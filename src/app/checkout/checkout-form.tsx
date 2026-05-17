@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -10,7 +10,6 @@ import { Loader2, ChevronLeft } from "lucide-react";
 
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,7 +142,6 @@ export default function CheckoutForm() {
     handleSubmit,
     control,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
@@ -154,7 +152,7 @@ export default function CheckoutForm() {
     },
   });
 
-  const requiresShipping = watch("requires_shipping");
+  const requiresShipping = useWatch({ control, name: "requires_shipping" });
 
   // Redirect if cart empty
   useEffect(() => {
@@ -186,7 +184,7 @@ export default function CheckoutForm() {
         buyerDetails: {
           full_name: values.full_name,
           email: values.email,
-          phone: phoneCountryCode + values.phone.replace(/^\+?[0-9]{1,4}/, ""),
+          phone: phoneCountryCode + values.phone.replace(/\s+/g, ""),
         },
         shippingAddress: values.requires_shipping
           ? {
@@ -194,7 +192,7 @@ export default function CheckoutForm() {
               address_line1: values.address_line1!,
               city: values.city!,
               country: values.country!,
-              phone: phoneCountryCode + values.phone.replace(/^\+?[0-9]{1,4}/, ""),
+              phone: phoneCountryCode + values.phone.replace(/\s+/g, ""),
             }
           : null,
         items: items.map((item) => ({
@@ -226,7 +224,7 @@ export default function CheckoutForm() {
       clearCart();
 
       // Redirect to Flutterwave hosted payment page
-      window.location.href = data.paymentLink;
+      window.location.assign(data.paymentLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Une erreur est survenue.";
       toast.error(message);
@@ -319,7 +317,7 @@ export default function CheckoutForm() {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="77 000 00 00"
+                      placeholder="770000000"
                       autoComplete="tel-national"
                       className="flex-1"
                       aria-invalid={!!errors.phone}

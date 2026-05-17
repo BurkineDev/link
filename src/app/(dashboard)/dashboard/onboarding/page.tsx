@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,7 +44,7 @@ type Template = {
 
 const TEMPLATES: Template[] = [
   {
-    id: "vibrant",
+    id: "boutique",
     name: "Vibrant",
     description: "Coloré et énergique, parfait pour la mode",
     config: {
@@ -55,7 +56,7 @@ const TEMPLATES: Template[] = [
     },
   },
   {
-    id: "minimaliste",
+    id: "minimal",
     name: "Minimaliste",
     description: "Épuré et élégant pour un look premium",
     config: {
@@ -141,9 +142,9 @@ export default function OnboardingPage() {
     defaultValues: { currency: "XOF" },
   });
 
-  const watchedSlug = form2.watch("shopSlug");
+  const watchedSlug = useWatch({ control: form2.control, name: "shopSlug" });
   const debouncedSlug = useDebounce(watchedSlug, 500);
-  const watchedShopName = form2.watch("shopName");
+  const watchedShopName = useWatch({ control: form2.control, name: "shopName" });
 
   // Auto-generate slug from shop name
   useEffect(() => {
@@ -162,9 +163,10 @@ export default function OnboardingPage() {
   // Check slug availability
   useEffect(() => {
     if (!debouncedSlug || debouncedSlug.length < 3) {
-      setSlugAvailable(null);
+      queueMicrotask(() => setSlugAvailable(null));
       return;
     }
+    let cancelled = false;
     const check = async () => {
       setCheckingSlug(true);
       const { data } = await supabase
@@ -172,11 +174,18 @@ export default function OnboardingPage() {
         .select("id")
         .eq("slug", debouncedSlug)
         .maybeSingle();
-      setSlugAvailable(!data);
-      setCheckingSlug(false);
+      if (!cancelled) {
+        setSlugAvailable(!data);
+        setCheckingSlug(false);
+      }
     };
     check();
-  }, [debouncedSlug, supabase]);
+    return () => {
+      cancelled = true;
+    };
+    // supabase client is stable across renders — safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSlug]);
 
   const handleStep1 = form1.handleSubmit((data) => {
     setStep1Data(data);
@@ -212,7 +221,7 @@ export default function OnboardingPage() {
       const { data: templateRecord } = await supabase
         .from("templates")
         .select("id")
-        .eq("name", selectedTemplate.name)
+        .eq("id", selectedTemplate.id)
         .maybeSingle();
 
       // Create shop — use type assertion to satisfy strict insert type
@@ -563,9 +572,9 @@ export default function OnboardingPage() {
         {/* Footer note */}
         <p className="text-center text-xs text-muted-foreground mt-6">
           En créant ta boutique, tu acceptes les{" "}
-          <a href="/terms" className="underline hover:text-primary">
+          <Link href="/terms" className="underline hover:text-primary">
             conditions d&apos;utilisation
-          </a>{" "}
+          </Link>{" "}
           de LinkBoutik
         </p>
       </div>
