@@ -223,7 +223,7 @@ export default function CheckoutForm() {
 
       clearCart();
 
-      // Redirect to Flutterwave hosted payment page
+      // Redirect to the hosted payment page
       window.location.assign(data.paymentLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Une erreur est survenue.";

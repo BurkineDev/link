@@ -7,6 +7,7 @@ import { ProductCard } from "@/components/shop/product-card";
 import { CartDrawer } from "@/components/shop/cart-drawer";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
+import { TEMPLATES } from "@/lib/constants";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 
 interface ShopPageProps {
@@ -20,13 +21,29 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
   const [cartOpen, setCartOpen] = useState(false);
   const itemCount = useCart((s) => s.getItemCount());
 
-  // Filter products by selected category
+  const selectedTemplate = useMemo(
+    () => TEMPLATES.find((template) => template.id === shop.template_id) ?? TEMPLATES[0],
+    [shop.template_id]
+  );
+
+  const showSocialLinks = selectedTemplate.config.showSocialLinks;
+  const heroStyle = selectedTemplate.config.hero.style;
+  const heroVisible = selectedTemplate.config.hero.show;
+  const productDisplay = selectedTemplate.id === "artisan" ? "gallery" : selectedTemplate.config.layout;
+
   const filteredProducts = useMemo(() => {
     if (!activeCategory) return products;
     return products.filter((p) => p.category_id === activeCategory);
   }, [products, activeCategory]);
 
   const hasCategories = categories.length > 0;
+
+  const productGridClasses =
+    productDisplay === "masonry"
+      ? "columns-1 space-y-4 sm:columns-2 lg:columns-3"
+      : productDisplay === "list"
+      ? "grid grid-cols-1 gap-4"
+      : "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4";
 
   return (
     // Inject shop theme color as CSS custom property
@@ -35,9 +52,60 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
       style={{ "--shop-primary": shop.theme_color } as React.CSSProperties}
     >
       {/* ── Shop header: banner, logo, name, bio, socials ── */}
-      <ShopHeader shop={shop} />
+      <ShopHeader shop={shop} showSocialLinks={showSocialLinks} />
 
       <main className="mx-auto max-w-6xl px-3 sm:px-4 pb-24">
+        {heroVisible && (
+          <section
+            className={cn(
+              "mt-6 overflow-hidden rounded-3xl border border-border bg-white p-6 shadow-sm",
+              heroStyle === "banner" && "bg-gradient-to-r from-slate-950 via-slate-900 to-slate-700 text-white",
+              heroStyle === "split" && "grid gap-4 lg:grid-cols-[1.4fr_1fr] items-center",
+              heroStyle === "centered" && "text-center"
+            )}
+            style={
+              heroStyle === "banner"
+                ? undefined
+                : { borderColor: shop.theme_color }
+            }
+          >
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
+                {selectedTemplate.name}
+              </p>
+              <h2 className={cn(
+                "mt-3 text-3xl font-bold tracking-tight sm:text-4xl",
+                heroStyle === "banner" ? "text-white" : "text-foreground"
+              )}>
+                {shop.name}
+              </h2>
+              {shop.description ? (
+                <p className={cn(
+                  "mt-3 max-w-3xl text-sm leading-7",
+                  heroStyle === "banner" ? "text-slate-200" : "text-muted-foreground"
+                )}>
+                  {shop.description}
+                </p>
+              ) : (
+                <p className={cn(
+                  "mt-3 max-w-3xl text-sm leading-7",
+                  heroStyle === "banner" ? "text-slate-200" : "text-muted-foreground"
+                )}>
+                  Découvre les meilleurs produits de cette boutique.
+                </p>
+              )}
+            </div>
+
+            {heroStyle === "split" && (
+              <div className="rounded-3xl bg-slate-50 p-6 text-slate-900 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">À la une</p>
+                <p className="mt-3 text-lg font-semibold">
+                  Inspiration et sélection spéciale pour ta marque.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
         {/* ── Category filter tabs ── */}
         {hasCategories && (
           <div className="mt-6 mb-2">
@@ -113,8 +181,7 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
           <div
             className={cn(
               "mt-6 grid gap-3 sm:gap-4",
-              // 2 cols on mobile (360px+), 3 on tablet, 4 on desktop
-              "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+              productGridClasses
             )}
           >
             {filteredProducts.map((product) => (
@@ -124,6 +191,7 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
                 shopSlug={shop.slug}
                 shopId={shop.id}
                 currency={shop.currency}
+                layoutStyle={productDisplay}
               />
             ))}
           </div>
@@ -170,7 +238,6 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
         open={cartOpen}
         onOpenChange={setCartOpen}
         currency={shop.currency}
-        shopSlug={shop.slug}
       />
     </div>
   );

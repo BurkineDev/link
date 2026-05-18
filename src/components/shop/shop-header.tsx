@@ -48,6 +48,7 @@ function TikTokIcon({ className }: { className?: string }) {
 interface ShopHeaderProps {
   shop: ShopRow;
   className?: string;
+  showSocialLinks?: boolean;
 }
 
 const SOCIAL_CONFIG = [
@@ -92,11 +93,11 @@ const SOCIAL_CONFIG = [
   },
 ] as const;
 
-export function ShopHeader({ shop, className }: ShopHeaderProps) {
+export function ShopHeader({ shop, className, showSocialLinks = true }: ShopHeaderProps) {
   const socialLinks = shop.social_links ?? {};
-  const activeSocials = SOCIAL_CONFIG.filter(
-    (s) => socialLinks[s.key]
-  );
+  const activeSocials = showSocialLinks
+    ? SOCIAL_CONFIG.filter((s) => socialLinks[s.key])
+    : [];
 
   return (
     <header className={cn("relative w-full", className)}>

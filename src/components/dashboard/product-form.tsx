@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -21,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -328,9 +327,8 @@ export function ProductForm({
 
   const isEdit = Boolean(productId);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<CreateProductInput>({
-    resolver: zodResolver(createProductSchema) as any,
+    resolver: zodResolver(createProductSchema) as Resolver<CreateProductInput>,
     defaultValues: {
       name: "",
       slug: "",
@@ -353,18 +351,16 @@ export function ProductForm({
   const {
     register,
     handleSubmit,
-    watch,
     setValue,
     control,
     formState: { errors },
   } = form;
 
-  const watchName = watch("name");
-  const watchSlug = watch("slug");
-  const watchHasVariants = watch("has_variants");
-  const watchVariants = watch("variants") ?? [];
-  const watchImages = watch("images");
-  const watchIsDigital = watch("is_digital");
+  const watchName = useWatch({ control, name: "name" });
+  const watchHasVariants = useWatch({ control, name: "has_variants" });
+  const watchVariants = useWatch({ control, name: "variants" }) ?? [];
+  const watchImages = useWatch({ control, name: "images" });
+  const watchIsDigital = useWatch({ control, name: "is_digital" });
 
   // Auto-generate slug from name (only when slug is empty or matches previous auto-gen)
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(
@@ -394,12 +390,6 @@ export function ProductForm({
       const supabase = createClient();
 
       try {
-        const payload = {
-          ...data,
-          is_published: publish,
-          shop_id: shopId,
-        };
-
         if (isEdit && productId) {
           const { error } = await supabase
             .from("products")

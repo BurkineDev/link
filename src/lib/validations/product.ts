@@ -118,8 +118,7 @@ export type ProductMetadataInput = z.infer<typeof productMetadataSchema>;
 // Create product
 // ---------------------------------------------------------------------------
 
-export const createProductSchema = z
-  .object({
+const productSchemaBase = z.object({
     name: z
       .string()
       .min(2, "Product name must be at least 2 characters")
@@ -155,37 +154,36 @@ export const createProductSchema = z
         `You can add at most ${MAX_PRODUCT_VARIANTS} variants`,
       )
       .optional(),
-    metadata: productMetadataSchema,
-  })
-  .superRefine((data, ctx) => {
-    // If has_variants, at least one variant is required
-    if (data.has_variants && (!data.variants || data.variants.length === 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "At least one variant is required when variants are enabled",
-        path: ["variants"],
-      });
-    }
+  metadata: productMetadataSchema,
+});
 
-    // compare_price must be greater than price when set
-    if (
-      data.compare_price !== null &&
-      data.compare_price !== undefined &&
-      data.compare_price <= data.price
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Compare price must be greater than the selling price",
-        path: ["compare_price"],
-      });
-    }
+function validateProductRules(
+  data: Partial<z.infer<typeof productSchemaBase>>,
+  ctx: z.RefinementCtx,
+) {
+  if (data.has_variants && (!data.variants || data.variants.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "At least one variant is required when variants are enabled",
+      path: ["variants"],
+    });
+  }
 
-    // Digital products should have either a download_url or a stock_quantity of null
-    if (data.is_digital && data.metadata?.download_url === undefined) {
-      // Not an error — creator may add the URL later; just a soft warning
-      // Keeping validation lenient here to avoid blocking publish flow
-    }
-  });
+  if (
+    data.price !== undefined &&
+    data.compare_price !== null &&
+    data.compare_price !== undefined &&
+    data.compare_price <= data.price
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Compare price must be greater than the selling price",
+      path: ["compare_price"],
+    });
+  }
+}
+
+export const createProductSchema = productSchemaBase.superRefine(validateProductRules);
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 
@@ -193,10 +191,24 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 // Update product (all fields optional, same shape)
 // ---------------------------------------------------------------------------
 
-export const updateProductSchema = createProductSchema.partial().extend({
-  // slug cannot be changed silently — require explicit opt-in
-  slug: slugSchema.optional(),
-});
+export const updateProductSchema = z
+  .object({
+    name: productSchemaBase.shape.name.optional(),
+    slug: slugSchema.optional(),
+    description: productSchemaBase.shape.description.optional(),
+    price: productSchemaBase.shape.price.optional(),
+    compare_price: productSchemaBase.shape.compare_price.optional(),
+    currency: productSchemaBase.shape.currency.optional(),
+    images: productSchemaBase.shape.images.optional(),
+    category_id: productSchemaBase.shape.category_id.optional(),
+    is_published: productSchemaBase.shape.is_published.optional(),
+    is_digital: productSchemaBase.shape.is_digital.optional(),
+    stock_quantity: productSchemaBase.shape.stock_quantity.optional(),
+    has_variants: productSchemaBase.shape.has_variants.optional(),
+    variants: productSchemaBase.shape.variants.optional(),
+    metadata: productSchemaBase.shape.metadata.optional(),
+  })
+  .superRefine(validateProductRules);
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 

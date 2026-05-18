@@ -3,8 +3,8 @@
 import React, { useCallback, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { ImageIcon, Loader2, X, UploadCloud } from "lucide-react";
+import { ImageIcon, Loader2, X, UploadCloud, Star } from "lucide-react";
+import { toast } from "sonner";
 
 export interface UploadedImage {
   url: string;
@@ -52,70 +52,73 @@ export function ImageUploader({
   const syncToParent = useCallback(
     (updated: ImageSlot[]) => {
       const ready = updated.filter((s) => s.url && !s.loading);
-      onChange(
-        ready.map((s, i) => ({
-          url: s.url,
-          position: i,
-        }))
-      );
+      onChange(ready.map((s, i) => ({ url: s.url, position: i })));
     },
     [onChange]
   );
 
   const uploadFile = useCallback(
-    async (file: File, slotId: string) => {
-      const supabase = createClient();
-      const path = `${shopId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+    async (file: File) => {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("bucket", "shop-assets");
+        form.append("folder", shopId);
 
-      const { data, error } = await supabase.storage
-        .from("shop-assets")
-        .upload(path, file, { upsert: false });
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: form,
+        });
+        const json = await res.json();
 
-      if (error || !data) {
-        return { url: "", error: error?.message ?? "Échec de l'upload" };
+        if (!res.ok) {
+          return { url: "", error: json.error ?? "Échec de l'upload" };
+        }
+
+        return { url: json.url, error: undefined };
+      } catch (err) {
+        console.error(err);
+        return { url: "", error: (err as Error).message || "Échec de l'upload" };
       }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("shop-assets").getPublicUrl(data.path);
-
-      return { url: publicUrl, error: undefined };
     },
     [shopId]
   );
 
   const processFiles = useCallback(
     async (files: File[]) => {
-      const current = slots.filter((s) => s.url && !s.loading).length;
-      const remaining = maxImages - current;
-      const toProcess = files.slice(0, remaining);
-
-      if (toProcess.length === 0) return;
-
       const accepted: File[] = [];
-      for (const file of toProcess) {
-        if (!file.type.startsWith("image/")) continue;
-        if (file.size > maxSizeMB * 1024 * 1024) continue;
+
+      for (const file of files) {
+        if (!file) continue;
+        if (file.size > maxSizeMB * 1024 * 1024) {
+          toast.error(`${file.name} dépasse ${maxSizeMB} Mo.`);
+          continue;
+        }
         accepted.push(file);
       }
 
-      const newSlots: ImageSlot[] = accepted.map((_, i) => ({
+      const activeCount = slots.filter((s) => s.url || s.loading).length;
+      const available = Math.max(0, maxImages - activeCount);
+      if (accepted.length === 0) return;
+      if (accepted.length > available) {
+        toast.error(`Vous ne pouvez téléverser que ${available} image(s) supplémentaires.`);
+      }
+
+      const toUpload = accepted.slice(0, available);
+      if (toUpload.length === 0) return;
+
+      const newSlots: ImageSlot[] = toUpload.map((_, i) => ({
         id: `uploading-${Date.now()}-${i}`,
         url: "",
         loading: true,
       }));
 
-      setSlots((prev) => {
-        const next = [...prev, ...newSlots];
-        return next;
-      });
+      setSlots((prev) => [...prev, ...newSlots]);
 
-      const results = await Promise.all(
-        accepted.map((file, i) => uploadFile(file, newSlots[i].id))
-      );
+      const results = await Promise.all(toUpload.map((file) => uploadFile(file)));
 
       setSlots((prev) => {
-        let next = [...prev];
+        const next = [...prev];
         newSlots.forEach((slot, i) => {
           const idx = next.findIndex((s) => s.id === slot.id);
           if (idx === -1) return;
@@ -136,24 +139,10 @@ export function ImageUploader({
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const files = Array.from(e.dataTransfer.files);
-      processFiles(files);
+      processFiles(Array.from(e.dataTransfer.files));
     },
     [processFiles]
   );
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => setIsDragging(false);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    processFiles(files);
-    e.target.value = "";
-  };
 
   const removeSlot = (id: string) => {
     setSlots((prev) => {
@@ -168,74 +157,50 @@ export function ImageUploader({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Drop zone */}
-      {canAdd && (
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => inputRef.current?.click()}
-          className={cn(
-            "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-colors",
-            isDragging
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50 hover:bg-muted/50"
-          )}
-        >
-          <UploadCloud className="size-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground text-center">
-            <span className="font-medium text-foreground">
-              Cliquez pour choisir
-            </span>{" "}
-            ou glissez vos images ici
-          </p>
-          <p className="text-xs text-muted-foreground">
-            PNG, JPG, WebP · Max {maxSizeMB} Mo par image ·{" "}
-            {activeSlots.length}/{maxImages} images
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleInputChange}
-          />
-        </div>
-      )}
-
-      {/* Thumbnails */}
+      {/* Thumbnails grid */}
       {activeSlots.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {activeSlots.map((slot) => (
+          {activeSlots.map((slot, index) => (
             <div
               key={slot.id}
-              className="relative aspect-square rounded-lg overflow-hidden bg-muted ring-1 ring-foreground/10"
+              className={cn(
+                "group relative aspect-square overflow-hidden rounded-xl bg-muted ring-1 transition-all",
+                index === 0
+                  ? "ring-primary/60 col-span-1 row-span-1"
+                  : "ring-foreground/8"
+              )}
             >
               {slot.loading ? (
-                <div className="flex h-full items-center justify-center">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                <div className="flex h-full items-center justify-center bg-muted">
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
                 </div>
               ) : slot.url ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={slot.url}
-                    alt="Aperçu"
-                    className="h-full w-full object-cover"
+                    alt={`Image ${index + 1}`}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
+                  {/* Primary badge */}
+                  {index === 0 && (
+                    <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-md bg-primary/90 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur-sm">
+                      <Star className="size-2 fill-white" />
+                      Principale
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeSlot(slot.id)}
-                    className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80 transition-colors"
-                    aria-label="Supprimer l'image"
+                    className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-all hover:bg-black/90 group-hover:opacity-100"
+                    aria-label="Supprimer"
                   >
                     <X className="size-3" />
                   </button>
                 </>
               ) : (
                 <div className="flex h-full items-center justify-center">
-                  <ImageIcon className="size-5 text-muted-foreground" />
+                  <ImageIcon className="size-4 text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -243,21 +208,64 @@ export function ImageUploader({
         </div>
       )}
 
+      {/* Drop zone */}
+      {canAdd && (
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-all duration-200",
+            isDragging
+              ? "border-primary bg-primary/5 scale-[1.01]"
+              : "border-border hover:border-primary/50 hover:bg-muted/40"
+          )}
+        >
+          <div className={cn(
+            "flex size-12 items-center justify-center rounded-2xl transition-colors",
+            isDragging ? "bg-primary/15" : "bg-muted"
+          )}>
+            <UploadCloud className={cn(
+              "size-5 transition-colors",
+              isDragging ? "text-primary" : "text-muted-foreground"
+            )} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              <span className="text-primary">Cliquez pour choisir</span> ou glissez ici
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              PNG, JPG, WebP · Max {maxSizeMB} Mo · {activeSlots.length}/{maxImages} images
+            </p>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              processFiles(Array.from(e.target.files ?? []));
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
+
       {!canAdd && (
-        <p className="text-xs text-muted-foreground text-center">
+        <p className="text-xs text-muted-foreground text-center py-2">
           Limite de {maxImages} images atteinte.{" "}
-          <Button
+          <button
             type="button"
-            variant="link"
-            size="xs"
-            className="h-auto p-0"
+            className="text-primary underline underline-offset-2 hover:no-underline"
             onClick={() => {
               const first = activeSlots[0];
               if (first) removeSlot(first.id);
             }}
           >
-            Supprimer une image pour en ajouter une autre.
-          </Button>
+            Supprimer une image pour libérer de l'espace.
+          </button>
         </p>
       )}
     </div>

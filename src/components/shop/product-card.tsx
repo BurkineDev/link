@@ -15,6 +15,7 @@ interface ProductCardProps {
   shopSlug: string;
   shopId: string;
   currency: Currency;
+  layoutStyle?: "grid" | "list" | "masonry" | "gallery";
   className?: string;
 }
 
@@ -23,6 +24,7 @@ export function ProductCard({
   shopSlug,
   shopId,
   currency,
+  layoutStyle = "grid",
   className,
 }: ProductCardProps) {
   const addItem = useCart((s) => s.addItem);
@@ -59,26 +61,45 @@ export function ProductCard({
     });
   }
 
+  const rootClassName = cn(
+    "group relative overflow-hidden rounded-xl bg-card border border-border/60 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    isOutOfStock && "opacity-70",
+    layoutStyle === "list" && "grid grid-cols-[110px_1fr] items-stretch gap-3 p-3",
+    layoutStyle === "gallery" && "rounded-[2rem] border-2 border-slate-200 shadow-lg",
+    layoutStyle === "masonry" && "inline-block w-full mb-4 break-inside-avoid",
+    className
+  );
+
+  const imageWrapperClass = cn(
+    "relative overflow-hidden bg-muted",
+    layoutStyle === "list"
+      ? "h-full min-h-[120px] aspect-square rounded-3xl"
+      : "aspect-square w-full"
+  );
+
+  const bodyClass = cn(
+    "flex flex-1 flex-col gap-1.5",
+    layoutStyle === "list" ? "justify-between" : "p-3"
+  );
+
+  const detailsClass = cn(
+    "mt-auto flex items-center justify-between gap-2",
+    layoutStyle === "list" ? "items-start" : "items-center"
+  );
+
   return (
-    <Link
-      href={`/${shopSlug}/${product.slug}`}
-      className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl bg-card",
-        "border border-border/60 shadow-sm",
-        "transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isOutOfStock && "opacity-70",
-        className
-      )}
-    >
+    <Link href={`/${shopSlug}/${product.slug}`} className={rootClassName}>
       {/* ── Image ── */}
-      <div className="relative aspect-square w-full overflow-hidden bg-muted">
+      <div className={imageWrapperClass}>
         {primaryImage?.url ? (
           <Image
             src={primaryImage.url}
             alt={primaryImage.alt ?? product.name}
             fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            className={cn(
+              "object-cover transition-transform duration-300",
+              layoutStyle === "gallery" ? "group-hover:scale-105" : "group-hover:scale-105"
+            )}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
         ) : (
@@ -108,7 +129,6 @@ export function ProductCard({
             onClick={handleAddToCart}
             aria-label={`Ajouter ${product.name} au panier`}
             className={cn(
-              // 44px touch target
               "absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-xl",
               "bg-background/90 text-foreground shadow-md backdrop-blur-sm",
               "transition-all duration-200",
@@ -122,12 +142,12 @@ export function ProductCard({
       </div>
 
       {/* ── Details ── */}
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
+      <div className={bodyClass}>
         <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
           {product.name}
         </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2">
+        <div className={detailsClass}>
           <div className="flex flex-col">
             <span className="text-sm font-bold text-foreground">
               {formatPrice(product.price, effectiveCurrency)}

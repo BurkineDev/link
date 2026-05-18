@@ -14,21 +14,18 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
-import { cn } from "@/lib/utils";
 import type { Currency } from "@/lib/types/database";
 
 interface CartDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currency: Currency;
-  shopSlug: string;
 }
 
 export function CartDrawer({
   open,
   onOpenChange,
   currency,
-  shopSlug,
 }: CartDrawerProps) {
   const items = useCart((s) => s.items);
   const updateQuantity = useCart((s) => s.updateQuantity);

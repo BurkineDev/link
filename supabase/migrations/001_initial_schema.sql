@@ -333,10 +333,10 @@ create index if not exists products_category_id_idx on public.products (category
 create index if not exists products_published_idx   on public.products (shop_id, is_published) where is_published = true;
 create index if not exists products_slug_idx        on public.products (shop_id, slug);
 
--- Full-text search: name + description, unaccented, with trigram fallback
+-- Full-text search: name + description, with trigram fallback
 create index if not exists products_fts_idx on public.products
   using gin (
-    to_tsvector('french', coalesce(unaccent(name), '') || ' ' || coalesce(unaccent(description), ''))
+    to_tsvector('french', coalesce(name, '') || ' ' || coalesce(description, ''))
   );
 
 create index if not exists products_name_trgm_idx on public.products

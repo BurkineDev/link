@@ -195,6 +195,38 @@ export const initiatePaymentSchema = z.object({
 export type InitiatePaymentInput = z.infer<typeof initiatePaymentSchema>;
 
 // ---------------------------------------------------------------------------
+// PawaPay webhook payload verification
+// ---------------------------------------------------------------------------
+
+export const pawaPayDepositWebhookSchema = z.union([
+  z.object({
+    event: z.string().optional(),
+    data: z.object({
+      id: z.string(),
+      status: z.string(),
+      amount: z.union([z.number(), z.string()]),
+      currency: z.string(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+      failureReason: z
+        .object({ failureMessage: z.string().optional() })
+        .optional(),
+    }),
+  }),
+  z.object({
+    id: z.string(),
+    status: z.string(),
+    amount: z.union([z.number(), z.string()]),
+    currency: z.string(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    failureReason: z
+      .object({ failureMessage: z.string().optional() })
+      .optional(),
+  }),
+]);
+
+export type PawaPayDepositWebhookPayload = z.infer<typeof pawaPayDepositWebhookSchema>;
+
+// ---------------------------------------------------------------------------
 // Flutterwave webhook payload verification
 // ---------------------------------------------------------------------------
 

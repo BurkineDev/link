@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Row } from "@/lib/types/database";
-import { CURRENCIES, CURRENCY_META, TEMPLATES, SHOP_THEME_COLORS } from "@/lib/constants";
+import { CURRENCIES, CURRENCY_META, SHOP_THEME_COLORS } from "@/lib/constants";
+import { ThemeGallery, type ThemeId } from "@/components/shop/themes/theme-previews";
+import { SingleImageUploader } from "@/components/dashboard/single-image-uploader";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -40,119 +42,17 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Upload,
-  Trash2,
   AlertTriangle,
   Check,
   Loader2,
   EyeOff,
-  Store,
+  Trash2,
 } from "lucide-react";
 
 type Shop = Row<"shops">;
 
 interface SettingsClientProps {
   shop: Shop;
-}
-
-// ---------------------------------------------------------------------------
-// Logo / Banner uploader
-// ---------------------------------------------------------------------------
-
-interface ImageFieldProps {
-  label: string;
-  value: string | null;
-  onChange: (url: string | null) => void;
-  shopId: string;
-  storageKey: string;
-  aspectClass?: string;
-}
-
-function ImageField({
-  label,
-  value,
-  onChange,
-  shopId,
-  storageKey,
-  aspectClass = "aspect-square",
-}: ImageFieldProps) {
-  const [uploading, setUploading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    const supabase = createClient();
-    const path = `${shopId}/${storageKey}-${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-    const { data, error } = await supabase.storage
-      .from("shop-assets")
-      .upload(path, file, { upsert: true });
-
-    if (error || !data) {
-      toast.error("Échec de l'upload.");
-      setUploading(false);
-      return;
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("shop-assets").getPublicUrl(data.path);
-
-    onChange(publicUrl);
-    setUploading(false);
-  };
-
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-xl border border-border bg-muted cursor-pointer hover:border-primary/50 transition-colors",
-          aspectClass
-        )}
-        onClick={() => !uploading && inputRef.current?.click()}
-      >
-        {value ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={value} alt={label} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Upload className="size-6" />
-            <span className="text-xs">Cliquez pour choisir</span>
-          </div>
-        )}
-
-        {uploading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
-            <Loader2 className="size-6 animate-spin" />
-          </div>
-        )}
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleUpload(file);
-            e.target.value = "";
-          }}
-        />
-      </div>
-      {value && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          onClick={() => onChange(null)}
-        >
-          <Trash2 className="size-3.5" />
-          Supprimer
-        </Button>
-      )}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +173,7 @@ export function SettingsClient({ shop }: SettingsClientProps) {
       .from("shops")
       .update({
         template_id: templateId,
-        theme_color: themeColor,
+        theme_color: themeColor || undefined,
         updated_at: new Date().toISOString(),
       })
       .eq("id", shop.id);
@@ -408,21 +308,23 @@ export function SettingsClient({ shop }: SettingsClientProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <ImageField
-                label="Logo"
+              <SingleImageUploader
+                shopId={shop.id}
                 value={logoUrl}
                 onChange={setLogoUrl}
-                shopId={shop.id}
                 storageKey="logo"
                 aspectClass="aspect-square max-h-40"
+                label="Logo"
+                hint="PNG ou SVG recommandé"
               />
-              <ImageField
-                label="Bannière"
+              <SingleImageUploader
+                shopId={shop.id}
                 value={bannerUrl}
                 onChange={setBannerUrl}
-                shopId={shop.id}
                 storageKey="banner"
                 aspectClass="aspect-video"
+                label="Bannière"
+                hint="1200×400 px idéal"
               />
             </div>
 
@@ -447,44 +349,10 @@ export function SettingsClient({ shop }: SettingsClientProps) {
               <Label className="text-base font-semibold">
                 Thème de la boutique
               </Label>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => setTemplateId(tpl.id)}
-                    className={cn(
-                      "rounded-xl border overflow-hidden text-left transition-all",
-                      templateId === tpl.id
-                        ? "border-primary ring-2 ring-primary"
-                        : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <div className="aspect-video bg-muted relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={tpl.preview_image}
-                        alt={tpl.name}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                      {templateId === tpl.id && (
-                        <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5">
-                          <Check className="size-3 text-primary-foreground" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <p className="text-sm font-medium">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {tpl.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <ThemeGallery
+                selected={templateId as ThemeId}
+                onSelect={(id) => setTemplateId(id)}
+              />
             </div>
 
             <Separator />

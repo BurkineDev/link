@@ -25,12 +25,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const { data } = await supabase
     .from("shops")
-    .select("name, description, banner_url, theme_color")
+    .select(
+      "name, description, logo_url, banner_url, theme_color, social_links"
+    )
     .eq("slug", username)
     .eq("is_published", true)
     .single();
 
-  const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
+  const shop = data as Pick<ShopRow, "name" | "description" | "logo_url" | "banner_url" | "theme_color" | "social_links"> | null;
 
   if (!shop) {
     return { title: "Boutique introuvable | LinkBoutik" };

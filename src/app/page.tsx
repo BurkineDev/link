@@ -15,11 +15,7 @@ import {
   ArrowRight,
   Menu,
   X,
-  Globe,
-  Send,
-  Rss,
   ChevronRight,
-  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -554,7 +550,7 @@ function Features() {
             Fonctionnalités
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Tout ce qu'il te faut pour{" "}
+            Tout ce qu&apos;il te faut pour{" "}
             <span className="gradient-brand-text">vendre en ligne</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
@@ -690,7 +686,7 @@ function Templates() {
             <span className="gradient-brand-text">qui vendent</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            3 templates professionnels, personnalisables à l'infini. Lance ta
+            3 templates professionnels, personnalisables à l&apos;infini. Lance ta
             boutique avec style.
           </p>
         </FadeIn>
@@ -884,7 +880,7 @@ function Pricing() {
                     </span>
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Pour commencer à vendre dès aujourd'hui
+                    Pour commencer à vendre dès aujourd&apos;hui
                   </p>
                 </div>
 
@@ -936,7 +932,7 @@ function Pricing() {
                   variant="outline"
                   disabled
                 >
-                  Rejoindre la liste d'attente
+                  Rejoindre la liste d&apos;attente
                 </Button>
 
                 <ul className="space-y-3">
@@ -996,7 +992,7 @@ function FinalCTA() {
             Rejoins 10 000+ créateurs africains
           </h2>
           <p className="text-lg sm:text-xl text-white/80 mb-10 max-w-xl mx-auto">
-            Lance ta boutique gratuitement aujourd'hui. Pas de carte bancaire,
+            Lance ta boutique gratuitement aujourd&apos;hui. Pas de carte bancaire,
             pas de commission.
           </p>
 

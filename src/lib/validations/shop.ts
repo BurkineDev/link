@@ -63,7 +63,7 @@ export const createShopSchema = z.object({
   currency: z.enum(CURRENCIES, {
     error: "Please select a supported currency",
   }),
-  template_id: z.string().uuid("Invalid template").optional(),
+  template_id: z.string().optional(),
 });
 
 export type CreateShopInput = z.infer<typeof createShopSchema>;

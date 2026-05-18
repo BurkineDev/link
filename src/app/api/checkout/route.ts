@@ -8,6 +8,7 @@ import type {
   ShopRow,
   ProductRow,
 } from "@/lib/types/database";
+import { CURRENCY_META } from "@/lib/constants";
 import type { Currency } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
@@ -52,30 +53,6 @@ const checkoutRequestSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-// ---------------------------------------------------------------------------
-// Mobile money provider → Flutterwave payment_options mapping
-// ---------------------------------------------------------------------------
-
-const MOBILE_MONEY_FLW_OPTION: Record<string, string> = {
-  orange_money: "mobilemoneyfranco",
-  mtn_momo: "mobilemoneyghana",
-  wave: "mobilemoneysenegal",
-  moov_money: "mobilemoneyfranco",
-  airtel_money: "mobilemoneyuganda",
-  free_money: "mobilemoneysenegal",
-  mpesa: "mpesa",
-  zamtel_money: "mobilemoneyzambia",
-};
-
-function flwPaymentOptions(type: string, provider?: string): string {
-  if (type === "card") return "card";
-  if (provider && MOBILE_MONEY_FLW_OPTION[provider]) {
-    return MOBILE_MONEY_FLW_OPTION[provider];
-  }
-  return "mobilemoneyfranco,card";
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/checkout
 // ---------------------------------------------------------------------------
 
@@ -97,7 +74,6 @@ export async function POST(request: NextRequest) {
       shippingAddress,
       items,
       paymentMethod,
-      currency,
       notes,
     } = parsed.data;
 
@@ -187,7 +163,7 @@ export async function POST(request: NextRequest) {
       buyer_phone: buyerDetails.phone,
       status: "pending" as const,
       payment_status: "pending" as const,
-      payment_provider: "flutterwave" as const,
+      payment_provider: "pawapay" as const,
       payment_ref: null,
       total_amount: totalAmount,
       currency: shop.currency,
@@ -210,48 +186,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // -- Initiate Flutterwave payment ------------------------------------------
-    const txRef = `LBK-${order.id}-${Date.now()}`;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    // -- Initiate pawaPay payment page session -------------------------------
+    const depositId = crypto.randomUUID();
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    const pawaPayBaseUrl =
+      process.env.PAWAPAY_API_BASE_URL ?? "https://api.sandbox.pawapay.io";
 
-    const flwPayload = {
-      tx_ref: txRef,
-      amount: totalAmount,
-      currency: shop.currency,
-      redirect_url: `${appUrl}/checkout/success`,
-      customer: {
-        email: buyerDetails.email,
-        phonenumber: buyerDetails.phone,
-        name: buyerDetails.full_name,
+    const paymentPagePayload = {
+      depositId,
+      returnUrl: `${appUrl}/checkout/success?tx_ref=${depositId}`,
+      customerMessage: `Commande #${order.id.slice(0, 8).toUpperCase()}`,
+      amountDetails: {
+        amount: totalAmount.toFixed(CURRENCY_META[shop.currency].decimals),
+        currency: shop.currency,
       },
-      payment_options: flwPaymentOptions(
-        paymentMethod.type,
-        paymentMethod.mobileProvider,
-      ),
-      meta: {
-        orderId: order.id,
-        shopId,
-        shopName: shop.name,
-      },
-      customizations: {
-        title: shop.name,
-        description: `Commande #${order.id.slice(0, 8).toUpperCase()}`,
-      },
+      phoneNumber: buyerDetails.phone,
+      language: "FR",
+      reason: `Achat chez ${shop.name}`,
+      metadata: [
+        { orderId: order.id },
+        { shopId },
+        { shopName: shop.name },
+        { paymentMethod: paymentMethod.type },
+        ...(paymentMethod.mobileProvider ? [{ mobileProvider: paymentMethod.mobileProvider }] : []),
+      ],
     };
 
-    const flwRes = await fetch("https://api.flutterwave.com/v3/payments", {
+    const pawaPayRes = await fetch(`${pawaPayBaseUrl}/v2/paymentpage`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`,
+        Authorization: `Bearer ${process.env.PAWAPAY_API_TOKEN}`,
       },
-      body: JSON.stringify(flwPayload),
+      body: JSON.stringify(paymentPagePayload),
     });
 
-    const flwData = await flwRes.json();
+    const pawaPayData = await pawaPayRes.json();
 
-    if (!flwRes.ok || flwData.status !== "success") {
-      console.error("[checkout] Flutterwave error:", flwData);
+    if (!pawaPayRes.ok || !pawaPayData?.redirectUrl) {
+      console.error("[checkout] pawaPay error:", pawaPayData);
       return NextResponse.json(
         {
           error:
@@ -261,14 +236,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // -- Save tx_ref on order --------------------------------------------------
     await supabase
       .from("orders")
-      .update({ payment_ref: txRef })
+      .update({ payment_ref: depositId })
       .eq("id", order.id);
 
     return NextResponse.json({
-      paymentLink: flwData.data.link as string,
+      paymentLink: pawaPayData.redirectUrl as string,
       orderId: order.id,
     });
   } catch (err) {

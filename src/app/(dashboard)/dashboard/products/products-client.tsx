@@ -291,7 +291,6 @@ function ProductCard({
 
 export function ProductsClient({
   products: initialProducts,
-  shopId,
   currency,
 }: ProductsClientProps) {
   const router = useRouter();

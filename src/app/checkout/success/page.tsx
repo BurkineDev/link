@@ -56,11 +56,14 @@ function SuccessContent() {
   const txRef = searchParams.get("tx_ref");
   const transactionId = searchParams.get("transaction_id");
 
-  const [state, setState] = useState<VerifyState>({ status: "loading" });
+  const [state, setState] = useState<VerifyState>(
+    txRef
+      ? { status: "loading" }
+      : { status: "error", message: "Référence de transaction manquante." },
+  );
 
   useEffect(() => {
     if (!txRef) {
-      setState({ status: "error", message: "Référence de transaction manquante." });
       return;
     }
 

@@ -361,7 +361,6 @@ export function ProductPage({
         open={cartOpen}
         onOpenChange={setCartOpen}
         currency={shop.currency}
-        shopSlug={shop.slug}
       />
     </div>
   );

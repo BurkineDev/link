@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(
-        "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, buyer_phone",
+        "id, shop_id, total_amount, currency, payment_status, status, payment_provider, items, buyer_name, buyer_email, buyer_phone",
       )
       .eq("payment_ref", txRef)
       .single();
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       const { data: orderById } = await supabase
         .from("orders")
         .select(
-          "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, buyer_phone",
+          "id, shop_id, total_amount, currency, payment_status, status, payment_provider, items, buyer_name, buyer_email, buyer_phone",
         )
         .eq("id", possibleOrderId)
         .maybeSingle();
@@ -80,6 +80,7 @@ async function verifyAndUpdate(
     currency: string;
     payment_status: string;
     status: string;
+    payment_provider: string | null;
     items: unknown;
     buyer_name: string;
     buyer_email: string;
@@ -101,6 +102,99 @@ async function verifyAndUpdate(
     return NextResponse.json({
       order: {
         ...order,
+        shop_name: shop?.name,
+        shop_slug: shop?.slug,
+      },
+    });
+  }
+
+  if (order.payment_provider === "pawapay") {
+    const pawaPayBaseUrl =
+      process.env.PAWAPAY_API_BASE_URL ?? "https://api.sandbox.pawapay.io";
+    const verifyRes = await fetch(`${pawaPayBaseUrl}/v2/deposits/${encodeURIComponent(txRef)}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.PAWAPAY_API_TOKEN}`,
+      },
+    });
+    const verifyData = await verifyRes.json();
+
+    if (!verifyRes.ok) {
+      console.error("[verify] pawaPay lookup error:", verifyData);
+      return NextResponse.json(
+        { error: "Échec de la vérification du paiement auprès de pawaPay." },
+        { status: 502 },
+      );
+    }
+
+    const deposit = verifyData?.data;
+    const depositStatus = deposit?.status;
+    const depositAmount = Number(deposit?.amount);
+    const depositCurrency = deposit?.currency;
+    const failureMessage = deposit?.failureReason?.failureMessage;
+
+    if (!deposit || !depositStatus) {
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de récupérer l'état du paiement. Veuillez réessayer plus tard.",
+        },
+        { status: 502 },
+      );
+    }
+
+    if (depositStatus !== "COMPLETED") {
+      return NextResponse.json(
+        {
+          error:
+            depositStatus === "FAILED"
+              ? failureMessage || "Le paiement a échoué."
+              : "Le paiement est en cours de traitement. Veuillez patienter.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const amountOk = depositAmount >= order.total_amount;
+    const currencyOk =
+      typeof depositCurrency === "string" &&
+      depositCurrency.toUpperCase() === order.currency.toUpperCase();
+
+    if (!amountOk || !currencyOk) {
+      return NextResponse.json(
+        {
+          error: !amountOk
+            ? "Le montant reçu est insuffisant."
+            : "Devise incorrecte.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "paid",
+        status: "confirmed",
+        payment_ref: txRef,
+      })
+      .eq("id", order.id);
+
+    if (updateError) {
+      console.error("[verify] order update error:", updateError);
+      // Return success anyway — pawaPay confirmed payment
+    }
+
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("name, slug")
+      .eq("id", order.shop_id)
+      .single();
+
+    return NextResponse.json({
+      order: {
+        ...order,
+        payment_status: "paid",
+        status: "confirmed",
         shop_name: shop?.name,
         shop_slug: shop?.slug,
       },
