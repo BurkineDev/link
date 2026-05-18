@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   const ext = file.name.split(".").pop() ?? "jpg";
   const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { data, error } = await supabase.storage
+  const { data, error } = await getAdminClient().storage
     .from(bucket)
     .upload(filename, file, {
       contentType: file.type,

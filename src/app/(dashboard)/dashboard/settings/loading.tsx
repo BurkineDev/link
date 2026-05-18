@@ -1,0 +1,37 @@
+import { Skeleton } from "@/components/ui/skeleton";
+
+function FormSection({ fields = 2 }: { fields?: number }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card overflow-hidden shadow-sm">
+      <div className="px-5 py-4 border-b border-border">
+        <Skeleton className="h-4 w-36 rounded" />
+        <Skeleton className="h-3 w-52 rounded mt-1.5" />
+      </div>
+      <div className="flex flex-col gap-4 p-5">
+        {Array.from({ length: fields }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-24 rounded" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+        ))}
+        <Skeleton className="h-10 w-28 rounded-xl mt-1" />
+      </div>
+    </div>
+  );
+}
+
+export default function SettingsLoading() {
+  return (
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col gap-1.5">
+        <Skeleton className="h-7 w-36 rounded" />
+        <Skeleton className="h-4 w-56 rounded" />
+      </div>
+
+      <FormSection fields={3} />
+      <FormSection fields={2} />
+      <FormSection fields={1} />
+    </div>
+  );
+}

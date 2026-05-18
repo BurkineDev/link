@@ -11,12 +11,13 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ExternalLinkIcon, UserIcon, SettingsIcon, LogOutIcon } from "lucide-react";
+import { ExternalLinkIcon, UserIcon, SettingsIcon, ChevronRightIcon, HomeIcon } from "lucide-react";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 
 export default async function DashboardLayout({
@@ -33,7 +34,6 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // Fetch profile and shop in parallel
   const [profileResult, shopResult] = await Promise.all([
     supabase
       .from("profiles")
@@ -42,7 +42,7 @@ export default async function DashboardLayout({
       .single(),
     supabase
       .from("shops")
-      .select("name, slug")
+      .select("name, slug, is_published")
       .eq("owner_id", user.id)
       .single(),
   ]);
@@ -67,33 +67,47 @@ export default async function DashboardLayout({
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Top header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 md:px-6">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/75 backdrop-blur-xl px-4 md:px-5 gap-4">
           {/* Mobile: logo */}
           <div className="flex items-center gap-3 md:hidden">
             <Logo size="sm" href="/dashboard" />
           </div>
 
-          {/* Desktop: shop name */}
-          <div className="hidden items-center md:flex">
-            {shop?.name ? (
-              <p className="text-sm font-semibold text-foreground">
-                {shop.name}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Mon tableau de bord</p>
+          {/* Desktop: shop status pill */}
+          <div className="hidden items-center gap-2 md:flex">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <HomeIcon className="size-3.5" />
+              <ChevronRightIcon className="size-3 text-muted-foreground/40" />
+              {shop?.name ? (
+                <span className="font-medium text-foreground">{shop.name}</span>
+              ) : (
+                <span className="text-muted-foreground">Mon tableau de bord</span>
+              )}
+            </div>
+            {shop && (
+              <span
+                className={[
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                  shop.is_published
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border border-amber-200",
+                ].join(" ")}
+              >
+                {shop.is_published ? "En ligne" : "Hors ligne"}
+              </span>
             )}
           </div>
 
-          {/* Right side actions */}
-          <div className="flex items-center gap-3">
+          {/* Right side */}
+          <div className="flex items-center gap-2.5">
             {shop?.slug && (
               <a
-                href={`/boutique/${shop.slug}`}
+                href={`/${shop.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:flex"
+                className="hidden items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 sm:flex"
               >
                 <ExternalLinkIcon className="size-3.5" />
                 Voir ma boutique
@@ -102,47 +116,61 @@ export default async function DashboardLayout({
 
             {/* Avatar dropdown */}
             <DropdownMenu>
-              <DropdownMenuTrigger className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                <Avatar>
+              <DropdownMenuTrigger className="cursor-pointer rounded-full ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all">
+                <Avatar className="size-8">
                   {profile?.avatar_url && (
-                    <AvatarImage
-                      src={profile.avatar_url}
-                      alt={displayName}
-                    />
+                    <AvatarImage src={profile.avatar_url} alt={displayName} />
                   )}
-                  <AvatarFallback className="text-xs font-semibold">
+                  <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="bottom" sideOffset={8}>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium">{displayName}</p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[180px]">
-                      {user.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
+              <DropdownMenuContent align="end" side="bottom" sideOffset={8} className="w-52">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="size-8">
+                        {profile?.avatar_url && (
+                          <AvatarImage src={profile.avatar_url} alt={displayName} />
+                        )}
+                        <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col min-w-0">
+                        <p className="text-sm font-semibold truncate">{displayName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
-                  <Link
-                    href="/dashboard/profile"
-                    className="flex items-center gap-2 w-full"
-                  >
+                  <Link href="/dashboard/profile" className="flex w-full items-center gap-2">
                     <UserIcon className="size-4" />
                     Mon profil
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  <Link
-                    href="/dashboard/settings"
-                    className="flex items-center gap-2 w-full"
-                  >
+                  <Link href="/dashboard/settings" className="flex w-full items-center gap-2">
                     <SettingsIcon className="size-4" />
                     Paramètres
                   </Link>
                 </DropdownMenuItem>
+                {shop?.slug && (
+                  <DropdownMenuItem>
+                    <a
+                      href={`/${shop.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center gap-2"
+                    >
+                      <ExternalLinkIcon className="size-4" />
+                      Voir ma boutique
+                    </a>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive">
                   <SignOutButton />

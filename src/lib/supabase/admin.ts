@@ -35,9 +35,9 @@ function createAdminClient() {
   });
 }
 
-/**
- * Singleton admin client.
- * Module-level singleton is safe in server-only code (each worker instance
- * shares one key). Do NOT use this pattern in browser code.
- */
-export const adminClient = createAdminClient();
+let _adminClient: ReturnType<typeof createAdminClient> | undefined;
+
+export function getAdminClient() {
+  if (!_adminClient) _adminClient = createAdminClient();
+  return _adminClient;
+}

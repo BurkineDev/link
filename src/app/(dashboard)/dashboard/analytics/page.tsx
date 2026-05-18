@@ -151,18 +151,15 @@ function DonutChart({ data, total }: DonutChartProps) {
 
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
-
   const segments = data
     .filter((d) => d.count > 0)
-    .map((d) => {
+    .reduce<Array<{ status: OrderStatus; count: number; dash: number; gap: number; offset: number; fraction: number }>>((acc, d) => {
       const fraction = d.count / total;
       const dash = fraction * circumference;
       const gap = circumference - dash;
-      const seg = { ...d, dash, gap, offset, fraction };
-      offset += dash;
-      return seg;
-    });
+      const offset = acc.reduce((sum, seg) => sum + seg.dash, 0);
+      return [...acc, { ...d, dash, gap, offset, fraction }];
+    }, []);
 
   return (
     <div className="flex items-center gap-6">

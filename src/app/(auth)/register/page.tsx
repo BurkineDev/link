@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -127,6 +127,19 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
+function UsernameIndicator({ status }: { status: UsernameStatus }) {
+  if (status === "checking") {
+    return <Loader2 className="size-4 text-muted-foreground animate-spin" />;
+  }
+  if (status === "available") {
+    return <CheckCircle2 className="size-4 text-green-500" />;
+  }
+  if (status === "taken" || status === "invalid") {
+    return <XCircle className="size-4 text-destructive" />;
+  }
+  return null;
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function RegisterPage() {
   const router = useRouter();
@@ -138,7 +151,7 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormInput>({
@@ -146,9 +159,9 @@ export default function RegisterPage() {
     defaultValues: { agreed_to_terms: false },
   });
 
-  const passwordValue = watch("password");
-  const usernameValue = watch("username") ?? "";
-  const agreedToTerms = watch("agreed_to_terms");
+  const passwordValue = useWatch({ control, name: "password" });
+  const usernameValue = useWatch({ control, name: "username" }) ?? "";
+  const agreedToTerms = useWatch({ control, name: "agreed_to_terms" });
   const debouncedUsername = useDebounce(usernameValue, 500);
 
   // ── Real-time username availability check ──────────────────────────────────
@@ -156,12 +169,12 @@ export default function RegisterPage() {
     const trimmed = debouncedUsername.trim();
 
     if (!trimmed || trimmed.length < 3) {
-      setUsernameStatus("idle");
+      queueMicrotask(() => setUsernameStatus("idle"));
       return;
     }
 
     if (!/^[a-z0-9_-]+$/.test(trimmed)) {
-      setUsernameStatus("invalid");
+      queueMicrotask(() => setUsernameStatus("invalid"));
       return;
     }
 
@@ -238,7 +251,7 @@ export default function RegisterPage() {
       description: "Vérifiez vos emails pour confirmer votre inscription.",
     });
 
-    router.push("/dashboard/onboarding");
+    router.push("/login?registered=true");
   }
 
   // ── Google OAuth ───────────────────────────────────────────────────────────
@@ -259,20 +272,6 @@ export default function RegisterPage() {
   }
 
   const isLoading = isSubmitting || isGoogleLoading;
-
-  // ── Username status indicator ──────────────────────────────────────────────
-  function UsernameIndicator() {
-    if (usernameStatus === "checking") {
-      return <Loader2 className="size-4 text-muted-foreground animate-spin" />;
-    }
-    if (usernameStatus === "available") {
-      return <CheckCircle2 className="size-4 text-green-500" />;
-    }
-    if (usernameStatus === "taken" || usernameStatus === "invalid") {
-      return <XCircle className="size-4 text-destructive" />;
-    }
-    return null;
-  }
 
   return (
     <div className="space-y-6">
@@ -357,7 +356,7 @@ export default function RegisterPage() {
               {...register("username")}
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <UsernameIndicator />
+              <UsernameIndicator status={usernameStatus} />
             </div>
           </div>
           {usernameStatus === "taken" && !errors.username && (

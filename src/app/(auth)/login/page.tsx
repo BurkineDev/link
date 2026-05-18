@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, MailCheck } from "lucide-react";
 
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +36,20 @@ function GoogleIcon({ className }: { className?: string }) {
         fill="#EA4335"
       />
     </svg>
+  );
+}
+
+function RegistrationBanner() {
+  const searchParams = useSearchParams();
+  const registered = searchParams.get("registered") === "true";
+  if (!registered) return null;
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+      <MailCheck className="size-4 mt-0.5 shrink-0 text-blue-600" />
+      <p>
+        <span className="font-semibold">Vérifiez vos emails.</span> Un lien de confirmation vous a été envoyé. Cliquez dessus puis connectez-vous ici.
+      </p>
+    </div>
   );
 }
 
@@ -72,6 +86,7 @@ export default function LoginPage() {
     }
 
     toast.success("Connexion réussie ! Bienvenue 👋");
+    router.refresh();
     router.push("/dashboard");
   }
 
@@ -97,6 +112,11 @@ export default function LoginPage() {
 
   return (
     <div className="space-y-6">
+      {/* Email confirmation banner */}
+      <Suspense>
+        <RegistrationBanner />
+      </Suspense>
+
       {/* Header */}
       <div className="space-y-1.5">
         <h1 className="text-2xl font-black text-foreground">Bon retour 👋</h1>
