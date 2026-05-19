@@ -39,7 +39,7 @@ export type PaymentStatus =
   | "refunded"
   | "partially_refunded";
 
-export type PaymentProvider = "flutterwave" | "manual" | "free";
+export type PaymentProvider = "flutterwave" | "manual" | "free" | "pawapay";
 
 // ---------------------------------------------------------------------------
 // JSONB object shapes
