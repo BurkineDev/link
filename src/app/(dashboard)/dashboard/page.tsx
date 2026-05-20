@@ -94,7 +94,7 @@ export default async function DashboardPage() {
       await Promise.all([
         supabase
           .from("orders")
-          .select("total_amount, status")
+          .select("total_amount, status, payment_status")
           .eq("shop_id", shop.id),
         supabase
           .from("products")
@@ -111,7 +111,7 @@ export default async function DashboardPage() {
     const ordersStats = ordersStatsResult.data ?? [];
     ordersCount = ordersStats.length;
     totalRevenue = ordersStats
-      .filter((o) => o.status !== "cancelled" && o.status !== "refunded")
+      .filter((o) => o.payment_status === "paid")
       .reduce((sum, o) => sum + (o.total_amount ?? 0), 0);
     productsCount = productsResult.count ?? 0;
     recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];

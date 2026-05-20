@@ -223,7 +223,6 @@ export default function CheckoutForm() {
 
       clearCart();
 
-      // Redirect to Flutterwave hosted payment page
       window.location.assign(data.paymentLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Une erreur est survenue.";
@@ -474,7 +473,7 @@ export default function CheckoutForm() {
                 )}
               </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Paiement sécurisé via Flutterwave
+                Paiement sécurisé via PawaPay
               </p>
             </OrderSummary>
           </div>
