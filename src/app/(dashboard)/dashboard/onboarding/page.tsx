@@ -224,7 +224,6 @@ export default function OnboardingPage() {
         .eq("id", selectedTemplate.id)
         .maybeSingle();
 
-      // Create shop — use type assertion to satisfy strict insert type
       const { error: shopError } = await supabase
         .from("shops")
         .insert({
@@ -241,10 +240,14 @@ export default function OnboardingPage() {
           contact_email: null,
           contact_phone: null,
           social_links: null,
-          metadata: {},
         });
 
       if (shopError) throw shopError;
+
+      await supabase
+        .from("profiles")
+        .update({ onboarding_completed: true })
+        .eq("id", user.id);
 
       toast.success("Ta boutique est créée ! 🎉");
       router.push("/dashboard");

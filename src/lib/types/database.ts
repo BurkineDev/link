@@ -41,6 +41,15 @@ export type PaymentStatus =
 
 export type PaymentProvider = "flutterwave" | "manual" | "free" | "pawapay" | "stripe";
 
+export type SubscriptionPlan = "free" | "pro";
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "cancelled"
+  | "incomplete";
+
 // ---------------------------------------------------------------------------
 // JSONB object shapes
 // ---------------------------------------------------------------------------
@@ -135,8 +144,31 @@ export type ProfileRow = {
   full_name: string | null;
   avatar_url: string | null;
   bio: string | null;
+  onboarding_completed: boolean;
   created_at: string;
 };
+
+export type CreatorSubscriptionRow = {
+  id: string;
+  user_id: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreatorSubscriptionInsert = Omit<
+  CreatorSubscriptionRow,
+  "id" | "created_at" | "updated_at"
+>;
+
+export type CreatorSubscriptionUpdate = Partial<
+  Omit<CreatorSubscriptionRow, "id" | "user_id" | "created_at">
+>;
 
 export type ShopRow = {
   id: string;
@@ -153,7 +185,6 @@ export type ShopRow = {
   contact_email: string | null;
   contact_phone: string | null;
   social_links: SocialLinks | null;
-  metadata: Record<string, Json>;
   created_at: string;
   updated_at: string;
 };
@@ -216,7 +247,6 @@ export type OrderRow = {
   payment_status: PaymentStatus;
   payment_provider: PaymentProvider | null;
   payment_ref: string | null;
-  flw_tx_id: string | null;
   total_amount: number;
   currency: Currency;
   items: OrderItem[];
@@ -241,7 +271,9 @@ export type OrderItemRow = {
 // Insert types (omit server-generated fields)
 // ---------------------------------------------------------------------------
 
-export type ProfileInsert = Omit<ProfileRow, "created_at">;
+export type ProfileInsert = Omit<ProfileRow, "created_at" | "onboarding_completed"> & {
+  onboarding_completed?: boolean;
+};
 
 export type ShopInsert = Omit<ShopRow, "id" | "created_at" | "updated_at">;
 
@@ -253,9 +285,7 @@ export type ProductInsert = Omit<ProductRow, "id" | "created_at" | "updated_at">
 
 export type ProductVariantInsert = Omit<ProductVariantRow, "id">;
 
-export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "updated_at" | "flw_tx_id"> & {
-  flw_tx_id?: string | null;
-};
+export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "updated_at">;
 
 export type OrderItemInsert = Omit<OrderItemRow, "id">;
 
@@ -323,9 +353,23 @@ export interface Database {
         Insert: OrderItemInsert;
         Update: Partial<OrderItemRow>;
       } & NoRelationships;
+      creator_subscriptions: {
+        Row: CreatorSubscriptionRow;
+        Insert: CreatorSubscriptionInsert;
+        Update: CreatorSubscriptionUpdate;
+      } & NoRelationships;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      reserve_stock: {
+        Args: { items: Json };
+        Returns: Json;
+      };
+      release_stock: {
+        Args: { items: Json };
+        Returns: void;
+      };
+    };
     Enums: {
       currency: Currency;
       order_status: OrderStatus;

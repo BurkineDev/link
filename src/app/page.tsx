@@ -119,12 +119,14 @@ function PhoneMockup() {
             ))}
           </div>
 
-          {/* Mobile money bar */}
+          {/* Payments bar */}
           <div className="mx-2 mb-3 bg-gray-50 rounded-xl px-3 py-2 flex items-center gap-2">
-            <span className="text-sm">📱</span>
+            <span className="text-sm">💳</span>
             <div>
-              <p className="text-[9px] font-semibold text-gray-700">Paiements acceptés</p>
-              <p className="text-[8px] text-muted-foreground">Orange · MTN · Wave · M-Pesa</p>
+              <p className="text-[9px] font-semibold text-gray-700">Paiement sécurisé</p>
+              <p className="text-[8px] text-muted-foreground">
+                Carte bancaire · Mobile Money bientôt
+              </p>
             </div>
           </div>
         </div>
@@ -169,7 +171,7 @@ function Navbar() {
           {[
             { label: "Fonctionnalités", href: "#features" },
             { label: "Templates", href: "#templates" },
-            { label: "Tarifs", href: "#pricing" },
+            { label: "Tarifs", href: "/pricing" },
           ].map((item) => (
             <a
               key={item.href}
@@ -219,7 +221,7 @@ function Navbar() {
             {[
               { label: "Fonctionnalités", href: "#features" },
               { label: "Templates", href: "#templates" },
-              { label: "Tarifs", href: "#pricing" },
+              { label: "Tarifs", href: "/pricing" },
             ].map((item) => (
               <a
                 key={item.href}
@@ -306,9 +308,9 @@ function Hero() {
               transition={{ duration: 0.55, delay: 0.16 }}
               className="text-lg sm:text-xl text-white/85 mb-8 leading-relaxed max-w-lg"
             >
-              Partage ton lien unique sur TikTok et Instagram. Accepte les
-              paiements Mobile Money (Orange, MTN, Wave…) et vends partout en
-              Afrique — sans commission.
+              Partage ton lien unique sur TikTok et Instagram. Encaisse par
+              carte bancaire dès aujourd&apos;hui, et bientôt Mobile Money
+              (Orange, MTN, Wave). Vends partout en Afrique.
             </motion.p>
 
             <motion.div
@@ -369,10 +371,10 @@ function Hero() {
 
 function StatsBar() {
   const stats = [
-    { value: "10 000+", label: "créateurs actifs" },
-    { value: "50+", label: "pays africains" },
-    { value: "Mobile Money", label: "Orange · MTN · Wave" },
-    { value: "0%", label: "de commission" },
+    { value: "5 min", label: "pour lancer ta boutique" },
+    { value: "Stripe", label: "paiement sécurisé" },
+    { value: "@username", label: "ton lien unique" },
+    { value: "0 FCFA", label: "pour démarrer" },
   ];
 
   return (
@@ -404,7 +406,7 @@ function HowItWorks() {
       title: "Crée ton compte",
       subtitle: "30 secondes",
       description:
-        "Inscris-toi gratuitement avec ton numéro de téléphone ou ton email. Aucune carte bancaire requise.",
+        "Inscris-toi gratuitement avec ton email ou ton compte Google. Aucune carte bancaire requise.",
       emoji: "🚀",
       color: "from-orange-500/10 to-amber-500/10",
       border: "border-orange-200",
@@ -424,7 +426,7 @@ function HowItWorks() {
       title: "Partage et encaisse",
       subtitle: "Lien @username unique",
       description:
-        "Copie ton lien linkboutik.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse en Mobile Money.",
+        "Copie ton lien linkboutik.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse par carte bancaire dès aujourd'hui.",
       emoji: "💰",
       color: "from-emerald-500/10 to-teal-500/10",
       border: "border-emerald-200",
@@ -498,9 +500,9 @@ function Features() {
   const features = [
     {
       icon: Smartphone,
-      title: "Mobile Money intégré",
+      title: "Paiement sécurisé",
       description:
-        "Accepte Orange Money, MTN MoMo, Wave, M-Pesa, Airtel Money et plus. Tes clients paient en 1 clic.",
+        "Tes clients paient par carte bancaire via Stripe — sécurisé et fiable. Intégration Mobile Money (Orange, MTN, Wave) en cours.",
       color: "text-orange-500",
       bg: "bg-orange-50",
     },
@@ -745,7 +747,7 @@ function Testimonials() {
       avatar: "KA",
       avatarColor: "from-emerald-400 to-teal-500",
       quote:
-        "My customers pay with MTN MoMo directly. No more waiting for bank transfers. Sales went up 200% in 3 months. This is exactly what we needed in Africa.",
+        "The checkout is smooth and the dashboard is clear — I set up my shop in one evening and got my first sale the next day. Sales are up 200% in 3 months.",
       stars: 5,
       product: "Artisanat",
     },
@@ -756,7 +758,7 @@ function Testimonials() {
       avatar: "FK",
       avatarColor: "from-violet-400 to-purple-500",
       quote:
-        "Je poste sur Instagram, mes clientes cliquent sur mon lien LinkBoutik et paient avec Orange Money. C'est trop simple ! Je recommande à toutes les entrepreneures.",
+        "Je poste sur Instagram, mes clientes cliquent sur mon lien LinkBoutik et finalisent leur commande en quelques secondes. C'est trop simple ! Je recommande à toutes les entrepreneures.",
       stars: 5,
       product: "Cosmétiques naturels",
     },
@@ -832,23 +834,21 @@ function Testimonials() {
 
 function Pricing() {
   const freePlan = [
-    "1 boutique en ligne",
-    "Jusqu'à 20 produits",
-    "Paiements Mobile Money",
+    "Jusqu'à 5 produits",
     "Lien @username unique",
-    "Analytics de base",
+    "Paiement par carte bancaire (Stripe)",
     "Templates inclus",
+    "Analytics de base",
     "Support par email",
   ];
 
   const proPlan = [
     "Produits illimités",
-    "Analytics avancés",
-    "Domaine personnalisé",
+    "0% de commission sur tes ventes",
+    "Analytics avancés (top produits, AOV)",
     "Suppression du badge LinkBoutik",
-    "Intégrations WhatsApp Business",
-    "Rapports de vente détaillés",
-    "Support prioritaire 24/7",
+    "Templates premium",
+    "Support prioritaire",
   ];
 
   return (
@@ -863,15 +863,14 @@ function Pricing() {
             <span className="gradient-brand-text">gratuitement</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Pas de frais cachés, pas de commission sur tes ventes. Tu gardes
-            100% de tes revenus.
+            Pas de frais cachés. Passe en Pro le jour où ta boutique décolle.
           </p>
         </FadeIn>
 
         <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {/* Free */}
           <FadeIn delay={0.05}>
-            <Card className="h-full border-2 border-primary/20 relative overflow-hidden">
+            <Card className="h-full border-2 border-border/60 relative overflow-hidden">
               <CardContent className="p-6">
                 <div className="mb-6">
                   <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-2">
@@ -884,7 +883,7 @@ function Pricing() {
                     </span>
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Pour commencer à vendre dès aujourd'hui
+                    Pour démarrer et tester ta boutique
                   </p>
                 </div>
 
@@ -905,38 +904,44 @@ function Pricing() {
                     </li>
                   ))}
                 </ul>
+
+                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
+                  Une commission de 5% s'applique sur chaque vente pour couvrir
+                  les frais de la plateforme.
+                </p>
               </CardContent>
             </Card>
           </FadeIn>
 
           {/* Pro */}
           <FadeIn delay={0.12}>
-            <Card className="h-full border-2 border-muted relative overflow-hidden bg-muted/20">
+            <Card className="h-full border-2 border-primary relative overflow-hidden shadow-lg shadow-primary/10">
               <div className="absolute top-4 right-4">
-                <Badge className="bg-amber-100 text-amber-700 border-amber-200">
-                  Bientôt disponible
+                <Badge className="bg-primary text-primary-foreground">
+                  Recommandé
                 </Badge>
               </div>
               <CardContent className="p-6">
                 <div className="mb-6">
-                  <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-2">
                     Pro
                   </p>
-                  <p className="text-4xl font-black text-muted-foreground">
-                    ???
-                    <span className="text-base font-normal ml-1">/ mois</span>
+                  <p className="text-4xl font-black">
+                    5 000 FCFA
+                    <span className="text-base font-normal text-muted-foreground ml-1">
+                      / mois
+                    </span>
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Pour les créateurs qui veulent aller plus loin
+                    Pour les créateurs qui veulent grandir
                   </p>
                 </div>
 
                 <Button
-                  className="w-full mb-6 h-11"
-                  variant="outline"
-                  disabled
+                  className="w-full gradient-brand text-white border-0 mb-6 h-11"
+                  asChild
                 >
-                  Rejoindre la liste d'attente
+                  <Link href="/pricing">Passer en Pro</Link>
                 </Button>
 
                 <ul className="space-y-3">
@@ -944,17 +949,18 @@ function Pricing() {
                     Tout du plan Gratuit, plus :
                   </li>
                   {proPlan.map((item) => (
-                    <li
-                      key={item}
-                      className="flex items-center gap-3 text-sm text-muted-foreground"
-                    >
-                      <div className="size-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                        <Check className="size-3" />
+                    <li key={item} className="flex items-center gap-3 text-sm">
+                      <div className="size-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                        <Check className="size-3 text-primary-foreground" />
                       </div>
                       {item}
                     </li>
                   ))}
                 </ul>
+
+                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
+                  Sans engagement. Annule à tout moment depuis ton profil.
+                </p>
               </CardContent>
             </Card>
           </FadeIn>
@@ -1071,7 +1077,7 @@ function Footer() {
               {[
                 { label: "Fonctionnalités", href: "#features" },
                 { label: "Templates", href: "#templates" },
-                { label: "Tarifs", href: "#pricing" },
+                { label: "Tarifs", href: "/pricing" },
                 { label: "Voir une démo", href: "/@demo" },
               ].map((l) => (
                 <li key={l.href}>

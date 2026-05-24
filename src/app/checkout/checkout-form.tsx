@@ -23,11 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrderSummary, formatPrice } from "@/components/checkout/order-summary";
-import {
-  PaymentMethods,
-  type PaymentType,
-} from "@/components/checkout/payment-methods";
-import { type MobileMoneyProvider } from "@/lib/constants";
+import { PaymentMethods } from "@/components/checkout/payment-methods";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -48,14 +44,9 @@ const checkoutSchema = z
       .min(1, "Le numéro de téléphone est requis")
       .regex(/^\+?[1-9]\d{6,14}$/, "Numéro de téléphone invalide (ex: +22507000000)"),
     requires_shipping: z.boolean(),
-    // Shipping
     address_line1: z.string().max(200).optional(),
     city: z.string().max(100).optional(),
     country: z.string().length(2).optional(),
-    // Payment
-    payment_type: z.enum(["mobile_money", "card"] as const),
-    mobile_provider: z.string().optional(),
-    // Notes
     notes: z.string().max(500).optional(),
   })
   .superRefine((data, ctx) => {
@@ -81,16 +72,6 @@ const checkoutSchema = z
           path: ["country"],
         });
       }
-    }
-    if (
-      data.payment_type === "mobile_money" &&
-      !data.mobile_provider
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Veuillez sélectionner votre opérateur Mobile Money",
-        path: ["mobile_provider"],
-      });
     }
   });
 
@@ -132,22 +113,16 @@ export default function CheckoutForm() {
 
   const [phoneCountryCode, setPhoneCountryCode] = useState("+221");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentSelection, setPaymentSelection] = useState<{
-    type: PaymentType;
-    mobileProvider?: MobileMoneyProvider;
-  }>({ type: "card" });
 
   const {
     register,
     handleSubmit,
     control,
-    setValue,
     formState: { errors },
   } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       requires_shipping: hasPhysical,
-      payment_type: "card",
       country: "SN",
     },
   });
@@ -160,12 +135,6 @@ export default function CheckoutForm() {
       router.back();
     }
   }, [items.length, router]);
-
-  // Sync payment selection into form
-  useEffect(() => {
-    setValue("payment_type", paymentSelection.type);
-    setValue("mobile_provider", paymentSelection.mobileProvider ?? "");
-  }, [paymentSelection, setValue]);
 
   const total = getTotal();
 
@@ -202,8 +171,7 @@ export default function CheckoutForm() {
           unit_price: item.price,
         })),
         paymentMethod: {
-          type: values.payment_type,
-          mobileProvider: values.mobile_provider || undefined,
+          type: "card" as const,
         },
         notes: values.notes || undefined,
         currency,
@@ -405,13 +373,7 @@ export default function CheckoutForm() {
             {/* Section 3 – Mode de paiement */}
             <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <h2 className="mb-4 text-base font-semibold">Mode de paiement</h2>
-              <PaymentMethods
-                value={paymentSelection}
-                onChange={setPaymentSelection}
-                error={
-                  errors.payment_type?.message ?? errors.mobile_provider?.message
-                }
-              />
+              <PaymentMethods />
             </section>
 
             {/* Section 4 – Notes */}

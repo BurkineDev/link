@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
 import type {
   OrderInsert,
@@ -45,9 +46,10 @@ const checkoutRequestSchema = z.object({
     )
     .min(1)
     .max(100),
+  // Only "card" is supported today (Stripe). Mobile Money is planned and
+  // will be added via PawaPay/Flutterwave once provider access is granted.
   paymentMethod: z.object({
-    type: z.enum(["mobile_money", "card"]),
-    mobileProvider: z.string().optional(),
+    type: z.literal("card"),
   }),
   currency: z.string().min(3).max(3).toUpperCase(),
   notes: z.string().max(500).optional(),
@@ -95,6 +97,24 @@ export async function POST(request: NextRequest) {
         { error: "Cette boutique n'est pas encore ouverte." },
         { status: 403 },
       );
+    }
+
+    // Block checkout if the shop owner's subscription is past_due.
+    // The subscriptions row uses an admin-only read policy, so we use the
+    // admin client here. The check is cheap (single indexed lookup).
+    {
+      const admin = getAdminClient();
+      const { data: ownerSub } = await admin
+        .from("creator_subscriptions")
+        .select("status")
+        .eq("user_id", shop.owner_id)
+        .maybeSingle();
+      if (ownerSub?.status === "past_due") {
+        return NextResponse.json(
+          { error: "Cette boutique est temporairement indisponible." },
+          { status: 403 },
+        );
+      }
     }
 
     // -- Fetch product prices from DB to avoid price tampering -----------------
@@ -154,7 +174,56 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // -- Create order in Supabase ----------------------------------------------
+    // -- Atomically reserve stock ---------------------------------------------
+    // The reserve_stock RPC locks each product/variant row, validates
+    // availability, and decrements stock — all in a single transaction.
+    // Untracked stock (stock_quantity = NULL) is treated as unlimited.
+    const reservePayload = items.map((it) => ({
+      product_id: it.product_id,
+      variant_id: it.variant_id ?? null,
+      quantity: it.quantity,
+    }));
+
+    const { data: reserveResult, error: reserveError } = await supabase.rpc(
+      "reserve_stock",
+      { items: reservePayload },
+    );
+
+    if (reserveError) {
+      console.error("[checkout] reserve_stock error:", reserveError);
+      return NextResponse.json(
+        { error: "Impossible de vérifier le stock. Veuillez réessayer." },
+        { status: 500 },
+      );
+    }
+
+    const reservation = (reserveResult ?? {}) as {
+      ok?: boolean;
+      reason?: string;
+      product_name?: string;
+      available?: number;
+      requested?: number;
+    };
+
+    if (!reservation.ok) {
+      const friendlyMessage = (() => {
+        switch (reservation.reason) {
+          case "insufficient_stock":
+            return reservation.product_name
+              ? `Stock insuffisant pour « ${reservation.product_name} » (${reservation.available ?? 0} disponible${(reservation.available ?? 0) > 1 ? "s" : ""}).`
+              : "Un article est en rupture de stock.";
+          case "product_not_found":
+          case "variant_not_found":
+            return "Un article du panier n'est plus disponible.";
+          default:
+            return "Stock insuffisant pour finaliser la commande.";
+        }
+      })();
+
+      return NextResponse.json({ error: friendlyMessage }, { status: 409 });
+    }
+
+    // -- Create order in Supabase ---------------------------------------------
     const orderInsert = {
       shop_id: shopId,
       buyer_email: buyerDetails.email,
@@ -179,6 +248,8 @@ export async function POST(request: NextRequest) {
 
     if (orderError || !order) {
       console.error("[checkout] order insert error:", orderError);
+      // Roll back the stock reservation we just made.
+      await supabase.rpc("release_stock", { items: reservePayload });
       return NextResponse.json(
         { error: "Impossible de créer la commande." },
         { status: 500 },
@@ -193,51 +264,76 @@ export async function POST(request: NextRequest) {
       stripe = getStripe();
     } catch (err) {
       console.error("[checkout] Stripe is not configured:", err);
+      await supabase.rpc("release_stock", { items: reservePayload });
+      await supabase
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
       return NextResponse.json(
         { error: "Le service de paiement n'est pas configuré." },
         { status: 500 },
       );
     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: buyerDetails.email,
-      client_reference_id: order.id,
-      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/checkout`,
-      locale: "fr",
-      payment_method_types: ["card"],
-      billing_address_collection: "auto",
-      metadata: {
-        orderId: order.id,
-        shopId,
-        shopName: shop.name,
-      },
-      payment_intent_data: {
+    let checkoutSession;
+    try {
+      checkoutSession = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: buyerDetails.email,
+        client_reference_id: order.id,
+        success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/checkout`,
+        locale: "fr",
+        payment_method_types: ["card"],
+        billing_address_collection: "auto",
+        // 30-minute expiry — releases reserved stock if the buyer abandons.
+        expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
         metadata: {
           orderId: order.id,
           shopId,
+          shopName: shop.name,
         },
-      },
-      line_items: orderItems.map((item) => {
-        const imageUrl = item.product_snapshot.image_url;
-
-        return {
-          quantity: item.quantity,
-          price_data: {
-            currency: shop.currency.toLowerCase(),
-            unit_amount: toStripeAmount(item.unit_price, shop.currency),
-            product_data: {
-              name: item.product_snapshot.product_name,
-              images: imageUrl?.startsWith("https://") ? [imageUrl] : undefined,
-            },
+        payment_intent_data: {
+          metadata: {
+            orderId: order.id,
+            shopId,
           },
-        };
-      }),
-    });
+        },
+        line_items: orderItems.map((item) => {
+          const imageUrl = item.product_snapshot.image_url;
+          return {
+            quantity: item.quantity,
+            price_data: {
+              currency: shop.currency.toLowerCase(),
+              unit_amount: toStripeAmount(item.unit_price, shop.currency),
+              product_data: {
+                name: item.product_snapshot.product_name,
+                images: imageUrl?.startsWith("https://") ? [imageUrl] : undefined,
+              },
+            },
+          };
+        }),
+      });
+    } catch (err) {
+      console.error("[checkout] Stripe session creation failed:", err);
+      await supabase.rpc("release_stock", { items: reservePayload });
+      await supabase
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+      return NextResponse.json(
+        { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
+        { status: 502 },
+      );
+    }
 
     if (!checkoutSession.url) {
       console.error("[checkout] Stripe session missing url:", checkoutSession.id);
+      await supabase.rpc("release_stock", { items: reservePayload });
+      await supabase
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
       return NextResponse.json(
         { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
         { status: 502 },

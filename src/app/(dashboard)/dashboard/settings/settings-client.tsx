@@ -260,7 +260,15 @@ export function SettingsClient({ shop }: SettingsClientProps) {
 
     setSaving(false);
     if (error) {
-      toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+      if (error.code === "23505") {
+        toast.error("Cette adresse est déjà utilisée. Choisis-en une autre.");
+      } else if (error.code === "23514") {
+        toast.error(
+          "Adresse invalide. Utilise uniquement lettres minuscules, chiffres et tirets.",
+        );
+      } else {
+        toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+      }
     } else {
       toast.success("Informations mises à jour.");
       router.refresh();
