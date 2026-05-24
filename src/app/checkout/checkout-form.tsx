@@ -135,7 +135,7 @@ export default function CheckoutForm() {
   const [paymentSelection, setPaymentSelection] = useState<{
     type: PaymentType;
     mobileProvider?: MobileMoneyProvider;
-  }>({ type: "mobile_money" });
+  }>({ type: "card" });
 
   const {
     register,
@@ -147,7 +147,7 @@ export default function CheckoutForm() {
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       requires_shipping: hasPhysical,
-      payment_type: "mobile_money",
+      payment_type: "card",
       country: "SN",
     },
   });
@@ -473,7 +473,7 @@ export default function CheckoutForm() {
                 )}
               </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Paiement sécurisé via PawaPay
+                Paiement sécurisé via Stripe
               </p>
             </OrderSummary>
           </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getStripe, toStripeAmount } from "@/lib/stripe";
 import type {
   OrderInsert,
   OrderItem,
@@ -52,10 +52,6 @@ const checkoutRequestSchema = z.object({
   currency: z.string().min(3).max(3).toUpperCase(),
   notes: z.string().max(500).optional(),
 });
-
-function sanitizePhoneNumber(phone: string) {
-  return phone.replace(/[^\d]/g, "").replace(/^00/, "");
-}
 
 // ---------------------------------------------------------------------------
 // POST /api/checkout
@@ -166,7 +162,7 @@ export async function POST(request: NextRequest) {
       buyer_phone: buyerDetails.phone,
       status: "pending" as const,
       payment_status: "pending" as const,
-      payment_provider: "pawapay" as const,
+      payment_provider: "stripe" as const,
       payment_ref: null,
       total_amount: totalAmount,
       currency: shop.currency,
@@ -189,67 +185,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // -- Initiate PawaPay payment page session -------------------------------
-    const depositId = randomUUID();
+    // -- Initiate Stripe Checkout session ------------------------------------
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const pawapayToken = process.env.PAWAPAY_API_TOKEN;
-    const pawapayBaseUrl = process.env.PAWAPAY_API_BASE_URL ?? "https://api.sandbox.pawapay.io";
+    let stripe: ReturnType<typeof getStripe>;
 
-    if (!pawapayToken) {
-      console.error("[checkout] missing PAWAPAY_API_TOKEN");
+    try {
+      stripe = getStripe();
+    } catch (err) {
+      console.error("[checkout] Stripe is not configured:", err);
       return NextResponse.json(
         { error: "Le service de paiement n'est pas configuré." },
         { status: 500 },
       );
     }
 
-    const paymentPageRequest = {
-      depositId,
-      returnUrl: `${appUrl}/checkout/success?deposit_id=${depositId}`,
-      customerMessage: `Commande #${order.id.slice(0, 8).toUpperCase()}`,
-      amountDetails: {
-        amount: String(totalAmount),
-        currency: shop.currency,
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: buyerDetails.email,
+      client_reference_id: order.id,
+      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/checkout`,
+      locale: "fr",
+      payment_method_types: ["card"],
+      billing_address_collection: "auto",
+      metadata: {
+        orderId: order.id,
+        shopId,
+        shopName: shop.name,
       },
-      phoneNumber: sanitizePhoneNumber(buyerDetails.phone),
-      language: "FR",
-      reason: `Commande #${order.id.slice(0, 8).toUpperCase()}`,
-      metadata: [
-        { orderId: order.id },
-        { shopId },
-        { shopName: shop.name },
-      ],
-    };
+      payment_intent_data: {
+        metadata: {
+          orderId: order.id,
+          shopId,
+        },
+      },
+      line_items: orderItems.map((item) => {
+        const imageUrl = item.product_snapshot.image_url;
 
-    const pawapayRes = await fetch(`${pawapayBaseUrl}/v2/paymentpage`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${pawapayToken}`,
-      },
-      body: JSON.stringify(paymentPageRequest),
+        return {
+          quantity: item.quantity,
+          price_data: {
+            currency: shop.currency.toLowerCase(),
+            unit_amount: toStripeAmount(item.unit_price, shop.currency),
+            product_data: {
+              name: item.product_snapshot.product_name,
+              images: imageUrl?.startsWith("https://") ? [imageUrl] : undefined,
+            },
+          },
+        };
+      }),
     });
 
-    const pawapayData = await pawapayRes.json();
-
-    if (!pawapayRes.ok || !pawapayData?.redirectUrl) {
-      console.error("[checkout] PawaPay error:", pawapayData);
+    if (!checkoutSession.url) {
+      console.error("[checkout] Stripe session missing url:", checkoutSession.id);
       return NextResponse.json(
-        {
-          error:
-            "Impossible d'initialiser le paiement. Veuillez réessayer.",
-        },
+        { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
         { status: 502 },
       );
     }
 
     await supabase
       .from("orders")
-      .update({ payment_ref: depositId })
+      .update({ payment_ref: checkoutSession.id })
       .eq("id", order.id);
 
     return NextResponse.json({
-      paymentLink: pawapayData.redirectUrl as string,
+      paymentLink: checkoutSession.url,
       orderId: order.id,
     });
   } catch (err) {

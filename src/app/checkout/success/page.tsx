@@ -53,17 +53,17 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const depositId = searchParams.get("deposit_id");
+  const sessionId = searchParams.get("session_id");
 
   const [state, setState] = useState<VerifyState>({ status: "loading" });
 
   useEffect(() => {
-    if (!depositId) {
+    if (!sessionId) {
       setState({ status: "error", message: "Référence de transaction manquante." });
       return;
     }
 
-    const params = new URLSearchParams({ deposit_id: depositId });
+    const params = new URLSearchParams({ session_id: sessionId });
 
     fetch(`/api/checkout/verify?${params.toString()}`)
       .then((r) => r.json())
@@ -77,7 +77,7 @@ function SuccessContent() {
           message: err instanceof Error ? err.message : "Vérification échouée.",
         });
       });
-  }, [depositId]);
+  }, [sessionId]);
 
   // ---- Loading ----
   if (state.status === "loading") {
@@ -107,7 +107,7 @@ function SuccessContent() {
             onClick={() => {
               setState({ status: "loading" });
               const params = new URLSearchParams();
-              if (depositId) params.set("deposit_id", depositId);
+              if (sessionId) params.set("session_id", sessionId);
               fetch(`/api/checkout/verify?${params.toString()}`)
                 .then((r) => r.json())
                 .then((data) => {

@@ -1,32 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fromStripeAmount, getStripe } from "@/lib/stripe";
 
 // ---------------------------------------------------------------------------
-// GET /api/checkout/verify?deposit_id=XXX
-// Called from /checkout/success after PawaPay redirects back.
+// GET /api/checkout/verify?session_id=cs_xxx
+// Called from /checkout/success after Stripe redirects back.
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const depositId = searchParams.get("deposit_id");
+    const sessionId = searchParams.get("session_id");
 
-    if (!depositId) {
+    if (!sessionId) {
       return NextResponse.json(
-        { error: "Paramètre deposit_id manquant." },
+        { error: "Paramètre session_id manquant." },
         { status: 400 },
       );
     }
 
     const supabase = await createClient();
 
-    // -- Find order by deposit_id (stored as payment_ref) ---------------------
+    // -- Find order by Checkout Session ID (stored as payment_ref) ------------
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(
         "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email",
       )
-      .eq("payment_ref", depositId)
+      .eq("payment_ref", sessionId)
       .maybeSingle();
 
     if (orderError || !order) {
@@ -49,55 +50,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // -- Verify with PawaPay --------------------------------------------------
-    const pawapayToken = process.env.PAWAPAY_API_TOKEN;
-    const pawapayBaseUrl =
-      process.env.PAWAPAY_API_BASE_URL ?? "https://api.sandbox.pawapay.io";
+    // -- Verify with Stripe ---------------------------------------------------
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    if (!pawapayToken) {
-      console.error("[verify] missing PAWAPAY_API_TOKEN");
-      return NextResponse.json(
-        { error: "Service de paiement non configuré." },
-        { status: 500 },
-      );
-    }
-
-    const ppRes = await fetch(`${pawapayBaseUrl}/deposits/${encodeURIComponent(depositId)}`, {
-      headers: { Authorization: `Bearer ${pawapayToken}` },
-    });
-
-    if (!ppRes.ok) {
-      console.error("[verify] PawaPay API error:", ppRes.status);
-      return NextResponse.json(
-        { error: "Impossible de vérifier le paiement auprès de PawaPay." },
-        { status: 502 },
-      );
-    }
-
-    const ppData = await ppRes.json() as Array<{
-      depositId: string;
-      status: string;
-      amount: string;
-      currency: string;
-    }>;
-
-    // PawaPay returns an array
-    const deposit = Array.isArray(ppData) ? ppData[0] : ppData;
-
-    if (!deposit) {
-      return NextResponse.json(
-        { error: "Dépôt introuvable chez PawaPay." },
-        { status: 404 },
-      );
-    }
-
-    const isCompleted = deposit.status === "COMPLETED";
-    const isFailed = deposit.status === "FAILED";
-    const amountOk = parseFloat(deposit.amount) >= order.total_amount;
+    const isPaid = session.payment_status === "paid";
+    const isFailed = session.status === "expired";
+    const paidAmount = fromStripeAmount(session.amount_total, order.currency);
+    const amountOk = paidAmount !== null && paidAmount >= order.total_amount;
     const currencyOk =
-      deposit.currency.toUpperCase() === order.currency.toUpperCase();
+      session.currency?.toUpperCase() === order.currency.toUpperCase();
 
-    if (isCompleted && amountOk && currencyOk) {
+    if (isPaid && amountOk && currencyOk) {
       await supabase
         .from("orders")
         .update({ payment_status: "paid", status: "confirmed" })
@@ -132,7 +96,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // PENDING / ENQUEUED — payment still in progress
+    if (isPaid && (!amountOk || !currencyOk)) {
+      console.warn("[verify] Stripe amount/currency mismatch for order:", order.id);
+      return NextResponse.json(
+        { error: "Le montant ou la devise du paiement ne correspond pas à la commande." },
+        { status: 400 },
+      );
+    }
+
+    // open / complete but unpaid — payment still in progress
     return NextResponse.json(
       { error: "Le paiement est encore en cours de traitement. Réessayez dans quelques instants." },
       { status: 202 },

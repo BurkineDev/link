@@ -2,6 +2,19 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Create a local environment file with the app, Supabase, and Stripe values:
+
+```bash
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+Stripe Checkout redirects back to `/checkout/success?session_id=...`. Configure
+the Stripe webhook URL as `/api/webhooks/stripe` and subscribe to
+`checkout.session.completed` and `checkout.session.expired`.
+
 First, run the development server:
 
 ```bash
