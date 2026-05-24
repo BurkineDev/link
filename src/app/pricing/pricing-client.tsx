@@ -62,7 +62,7 @@ export function PricingClient({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/30">
+    <div className="min-h-screen bg-background">
       {/* Top bar */}
       <header className="border-b bg-background/70 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -90,7 +90,7 @@ export function PricingClient({
           </Badge>
           <h1 className="text-3xl sm:text-5xl font-black mb-3 leading-tight">
             Commence{" "}
-            <span className="gradient-brand-text">gratuitement</span>
+            <span className="text-primary">gratuitement</span>
           </h1>
           <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">
             Pas de frais cachés. Passe en Pro le jour où ta boutique décolle.

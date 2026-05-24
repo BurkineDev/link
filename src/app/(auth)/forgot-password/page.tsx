@@ -53,14 +53,8 @@ export default function ForgotPasswordPage() {
     return (
       <div className="space-y-6">
         <div className="flex flex-col items-center text-center space-y-4 py-4">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.62 0.24 22) 0%, oklch(0.72 0.18 85) 100%)",
-            }}
-          >
-            <CheckCircle2 className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[var(--success)] text-[var(--success-foreground)]">
+            <CheckCircle2 className="w-8 h-8" />
           </div>
 
           <div className="space-y-2">

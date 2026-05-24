@@ -39,50 +39,25 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="min-h-screen flex">
       {/* ── Left panel – brand / marketing (hidden on mobile) ── */}
-      <aside className="hidden lg:flex lg:w-[52%] xl:w-[55%] relative flex-col justify-between p-10 overflow-hidden">
-        {/* Gradient background */}
+      <aside className="hidden lg:flex lg:w-[52%] xl:w-[55%] relative flex-col justify-between p-10 overflow-hidden bg-foreground">
+        {/* Subtle dot pattern */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-[0.05]"
           style={{
-            background:
-              "linear-gradient(145deg, oklch(0.62 0.24 22) 0%, oklch(0.68 0.22 35) 40%, oklch(0.72 0.18 85) 100%)",
-          }}
-        />
-
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-20 bg-white/30" />
-        <div className="absolute -bottom-32 -right-16 w-[28rem] h-[28rem] rounded-full opacity-10 bg-white/40" />
-        <div className="absolute top-1/2 left-1/3 w-64 h-64 rounded-full opacity-10 bg-white/20 -translate-y-1/2" />
-
-        {/* Kente-inspired pattern overlay */}
-        <div
-          className="absolute inset-0 opacity-5"
-          style={{
-            backgroundImage: `repeating-linear-gradient(
-              45deg,
-              transparent,
-              transparent 10px,
-              rgba(255,255,255,0.8) 10px,
-              rgba(255,255,255,0.8) 11px
-            ), repeating-linear-gradient(
-              -45deg,
-              transparent,
-              transparent 10px,
-              rgba(255,255,255,0.8) 10px,
-              rgba(255,255,255,0.8) 11px
-            )`,
+            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+            backgroundSize: "32px 32px",
           }}
         />
 
         {/* Content */}
         <div className="relative z-10">
           <Link href="/" className="inline-flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 transition-transform group-hover:scale-105">
-              <ShoppingBag className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center transition-transform group-hover:scale-105">
+              <ShoppingBag className="w-5 h-5" />
             </div>
-            <span className="text-2xl font-black text-white tracking-tight">
-              Link<span className="text-white/80">Boutik</span>
-              <span className="ml-1.5 text-xs font-bold bg-white/20 text-white px-1.5 py-0.5 rounded-md leading-none align-middle border border-white/30">
+            <span className="text-2xl font-black text-background tracking-tight">
+              Link<span className="text-background/70">Boutik</span>
+              <span className="ml-1.5 text-xs font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-md leading-none align-middle">
                 AF
               </span>
             </span>
@@ -91,12 +66,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <div className="relative z-10 space-y-8">
           <div className="space-y-3">
-            <h1 className="text-4xl xl:text-5xl font-black text-white leading-tight">
+            <h1 className="text-4xl xl:text-5xl font-black text-background leading-tight">
               Vendez plus,
               <br />
-              <span className="text-white/80">partout en Afrique.</span>
+              <span className="text-primary">partout en Afrique.</span>
             </h1>
-            <p className="text-lg text-white/70 max-w-sm leading-relaxed">
+            <p className="text-lg text-background/70 max-w-sm leading-relaxed">
               La plateforme e-commerce pensée pour les entrepreneurs africains. Simple, rapide, et
               adapté à votre réalité.
             </p>
@@ -107,12 +82,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               const Icon = feature.icon;
               return (
                 <li key={feature.title} className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center flex-shrink-0 border border-white/20">
-                    <Icon className="w-5 h-5 text-white" />
+                  <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-white text-sm">{feature.title}</p>
-                    <p className="text-white/60 text-xs mt-0.5 leading-relaxed">
+                    <p className="font-semibold text-background text-sm">{feature.title}</p>
+                    <p className="text-background/60 text-xs mt-0.5 leading-relaxed">
                       {feature.description}
                     </p>
                   </div>
@@ -123,20 +98,20 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+          <div className="flex items-center gap-3 bg-white/[0.06] rounded-2xl p-4 border border-white/10">
             <div className="flex -space-x-2">
               {["🇸🇳", "🇨🇮", "🇨🇲", "🇬🇭"].map((flag, i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center text-sm"
+                  className="w-8 h-8 rounded-full bg-white/10 border-2 border-foreground flex items-center justify-center text-sm"
                 >
                   {flag}
                 </div>
               ))}
             </div>
             <div>
-              <p className="text-white font-semibold text-sm">+12 000 boutiques actives</p>
-              <p className="text-white/60 text-xs">dans 15 pays africains</p>
+              <p className="text-background font-semibold text-sm">+12 000 boutiques actives</p>
+              <p className="text-background/60 text-xs">dans 15 pays africains</p>
             </div>
           </div>
         </div>

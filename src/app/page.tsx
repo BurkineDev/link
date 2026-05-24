@@ -68,10 +68,10 @@ function FadeIn({
 
 function PhoneMockup() {
   const products = [
-    { name: "Robe Wax Ankara", price: "12 500 FCFA", color: "from-orange-400 to-amber-300", emoji: "👗" },
-    { name: "Sac en Raphia", price: "8 000 FCFA", color: "from-emerald-400 to-teal-300", emoji: "👜" },
-    { name: "Bijoux Artisanaux", price: "5 500 FCFA", color: "from-rose-400 to-pink-300", emoji: "💍" },
-    { name: "Huile de Karité", price: "3 200 FCFA", color: "from-amber-400 to-yellow-300", emoji: "🧴" },
+    { name: "Robe Wax Ankara", price: "12 500 FCFA", bg: "bg-[var(--primary)]", emoji: "👗" },
+    { name: "Sac en Raphia", price: "8 000 FCFA", bg: "bg-[var(--success)]", emoji: "👜" },
+    { name: "Bijoux Artisanaux", price: "5 500 FCFA", bg: "bg-foreground", emoji: "💍" },
+    { name: "Huile de Karité", price: "3 200 FCFA", bg: "bg-[var(--primary)]", emoji: "🧴" },
   ];
 
   return (
@@ -91,15 +91,15 @@ function PhoneMockup() {
 
           {/* Shop header */}
           <div className="px-3 pb-3">
-            <div className="gradient-brand rounded-2xl p-3 text-white text-center">
-              <div className="size-10 rounded-full bg-white/30 flex items-center justify-center text-lg mx-auto mb-1">
+            <div className="bg-foreground rounded-2xl p-3 text-background text-center">
+              <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg mx-auto mb-1">
                 🛍️
               </div>
               <p className="font-bold text-sm">Awa Style</p>
               <p className="text-[10px] opacity-80">@awa.style · Dakar, SN</p>
               <div className="flex justify-center gap-1 mt-2">
-                <span className="bg-white/20 text-[9px] rounded-full px-2 py-0.5">Mode</span>
-                <span className="bg-white/20 text-[9px] rounded-full px-2 py-0.5">Artisanat</span>
+                <span className="bg-white/15 text-[9px] rounded-full px-2 py-0.5">Mode</span>
+                <span className="bg-white/15 text-[9px] rounded-full px-2 py-0.5">Artisanat</span>
               </div>
             </div>
           </div>
@@ -107,13 +107,13 @@ function PhoneMockup() {
           {/* Products grid */}
           <div className="px-2 pb-3 grid grid-cols-2 gap-1.5">
             {products.map((p) => (
-              <div key={p.name} className="rounded-xl overflow-hidden bg-gray-50">
-                <div className={`h-16 bg-gradient-to-br ${p.color} flex items-center justify-center text-2xl`}>
+              <div key={p.name} className="rounded-xl overflow-hidden bg-gray-50 border border-black/[0.04]">
+                <div className={`h-16 ${p.bg} flex items-center justify-center text-2xl`}>
                   {p.emoji}
                 </div>
                 <div className="p-1.5">
                   <p className="text-[9px] font-semibold text-gray-800 truncate">{p.name}</p>
-                  <p className="text-[9px] text-primary font-bold">{p.price}</p>
+                  <p className="text-[9px] text-foreground font-bold">{p.price}</p>
                 </div>
               </div>
             ))}
@@ -190,7 +190,7 @@ function Navbar() {
           </Button>
           <Button
             size="sm"
-            className="gradient-brand text-white border-0"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 border-0"
             asChild
           >
             <Link href="/register">
@@ -237,7 +237,7 @@ function Navbar() {
                 <Link href="/login">Connexion</Link>
               </Button>
               <Button
-                className="w-full gradient-brand text-white border-0"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                 asChild
               >
                 <Link href="/register">Créer ma boutique gratuitement</Link>
@@ -256,25 +256,15 @@ function Navbar() {
 
 function Hero() {
   return (
-    <section className="relative pt-28 pb-20 sm:pt-36 sm:pb-28 overflow-hidden">
-      {/* Gradient background */}
+    <section className="relative pt-28 pb-20 sm:pt-36 sm:pb-28 overflow-hidden bg-foreground">
+      {/* Subtle dot pattern overlay */}
       <div
-        className="absolute inset-0 -z-10"
-        style={{
-          background:
-            "linear-gradient(135deg, oklch(0.62 0.24 22) 0%, oklch(0.68 0.22 40) 40%, oklch(0.72 0.18 85) 100%)",
-        }}
-      />
-      {/* Dot pattern overlay */}
-      <div
-        className="absolute inset-0 -z-10 opacity-10"
+        className="absolute inset-0 -z-10 opacity-[0.06]"
         style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
           backgroundSize: "32px 32px",
         }}
       />
-      {/* Bottom fade to white */}
-      <div className="absolute bottom-0 left-0 right-0 h-24 -z-10 bg-gradient-to-t from-white to-transparent" />
 
       <div className="max-w-6xl mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -285,7 +275,7 @@ function Hero() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <Badge className="mb-6 bg-white/20 text-white border-white/30 hover:bg-white/30 text-sm px-3 py-1">
+              <Badge className="mb-6 bg-primary text-primary-foreground border-0 hover:bg-primary/90 text-sm px-3 py-1 font-semibold">
                 🌍 Plateforme #1 pour les créateurs africains
               </Badge>
             </motion.div>
@@ -297,7 +287,7 @@ function Hero() {
               className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.08] tracking-tight mb-6"
             >
               Crée ta boutique en ligne en{" "}
-              <span className="bg-white/20 rounded-lg px-2 inline-block">
+              <span className="bg-primary text-primary-foreground rounded-lg px-2 inline-block">
                 5 minutes
               </span>
             </motion.h1>
@@ -321,7 +311,7 @@ function Hero() {
             >
               <Button
                 size="lg"
-                className="bg-white text-primary hover:bg-white/90 font-bold text-base h-12 px-7 shadow-lg shadow-black/20"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-base h-12 px-7 border-0"
                 asChild
               >
                 <Link href="/register">
@@ -332,7 +322,7 @@ function Hero() {
               <Button
                 size="lg"
                 variant="outline"
-                className="border-white/40 text-white bg-white/10 hover:bg-white/20 font-semibold text-base h-12 px-7"
+                className="border-white/30 text-white bg-transparent hover:bg-white/10 hover:text-white font-semibold text-base h-12 px-7"
                 asChild
               >
                 <Link href="/@demo">Voir une démo</Link>
@@ -383,7 +373,7 @@ function StatsBar() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-0 md:divide-x divide-muted">
           {stats.map((stat, i) => (
             <FadeIn key={stat.label} delay={i * 0.08} className="text-center px-4">
-              <p className="text-2xl sm:text-3xl font-black gradient-brand-text mb-1">
+              <p className="text-2xl sm:text-3xl font-black text-foreground mb-1">
                 {stat.value}
               </p>
               <p className="text-sm text-muted-foreground">{stat.label}</p>
@@ -408,8 +398,8 @@ function HowItWorks() {
       description:
         "Inscris-toi gratuitement avec ton email ou ton compte Google. Aucune carte bancaire requise.",
       emoji: "🚀",
-      color: "from-orange-500/10 to-amber-500/10",
-      border: "border-orange-200",
+      bg: "bg-[var(--primary)]/10",
+      border: "border-[var(--primary)]/30",
     },
     {
       number: "02",
@@ -418,8 +408,8 @@ function HowItWorks() {
       description:
         "Choisis parmi nos templates conçus pour l'Afrique. Ajoute tes produits avec photos, prix et stocks.",
       emoji: "🎨",
-      color: "from-violet-500/10 to-purple-500/10",
-      border: "border-violet-200",
+      bg: "bg-muted",
+      border: "border-border",
     },
     {
       number: "03",
@@ -428,8 +418,8 @@ function HowItWorks() {
       description:
         "Copie ton lien linkboutik.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse par carte bancaire dès aujourd'hui.",
       emoji: "💰",
-      color: "from-emerald-500/10 to-teal-500/10",
-      border: "border-emerald-200",
+      bg: "bg-[var(--success)]/10",
+      border: "border-[var(--success)]/30",
     },
   ];
 
@@ -442,7 +432,7 @@ function HowItWorks() {
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
             Simple comme{" "}
-            <span className="gradient-brand-text">bonjour</span>
+            <span className="text-primary">bonjour</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             En 3 étapes, tu as une boutique professionnelle prête à vendre.
@@ -451,21 +441,15 @@ function HowItWorks() {
 
         <div className="grid md:grid-cols-3 gap-6 relative">
           {/* Connector line */}
-          <div className="hidden md:block absolute top-12 left-[calc(16.66%+1rem)] right-[calc(16.66%+1rem)] h-px bg-gradient-to-r from-orange-200 via-violet-200 to-emerald-200" />
+          <div className="hidden md:block absolute top-12 left-[calc(16.66%+1rem)] right-[calc(16.66%+1rem)] h-px bg-border" />
 
           {steps.map((step, i) => (
             <FadeIn key={step.number} delay={i * 0.12}>
-              <Card className={cn("relative overflow-hidden border-2 h-full", step.border)}>
+              <Card className={cn("relative overflow-hidden border-2 h-full", step.border, step.bg)}>
                 <CardContent className="p-6">
-                  <div
-                    className={cn(
-                      "absolute inset-0 bg-gradient-to-br opacity-50",
-                      step.color
-                    )}
-                  />
                   <div className="relative">
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="size-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl flex-shrink-0">
+                      <div className="size-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl flex-shrink-0 border border-border">
                         {step.emoji}
                       </div>
                       <div>
@@ -503,48 +487,48 @@ function Features() {
       title: "Paiement sécurisé",
       description:
         "Tes clients paient par carte bancaire via Stripe — sécurisé et fiable. Intégration Mobile Money (Orange, MTN, Wave) en cours.",
-      color: "text-orange-500",
-      bg: "bg-orange-50",
+      color: "text-foreground",
+      bg: "bg-[var(--primary)]/15",
     },
     {
       icon: Zap,
       title: "Templates professionnels",
       description:
         "Boutique prête en minutes. Choisis parmi des designs pensés pour les créateurs africains.",
-      color: "text-amber-500",
-      bg: "bg-amber-50",
+      color: "text-foreground",
+      bg: "bg-[var(--primary)]/15",
     },
     {
       icon: Package,
       title: "Gestion des stocks",
       description:
         "Suis tes inventaires en temps réel. Alertes automatiques quand le stock est bas.",
-      color: "text-emerald-500",
-      bg: "bg-emerald-50",
+      color: "text-[var(--success)]",
+      bg: "bg-[var(--success)]/10",
     },
     {
       icon: BarChart3,
       title: "Analytics en temps réel",
       description:
         "Vues, conversions, revenus. Comprends ce qui se vend et optimise ta boutique.",
-      color: "text-violet-500",
-      bg: "bg-violet-50",
+      color: "text-[var(--success)]",
+      bg: "bg-[var(--success)]/10",
     },
     {
       icon: Link2,
       title: "Lien @username unique",
       description:
         "linkboutik.com/@ton-nom — facile à partager, à retenir et à promouvoir sur tous tes réseaux.",
-      color: "text-blue-500",
-      bg: "bg-blue-50",
+      color: "text-foreground",
+      bg: "bg-muted",
     },
     {
       icon: Headphones,
       title: "Support 24/7",
       description:
         "Notre équipe basée en Afrique répond en français, anglais et langues locales. Toujours là pour toi.",
-      color: "text-rose-500",
-      bg: "bg-rose-50",
+      color: "text-foreground",
+      bg: "bg-muted",
     },
   ];
 
@@ -556,8 +540,8 @@ function Features() {
             Fonctionnalités
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Tout ce qu'il te faut pour{" "}
-            <span className="gradient-brand-text">vendre en ligne</span>
+            Tout ce qu&apos;il te faut pour{" "}
+            <span className="text-primary">vendre en ligne</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             Des outils puissants, conçus spécifiquement pour les réalités du
@@ -599,21 +583,23 @@ function Features() {
 function TemplateCard({
   name,
   tag,
-  gradient,
+  headerBg,
+  headerText,
   products,
 }: {
   name: string;
   tag: string;
-  gradient: string;
+  headerBg: string;
+  headerText: string;
   products: { emoji: string; name: string; price: string }[];
 }) {
   return (
-    <div className="rounded-2xl overflow-hidden border border-black/[0.08] shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 bg-white">
+    <div className="rounded-2xl overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow duration-200 bg-card">
       {/* Header */}
-      <div className={cn("h-24 flex items-center justify-center", gradient)}>
-        <div className="text-center text-white">
+      <div className={cn("h-24 flex items-center justify-center", headerBg)}>
+        <div className={cn("text-center", headerText)}>
           <p className="text-xl font-black">{name}</p>
-          <Badge className="mt-1 bg-white/20 text-white border-white/30 text-[11px]">
+          <Badge className="mt-1 bg-white/15 border-white/25 text-[11px]" style={{ color: "inherit" }}>
             {tag}
           </Badge>
         </div>
@@ -624,20 +610,20 @@ function TemplateCard({
         {products.map((p) => (
           <div
             key={p.name}
-            className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/50"
+            className="flex items-center gap-3 p-2.5 rounded-xl bg-muted"
           >
             <span className="text-xl">{p.emoji}</span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{p.name}</p>
-              <p className="text-xs text-primary font-bold">{p.price}</p>
+              <p className="text-xs text-foreground font-bold">{p.price}</p>
             </div>
-            <button className="text-[10px] font-bold bg-primary text-white rounded-lg px-2.5 py-1.5 hover:opacity-90 transition-opacity">
+            <button className="text-[10px] font-bold bg-primary text-primary-foreground rounded-lg px-2.5 py-1.5 hover:opacity-90 transition-opacity">
               Acheter
             </button>
           </div>
         ))}
         <div className="pt-1">
-          <div className="w-full h-8 rounded-xl gradient-brand flex items-center justify-center text-white text-xs font-bold">
+          <div className="w-full h-8 rounded-xl bg-foreground text-background flex items-center justify-center text-xs font-bold">
             Voir la boutique
           </div>
         </div>
@@ -651,7 +637,8 @@ function Templates() {
     {
       name: "Vibrant",
       tag: "Mode & Beauté",
-      gradient: "bg-gradient-to-br from-orange-500 to-amber-400",
+      headerBg: "bg-primary",
+      headerText: "text-primary-foreground",
       products: [
         { emoji: "👗", name: "Robe Wax Ankara", price: "12 500 FCFA" },
         { emoji: "👒", name: "Chapeau Raphia", price: "4 200 FCFA" },
@@ -661,7 +648,8 @@ function Templates() {
     {
       name: "Minimaliste",
       tag: "Artisanat & Design",
-      gradient: "bg-gradient-to-br from-gray-700 to-gray-900",
+      headerBg: "bg-foreground",
+      headerText: "text-background",
       products: [
         { emoji: "🏺", name: "Vase en Terre cuite", price: "18 000 FCFA" },
         { emoji: "🖼️", name: "Tableau Batik", price: "35 000 FCFA" },
@@ -671,7 +659,8 @@ function Templates() {
     {
       name: "Market",
       tag: "Alimentaire & Bio",
-      gradient: "bg-gradient-to-br from-emerald-500 to-teal-600",
+      headerBg: "bg-[var(--success)]",
+      headerText: "text-[var(--success-foreground)]",
       products: [
         { emoji: "🧴", name: "Beurre de Karité pur", price: "5 500 FCFA" },
         { emoji: "🌿", name: "Tisane Moringa bio", price: "3 200 FCFA" },
@@ -689,7 +678,7 @@ function Templates() {
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
             Des boutiques{" "}
-            <span className="gradient-brand-text">qui vendent</span>
+            <span className="text-primary">qui vendent</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             3 templates professionnels, personnalisables à l'infini. Lance ta
@@ -709,7 +698,7 @@ function Templates() {
           <Button
             variant="outline"
             size="lg"
-            className="border-primary text-primary hover:bg-primary hover:text-white"
+            className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground"
             asChild
           >
             <Link href="/register">
@@ -734,7 +723,8 @@ function Testimonials() {
       handle: "@aminata.fashion",
       country: "🇸🇳 Sénégal",
       avatar: "AD",
-      avatarColor: "from-orange-400 to-amber-500",
+      avatarBg: "bg-primary",
+      avatarText: "text-primary-foreground",
       quote:
         "En 10 minutes j'avais ma boutique en ligne. Le premier mois j'ai fait 380 000 FCFA de chiffre d'affaires. LinkBoutik a transformé mon business !",
       stars: 5,
@@ -745,7 +735,8 @@ function Testimonials() {
       handle: "@kwame.craft",
       country: "🇬🇭 Ghana",
       avatar: "KA",
-      avatarColor: "from-emerald-400 to-teal-500",
+      avatarBg: "bg-[var(--success)]",
+      avatarText: "text-[var(--success-foreground)]",
       quote:
         "The checkout is smooth and the dashboard is clear — I set up my shop in one evening and got my first sale the next day. Sales are up 200% in 3 months.",
       stars: 5,
@@ -756,7 +747,8 @@ function Testimonials() {
       handle: "@fatou.beaute",
       country: "🇨🇮 Côte d'Ivoire",
       avatar: "FK",
-      avatarColor: "from-violet-400 to-purple-500",
+      avatarBg: "bg-foreground",
+      avatarText: "text-background",
       quote:
         "Je poste sur Instagram, mes clientes cliquent sur mon lien LinkBoutik et finalisent leur commande en quelques secondes. C'est trop simple ! Je recommande à toutes les entrepreneures.",
       stars: 5,
@@ -773,7 +765,7 @@ function Testimonials() {
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
             Ils vendent déjà avec{" "}
-            <span className="gradient-brand-text">LinkBoutik</span>
+            <span className="text-primary">LinkBoutik</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             Des milliers de créateurs africains font confiance à LinkBoutik
@@ -802,8 +794,9 @@ function Testimonials() {
                   <div className="flex items-center gap-3">
                     <div
                       className={cn(
-                        "size-10 rounded-full bg-gradient-to-br flex items-center justify-center text-white font-bold text-sm flex-shrink-0",
-                        t.avatarColor
+                        "size-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0",
+                        t.avatarBg,
+                        t.avatarText,
                       )}
                     >
                       {t.avatar}
@@ -860,7 +853,7 @@ function Pricing() {
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
             Commence{" "}
-            <span className="gradient-brand-text">gratuitement</span>
+            <span className="text-primary">gratuitement</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             Pas de frais cachés. Passe en Pro le jour où ta boutique décolle.
@@ -888,7 +881,7 @@ function Pricing() {
                 </div>
 
                 <Button
-                  className="w-full gradient-brand text-white border-0 mb-6 h-11"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0 mb-6 h-11 font-semibold"
                   asChild
                 >
                   <Link href="/register">Commencer gratuitement</Link>
@@ -938,7 +931,7 @@ function Pricing() {
                 </div>
 
                 <Button
-                  className="w-full gradient-brand text-white border-0 mb-6 h-11"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0 mb-6 h-11 font-semibold"
                   asChild
                 >
                   <Link href="/pricing">Passer en Pro</Link>
@@ -978,32 +971,24 @@ function FinalCTA() {
   const [email, setEmail] = useState("");
 
   return (
-    <section className="py-20 sm:py-28 relative overflow-hidden">
-      {/* Gradient background */}
+    <section className="py-20 sm:py-28 relative overflow-hidden bg-foreground">
       <div
-        className="absolute inset-0 -z-10"
-        style={{
-          background:
-            "linear-gradient(135deg, oklch(0.62 0.24 22) 0%, oklch(0.68 0.22 40) 50%, oklch(0.72 0.18 85) 100%)",
-        }}
-      />
-      <div
-        className="absolute inset-0 -z-10 opacity-10"
+        className="absolute inset-0 -z-10 opacity-[0.06]"
         style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
           backgroundSize: "40px 40px",
         }}
       />
 
-      <div className="max-w-3xl mx-auto px-4 text-center text-white">
+      <div className="max-w-3xl mx-auto px-4 text-center text-background">
         <FadeIn>
           <div className="text-5xl mb-6">🌍</div>
           <h2 className="text-3xl sm:text-5xl font-black mb-4 leading-tight">
             Rejoins 10 000+ créateurs africains
           </h2>
-          <p className="text-lg sm:text-xl text-white/80 mb-10 max-w-xl mx-auto">
-            Lance ta boutique gratuitement aujourd'hui. Pas de carte bancaire,
-            pas de commission.
+          <p className="text-lg sm:text-xl text-background/80 mb-10 max-w-xl mx-auto">
+            Lance ta boutique gratuitement aujourd&apos;hui. Pas de carte bancaire,
+            pas d&apos;engagement.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
@@ -1012,10 +997,10 @@ function FinalCTA() {
               placeholder="ton@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 h-12 px-4 rounded-xl bg-white/15 border border-white/30 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/20 transition-all text-sm"
+              className="flex-1 h-12 px-4 rounded-xl bg-white/10 border border-white/20 text-background placeholder:text-background/50 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:bg-white/15 transition-colors text-sm"
             />
             <Button
-              className="h-12 px-6 bg-white text-primary font-bold hover:bg-white/90 shadow-lg flex-shrink-0"
+              className="h-12 px-6 bg-primary text-primary-foreground font-bold hover:bg-primary/90 flex-shrink-0 border-0"
               asChild
             >
               <Link
@@ -1027,7 +1012,7 @@ function FinalCTA() {
             </Button>
           </div>
 
-          <p className="mt-4 text-sm text-white/60">
+          <p className="mt-4 text-sm text-background/60">
             Plus de 10 000 boutiques créées en Afrique. Rejoins-les maintenant.
           </p>
         </FadeIn>
@@ -1123,10 +1108,10 @@ function Footer() {
             </p>
             <ul className="space-y-2.5 text-sm">
               {[
-                { label: "À propos", href: "/about" },
-                { label: "Conditions d'utilisation", href: "/terms" },
-                { label: "Confidentialité", href: "/privacy" },
-                { label: "Contact", href: "/contact" },
+                { label: "Tarifs", href: "/pricing" },
+                { label: "Conditions d'utilisation", href: "/legal/terms" },
+                { label: "Confidentialité", href: "/legal/privacy" },
+                { label: "Mentions légales", href: "/legal/mentions" },
               ].map((l) => (
                 <li key={l.href}>
                   <a

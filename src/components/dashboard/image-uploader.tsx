@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ImageIcon, Loader2, X, UploadCloud } from "lucide-react";
+import { compressImage } from "@/lib/utils/compress-image";
 
 export interface UploadedImage {
   url: string;
@@ -110,8 +111,15 @@ export function ImageUploader({
         return next;
       });
 
+      // Compress in parallel before upload — faster on slow networks and
+      // friendlier to mobile data plans. compressImage() is a no-op for
+      // already-small / GIF / SVG files.
+      const compressed = await Promise.all(
+        accepted.map((file) => compressImage(file).catch(() => file)),
+      );
+
       const results = await Promise.all(
-        accepted.map((file, i) => uploadFile(file, newSlots[i].id))
+        compressed.map((file, i) => uploadFile(file, newSlots[i].id))
       );
 
       setSlots((prev) => {

@@ -15,6 +15,14 @@ interface Props {
   params: Promise<{ username: string }>;
 }
 
+/**
+ * Revalidate shop pages every 60 seconds. Cuts Supabase load by 60x for
+ * popular shops while keeping the catalog reasonably fresh. The dashboard
+ * still shows real-time data because it uses authenticated queries that
+ * bypass this cache.
+ */
+export const revalidate = 60;
+
 // ---------------------------------------------------------------------------
 // Metadata
 // ---------------------------------------------------------------------------
