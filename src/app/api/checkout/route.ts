@@ -273,7 +273,10 @@ export async function POST(request: NextRequest) {
       quantity: it.quantity,
     }));
 
-    const { data: reserveResult, error: reserveError } = await supabase.rpc(
+    // reserve_stock requires service_role since 006_security_hardening
+    // revoked EXECUTE from public roles. The check is still safe — the
+    // RPC validates ownership-agnostic stock levels, never auth state.
+    const { data: reserveResult, error: reserveError } = await admin.rpc(
       "reserve_stock",
       { items: reservePayload },
     );
@@ -342,7 +345,7 @@ export async function POST(request: NextRequest) {
 
     if (orderError || !order) {
       console.error("[checkout] order insert error:", orderError);
-      await supabase.rpc("release_stock", { items: reservePayload });
+      await admin.rpc("release_stock", { items: reservePayload });
       return NextResponse.json(
         { error: "Impossible de créer la commande." },
         { status: 500 },
@@ -351,7 +354,7 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const rollback = async () => {
-      await supabase.rpc("release_stock", { items: reservePayload });
+      await admin.rpc("release_stock", { items: reservePayload });
       await supabase
         .from("orders")
         .update({ status: "cancelled", payment_status: "failed" })

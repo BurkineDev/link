@@ -57,7 +57,8 @@ const mockCreateClient = jest.fn().mockImplementation(async () => ({
 
 jest.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
-// Admin client (subscription past_due check). Always returns no subscription.
+// Admin client (subscription past_due check + stock RPCs since the 006
+// security hardening migration revoked EXECUTE from public roles).
 const mockAdminClient = {
   from: () => ({
     select: () => ({
@@ -66,6 +67,12 @@ const mockAdminClient = {
       }),
     }),
   }),
+  rpc: (fn: string) => {
+    if (fn === "reserve_stock") {
+      return Promise.resolve({ data: _reserveResult, error: null });
+    }
+    return Promise.resolve({ data: null, error: null });
+  },
 };
 jest.mock("@/lib/supabase/admin", () => ({
   getAdminClient: () => mockAdminClient,
