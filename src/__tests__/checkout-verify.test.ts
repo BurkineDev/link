@@ -150,13 +150,13 @@ describe("GET /api/checkout/verify", () => {
     expect(res.status).toBe(202);
   });
 
-  // TC-17 — session_id manquant
-  test("TC-17: missing session_id returns 400", async () => {
+  // TC-17 — paramètres manquants (ni session_id ni provider/reference)
+  test("TC-17: missing verify params returns 400", async () => {
     const res = await GET(makeRequest());
     const json = await res.json();
 
     expect(res.status).toBe(400);
-    expect(json.error).toMatch(/session_id/i);
+    expect(json.error).toMatch(/manquant/i);
   });
 
   // TC-18 — session_id inconnu en DB

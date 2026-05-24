@@ -70,7 +70,6 @@ export default async function Page({ params }: Props) {
   const { username } = await params;
   const supabase = await createClient();
 
-  // Fetch shop
   const { data: shopData } = await supabase
     .from("shops")
     .select("*")
@@ -83,30 +82,42 @@ export default async function Page({ params }: Props) {
     notFound();
   }
 
-  // Fetch published products
-  const { data: productsData } = await supabase
-    .from("products")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .eq("is_published", true)
-    .order("created_at", { ascending: false });
+  const [productsResult, categoriesResult, linksResult] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*")
+      .eq("shop_id", shop.id)
+      .eq("is_published", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("shop_id", shop.id)
+      .order("position", { ascending: true }),
+    supabase
+      .from("shop_links")
+      .select("id, label, url, icon, position")
+      .eq("shop_id", shop.id)
+      .eq("is_active", true)
+      .order("position", { ascending: true }),
+  ]);
 
-  const products = (productsData ?? []) as ProductRow[];
-
-  // Fetch categories
-  const { data: categoriesData } = await supabase
-    .from("categories")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .order("position", { ascending: true });
-
-  const categories = (categoriesData ?? []) as CategoryRow[];
+  const products = (productsResult.data ?? []) as ProductRow[];
+  const categories = (categoriesResult.data ?? []) as CategoryRow[];
+  const links = (linksResult.data ?? []) as Array<{
+    id: string;
+    label: string;
+    url: string;
+    icon: string;
+    position: number;
+  }>;
 
   return (
     <ShopPage
       shop={shop}
       products={products}
       categories={categories}
+      links={links}
     />
   );
 }

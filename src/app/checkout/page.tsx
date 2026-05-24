@@ -1,8 +1,7 @@
-"use client";
-
 import { Suspense } from "react";
 import CheckoutForm from "./checkout-form";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isGeniusPayConfigured } from "@/lib/geniuspay";
 
 function CheckoutSkeleton() {
   return (
@@ -21,9 +20,11 @@ function CheckoutSkeleton() {
 }
 
 export default function CheckoutPage() {
+  const mobileMoneyEnabled = isGeniusPayConfigured();
+
   return (
     <Suspense fallback={<CheckoutSkeleton />}>
-      <CheckoutForm />
+      <CheckoutForm mobileMoneyEnabled={mobileMoneyEnabled} />
     </Suspense>
   );
 }

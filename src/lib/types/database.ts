@@ -39,9 +39,17 @@ export type PaymentStatus =
   | "refunded"
   | "partially_refunded";
 
-export type PaymentProvider = "flutterwave" | "manual" | "free" | "pawapay" | "stripe";
+export type PaymentProvider =
+  | "flutterwave"
+  | "manual"
+  | "free"
+  | "pawapay"
+  | "stripe"
+  | "geniuspay";
 
 export type SubscriptionPlan = "free" | "pro";
+
+export type PromoDiscountType = "percent" | "fixed";
 
 export type SubscriptionStatus =
   | "active"
@@ -185,9 +193,64 @@ export type ShopRow = {
   contact_email: string | null;
   contact_phone: string | null;
   social_links: SocialLinks | null;
+  tiktok_pixel_id: string | null;
+  meta_pixel_id: string | null;
+  whatsapp_number: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type ShopLinkRow = {
+  id: string;
+  shop_id: string;
+  label: string;
+  url: string;
+  icon: string;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ShopLinkInsert = Omit<ShopLinkRow, "id" | "created_at" | "updated_at">;
+export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
+
+export type PromoCodeRow = {
+  id: string;
+  shop_id: string;
+  code: string;
+  discount_type: PromoDiscountType;
+  discount_value: number;
+  min_order_amount: number | null;
+  max_uses: number | null;
+  uses_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PromoCodeInsert = Omit<
+  PromoCodeRow,
+  | "id"
+  | "uses_count"
+  | "created_at"
+  | "updated_at"
+  | "min_order_amount"
+  | "max_uses"
+  | "expires_at"
+  | "is_active"
+> & {
+  uses_count?: number;
+  is_active?: boolean;
+  min_order_amount?: number | null;
+  max_uses?: number | null;
+  expires_at?: string | null;
+};
+
+export type PromoCodeUpdate = Partial<
+  Omit<PromoCodeRow, "id" | "shop_id" | "created_at">
+>;
 
 export type TemplateRow = {
   id: string;
@@ -252,6 +315,8 @@ export type OrderRow = {
   items: OrderItem[];
   shipping_address: ShippingAddress | null;
   notes: string | null;
+  promo_code: string | null;
+  discount_amount: number;
   created_at: string;
   updated_at: string;
 };
@@ -275,7 +340,16 @@ export type ProfileInsert = Omit<ProfileRow, "created_at" | "onboarding_complete
   onboarding_completed?: boolean;
 };
 
-export type ShopInsert = Omit<ShopRow, "id" | "created_at" | "updated_at">;
+// Pixel + WhatsApp fields are optional on insert — sellers configure
+// them later from the Marketing dashboard.
+export type ShopInsert = Omit<
+  ShopRow,
+  "id" | "created_at" | "updated_at" | "tiktok_pixel_id" | "meta_pixel_id" | "whatsapp_number"
+> & {
+  tiktok_pixel_id?: string | null;
+  meta_pixel_id?: string | null;
+  whatsapp_number?: string | null;
+};
 
 export type TemplateInsert = Omit<TemplateRow, "id">;
 
@@ -358,6 +432,16 @@ export interface Database {
         Insert: CreatorSubscriptionInsert;
         Update: CreatorSubscriptionUpdate;
       } & NoRelationships;
+      shop_links: {
+        Row: ShopLinkRow;
+        Insert: ShopLinkInsert;
+        Update: ShopLinkUpdate;
+      } & NoRelationships;
+      promo_codes: {
+        Row: PromoCodeRow;
+        Insert: PromoCodeInsert;
+        Update: PromoCodeUpdate;
+      } & NoRelationships;
     };
     Views: Record<string, never>;
     Functions: {
@@ -368,6 +452,10 @@ export interface Database {
       release_stock: {
         Args: { items: Json };
         Returns: void;
+      };
+      redeem_promo_code: {
+        Args: { p_shop_id: string; p_code: string; p_order_total: number };
+        Returns: Json;
       };
     };
     Enums: {

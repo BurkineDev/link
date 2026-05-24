@@ -5,6 +5,8 @@ import { ShoppingBag } from "lucide-react";
 import { ShopHeader } from "@/components/shop/shop-header";
 import { ProductCard } from "@/components/shop/product-card";
 import { CartDrawer } from "@/components/shop/cart-drawer";
+import { ShopLinks, type PublicShopLink } from "@/components/shop/shop-links";
+import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
@@ -13,6 +15,7 @@ interface ShopPageProps {
   shop: ShopRow;
   products: ProductRow[];
   categories: CategoryRow[];
+  links?: PublicShopLink[];
 }
 
 /**
@@ -28,7 +31,7 @@ const TEMPLATE_GRIDS: Record<string, string> = {
 
 const DEFAULT_GRID = TEMPLATE_GRIDS.minimal;
 
-export function ShopPage({ shop, products, categories }: ShopPageProps) {
+export function ShopPage({ shop, products, categories, links = [] }: ShopPageProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const itemCount = useCart((s) => s.getItemCount());
@@ -48,10 +51,23 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
       className="min-h-screen bg-background"
       style={{ "--shop-primary": shop.theme_color } as React.CSSProperties}
     >
+      {/* ── Retargeting pixels ── */}
+      <TrackingPixels
+        tiktokPixelId={shop.tiktok_pixel_id}
+        metaPixelId={shop.meta_pixel_id}
+      />
+
       {/* ── Shop header: banner, logo, name, bio, socials ── */}
       <ShopHeader shop={shop} />
 
       <main className="mx-auto max-w-6xl px-3 sm:px-4 pb-24">
+        {/* ── Linktree-style CTA links ── */}
+        {links.length > 0 && (
+          <div className="mt-4 sm:mt-6">
+            <ShopLinks links={links} />
+          </div>
+        )}
+
         {/* ── Category filter tabs ── */}
         {hasCategories && (
           <div className="mt-6 mb-2">

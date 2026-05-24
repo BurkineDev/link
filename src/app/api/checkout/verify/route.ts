@@ -1,33 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
+import {
+  fetchPayment as fetchGeniusPayment,
+  mapStatusToPaymentStatus,
+} from "@/lib/geniuspay";
 
 // ---------------------------------------------------------------------------
 // GET /api/checkout/verify?session_id=cs_xxx
-// Called from /checkout/success after Stripe redirects back.
+//   - Stripe : ?session_id=cs_xxx
+//   - Genius Pay : ?provider=geniuspay&reference=MTX-XXXXXXXXXX
+//
+// Called from /checkout/success after the gateway redirects back. Returns
+// the order with a confirmed payment_status when verifying succeeds. The
+// webhook is the source of truth — this endpoint is a fallback / UX helper
+// so the success page can show the correct state without waiting on the
+// webhook to fire.
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("session_id");
+    const provider = searchParams.get("provider");
+    const reference = searchParams.get("reference");
 
-    if (!sessionId) {
+    const isGenius = provider === "geniuspay" && reference;
+    const isStripe = !!sessionId;
+
+    if (!isGenius && !isStripe) {
       return NextResponse.json(
-        { error: "Paramètre session_id manquant." },
+        { error: "Paramètres de vérification manquants." },
         { status: 400 },
       );
     }
 
     const supabase = await createClient();
+    const lookupRef = (isGenius ? reference : sessionId) as string;
 
-    // -- Find order by Checkout Session ID (stored as payment_ref) ------------
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(
-        "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email",
+        "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, discount_amount, promo_code",
       )
-      .eq("payment_ref", sessionId)
+      .eq("payment_ref", lookupRef)
       .maybeSingle();
 
     if (orderError || !order) {
@@ -37,22 +53,84 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If already confirmed, return immediately (idempotent)
-    if (order.payment_status === "paid") {
+    const withShop = async (orderObj: typeof order) => {
       const { data: shop } = await supabase
         .from("shops")
         .select("name, slug")
-        .eq("id", order.shop_id)
+        .eq("id", orderObj.shop_id)
         .single();
+      return { ...orderObj, shop_name: shop?.name, shop_slug: shop?.slug };
+    };
 
-      return NextResponse.json({
-        order: { ...order, shop_name: shop?.name, shop_slug: shop?.slug },
-      });
+    // Already settled — idempotent return.
+    if (order.payment_status === "paid") {
+      return NextResponse.json({ order: await withShop(order) });
     }
 
-    // -- Verify with Stripe ---------------------------------------------------
+    // --------------------------------------------------------------------- //
+    // Genius Pay branch                                                     //
+    // --------------------------------------------------------------------- //
+    if (isGenius) {
+      let payment;
+      try {
+        payment = await fetchGeniusPayment(reference!);
+      } catch (err) {
+        console.error("[verify] Genius Pay fetch failed:", err);
+        return NextResponse.json(
+          { error: "Impossible de vérifier le paiement Mobile Money." },
+          { status: 502 },
+        );
+      }
+
+      const nextStatus = mapStatusToPaymentStatus(payment.status);
+      const amountOk = payment.amount >= order.total_amount;
+      const currencyOk =
+        payment.currency.toUpperCase() === order.currency.toUpperCase();
+
+      if (nextStatus === "paid" && amountOk && currencyOk) {
+        await supabase
+          .from("orders")
+          .update({ payment_status: "paid", status: "confirmed" })
+          .eq("id", order.id);
+        return NextResponse.json({
+          order: await withShop({
+            ...order,
+            payment_status: "paid",
+            status: "confirmed",
+          }),
+        });
+      }
+
+      if (nextStatus === "paid" && (!amountOk || !currencyOk)) {
+        console.warn("[verify] Genius Pay mismatch for order:", order.id);
+        return NextResponse.json(
+          { error: "Le montant ou la devise ne correspond pas à la commande." },
+          { status: 400 },
+        );
+      }
+
+      if (nextStatus === "failed") {
+        await supabase
+          .from("orders")
+          .update({ payment_status: "failed", status: "cancelled" })
+          .eq("id", order.id);
+        return NextResponse.json({ error: "Le paiement a échoué." }, { status: 400 });
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "Le paiement est encore en cours de traitement. Réessayez dans quelques instants.",
+        },
+        { status: 202 },
+      );
+    }
+
+    // --------------------------------------------------------------------- //
+    // Stripe branch                                                          //
+    // --------------------------------------------------------------------- //
     const stripe = getStripe();
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const session = await stripe.checkout.sessions.retrieve(sessionId!);
 
     const isPaid = session.payment_status === "paid";
     const isFailed = session.status === "expired";
@@ -66,21 +144,12 @@ export async function GET(request: NextRequest) {
         .from("orders")
         .update({ payment_status: "paid", status: "confirmed" })
         .eq("id", order.id);
-
-      const { data: shop } = await supabase
-        .from("shops")
-        .select("name, slug")
-        .eq("id", order.shop_id)
-        .single();
-
       return NextResponse.json({
-        order: {
+        order: await withShop({
           ...order,
           payment_status: "paid",
           status: "confirmed",
-          shop_name: shop?.name,
-          shop_slug: shop?.slug,
-        },
+        }),
       });
     }
 
@@ -89,11 +158,7 @@ export async function GET(request: NextRequest) {
         .from("orders")
         .update({ payment_status: "failed" })
         .eq("id", order.id);
-
-      return NextResponse.json(
-        { error: "Le paiement a échoué." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Le paiement a échoué." }, { status: 400 });
     }
 
     if (isPaid && (!amountOk || !currencyOk)) {
@@ -104,9 +169,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // open / complete but unpaid — payment still in progress
     return NextResponse.json(
-      { error: "Le paiement est encore en cours de traitement. Réessayez dans quelques instants." },
+      {
+        error:
+          "Le paiement est encore en cours de traitement. Réessayez dans quelques instants.",
+      },
       { status: 202 },
     );
   } catch (err) {

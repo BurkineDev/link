@@ -13,6 +13,7 @@ import {
   SettingsIcon,
   LogOutIcon,
   ExternalLinkIcon,
+  MegaphoneIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -35,6 +36,7 @@ const NAV_GROUPS: { label: string; items: NavItemDef[] }[] = [
     label: "Croissance",
     items: [
       { label: "Analytiques", href: "/dashboard/analytics", icon: BarChart3Icon },
+      { label: "Marketing", href: "/dashboard/marketing", icon: MegaphoneIcon },
       { label: "Ma Boutique", href: "/dashboard/shop", icon: StoreIcon },
     ],
   },

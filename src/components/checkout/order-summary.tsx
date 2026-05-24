@@ -14,6 +14,8 @@ interface OrderSummaryProps {
   shopLogo?: string | null;
   currency: Currency;
   shipping?: number | null;
+  discount?: number;
+  discountLabel?: string;
   className?: string;
   /** Submit button rendered externally (on desktop, button lives here) */
   children?: React.ReactNode;
@@ -36,12 +38,14 @@ export function OrderSummary({
   shopLogo,
   currency,
   shipping,
+  discount = 0,
+  discountLabel,
   className,
   children,
 }: OrderSummaryProps) {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const shippingCost = shipping ?? 0;
-  const total = subtotal + shippingCost;
+  const total = Math.max(0, subtotal + shippingCost - discount);
 
   return (
     <Card className={cn("sticky top-6", className)}>
@@ -130,12 +134,21 @@ export function OrderSummary({
             <span>Livraison</span>
             <span className="tabular-nums">
               {shippingCost === 0 ? (
-                <span className="font-medium text-emerald-600">Gratuite</span>
+                <span className="font-medium text-[var(--success)]">Gratuite</span>
               ) : (
                 formatPrice(shippingCost, currency)
               )}
             </span>
           </div>
+
+          {discount > 0 && (
+            <div className="flex justify-between text-[var(--success)]">
+              <span>Remise {discountLabel ? `(${discountLabel})` : null}</span>
+              <span className="tabular-nums font-medium">
+                −{formatPrice(discount, currency)}
+              </span>
+            </div>
+          )}
         </div>
 
         <Separator />

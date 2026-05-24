@@ -6,7 +6,7 @@ import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, ChevronLeft } from "lucide-react";
+import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
 
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
@@ -23,7 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrderSummary, formatPrice } from "@/components/checkout/order-summary";
-import { PaymentMethods } from "@/components/checkout/payment-methods";
+import {
+  PaymentMethods,
+  type PaymentType,
+  type MobileProvider,
+} from "@/components/checkout/payment-methods";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -98,21 +102,37 @@ const PHONE_CODES = [
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CheckoutForm() {
+interface CheckoutFormProps {
+  mobileMoneyEnabled?: boolean;
+}
+
+export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFormProps) {
   const router = useRouter();
   const { items, getTotal, clearCart, shopId } = useCart();
 
-  // Detect if all items are digital (no shipping needed)
-  const hasPhysical = items.length > 0; // treat as physical by default
+  const hasPhysical = items.length > 0;
   const currency: Currency = (items[0]?.currency as Currency) ?? "XOF";
 
-  // Shop name / logo from cart items (shopId present, use slug for display)
   const shopName = items[0]?.shopSlug
     ? items[0].shopSlug.charAt(0).toUpperCase() + items[0].shopSlug.slice(1)
     : "Boutique";
 
-  const [phoneCountryCode, setPhoneCountryCode] = useState("+221");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+225");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [paymentSelection, setPaymentSelection] = useState<{
+    type: PaymentType;
+    mobileProvider?: MobileProvider;
+  }>({ type: mobileMoneyEnabled ? "mobile_money" : "card" });
+
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discount: number;
+    discount_type: "percent" | "fixed";
+    discount_value: number;
+  } | null>(null);
+  const [isCheckingPromo, setIsCheckingPromo] = useState(false);
 
   const {
     register,
@@ -123,22 +143,56 @@ export default function CheckoutForm() {
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       requires_shipping: hasPhysical,
-      country: "SN",
+      country: "CI",
     },
   });
 
   const requiresShipping = useWatch({ control, name: "requires_shipping" });
 
-  // Redirect if cart empty
   useEffect(() => {
-    if (items.length === 0) {
-      router.back();
-    }
+    if (items.length === 0) router.back();
   }, [items.length, router]);
 
-  const total = getTotal();
+  const subtotal = getTotal();
+  const discount = appliedPromo?.discount ?? 0;
+  const total = Math.max(0, subtotal - discount);
 
   // ---------------------------------------------------------------------------
+  async function applyPromo() {
+    if (!shopId || !promoInput.trim()) return;
+    setIsCheckingPromo(true);
+    try {
+      const res = await fetch("/api/promo-codes/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopId,
+          code: promoInput.trim().toUpperCase(),
+          orderTotal: subtotal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? "Code promo invalide.");
+        return;
+      }
+      setAppliedPromo({
+        code: promoInput.trim().toUpperCase(),
+        discount: data.discount,
+        discount_type: data.discount_type,
+        discount_value: data.discount_value,
+      });
+      toast.success("Code promo appliqué !");
+    } finally {
+      setIsCheckingPromo(false);
+    }
+  }
+
+  function removePromo() {
+    setAppliedPromo(null);
+    setPromoInput("");
+  }
+
   async function onSubmit(values: CheckoutFormValues) {
     if (!shopId) {
       toast.error("Boutique introuvable. Veuillez rafraîchir la page.");
@@ -171,10 +225,12 @@ export default function CheckoutForm() {
           unit_price: item.price,
         })),
         paymentMethod: {
-          type: "card" as const,
+          type: paymentSelection.type,
+          mobileProvider: paymentSelection.mobileProvider,
         },
         notes: values.notes || undefined,
         currency,
+        promoCode: appliedPromo?.code,
       };
 
       const res = await fetch("/api/checkout", {
@@ -190,7 +246,6 @@ export default function CheckoutForm() {
       }
 
       clearCart();
-
       window.location.assign(data.paymentLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Une erreur est survenue.";
@@ -203,10 +258,13 @@ export default function CheckoutForm() {
   if (items.length === 0) return null;
 
   const currencyMeta = CURRENCY_META[currency];
+  const paymentBlurb =
+    paymentSelection.type === "mobile_money"
+      ? "Paiement Mobile Money sécurisé via Genius Pay"
+      : "Paiement sécurisé via Stripe";
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
-      {/* Header */}
       <div className="mb-8">
         <button
           type="button"
@@ -221,9 +279,6 @@ export default function CheckoutForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
-          {/* ---------------------------------------------------------------- */}
-          {/* LEFT COLUMN – Form sections                                      */}
-          {/* ---------------------------------------------------------------- */}
           <div className="space-y-6">
 
             {/* Section 1 – Coordonnées */}
@@ -231,7 +286,6 @@ export default function CheckoutForm() {
               <h2 className="mb-4 text-base font-semibold">Vos coordonnées</h2>
 
               <div className="space-y-4">
-                {/* Full name */}
                 <div className="space-y-1.5">
                   <Label htmlFor="full_name">Nom complet</Label>
                   <Input
@@ -246,7 +300,6 @@ export default function CheckoutForm() {
                   )}
                 </div>
 
-                {/* Email */}
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Adresse email</Label>
                   <Input
@@ -262,13 +315,12 @@ export default function CheckoutForm() {
                   )}
                 </div>
 
-                {/* Phone with country code */}
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">Numéro de téléphone</Label>
                   <div className="flex gap-2">
                     <Select
                       value={phoneCountryCode}
-                      onValueChange={(v) => setPhoneCountryCode(v ?? "+221")}
+                      onValueChange={(v) => setPhoneCountryCode(v ?? "+225")}
                     >
                       <SelectTrigger className="w-24 shrink-0">
                         <SelectValue />
@@ -284,7 +336,7 @@ export default function CheckoutForm() {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="770000000"
+                      placeholder="0708070000"
                       autoComplete="tel-national"
                       className="flex-1"
                       aria-invalid={!!errors.phone}
@@ -298,13 +350,12 @@ export default function CheckoutForm() {
               </div>
             </section>
 
-            {/* Section 2 – Adresse de livraison */}
+            {/* Section 2 – Livraison */}
             {requiresShipping && (
               <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
                 <h2 className="mb-4 text-base font-semibold">Adresse de livraison</h2>
 
                 <div className="space-y-4">
-                  {/* Street */}
                   <div className="space-y-1.5">
                     <Label htmlFor="address_line1">Adresse</Label>
                     <Input
@@ -319,12 +370,11 @@ export default function CheckoutForm() {
                     )}
                   </div>
 
-                  {/* City */}
                   <div className="space-y-1.5">
                     <Label htmlFor="city">Ville</Label>
                     <Input
                       id="city"
-                      placeholder="Dakar"
+                      placeholder="Abidjan"
                       autoComplete="address-level2"
                       aria-invalid={!!errors.city}
                       {...register("city")}
@@ -334,22 +384,14 @@ export default function CheckoutForm() {
                     )}
                   </div>
 
-                  {/* Country */}
                   <div className="space-y-1.5">
                     <Label htmlFor="country">Pays</Label>
                     <Controller
                       name="country"
                       control={control}
                       render={({ field }) => (
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <SelectTrigger
-                            id="country"
-                            className="w-full"
-                            aria-invalid={!!errors.country}
-                          >
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="country" className="w-full" aria-invalid={!!errors.country}>
                             <SelectValue placeholder="Sélectionner un pays" />
                           </SelectTrigger>
                           <SelectContent>
@@ -373,10 +415,61 @@ export default function CheckoutForm() {
             {/* Section 3 – Mode de paiement */}
             <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <h2 className="mb-4 text-base font-semibold">Mode de paiement</h2>
-              <PaymentMethods />
+              <PaymentMethods
+                value={paymentSelection}
+                onChange={setPaymentSelection}
+                mobileMoneyDisabled={!mobileMoneyEnabled}
+              />
             </section>
 
-            {/* Section 4 – Notes */}
+            {/* Section 4 – Code promo */}
+            <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="mb-4 text-base font-semibold flex items-center gap-2">
+                <Tag className="size-4" />
+                Code promo
+              </h2>
+              {appliedPromo ? (
+                <div className="flex items-center justify-between rounded-lg border-2 border-[var(--success)] bg-[var(--success)]/10 px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <Check className="size-4 text-[var(--success)]" />
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{appliedPromo.code}</p>
+                      <p className="text-xs text-muted-foreground">
+                        −{formatPrice(appliedPromo.discount, currency)} appliqué
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removePromo}
+                    className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    aria-label="Retirer le code promo"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="MONCODE"
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                    className="uppercase"
+                    maxLength={30}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={applyPromo}
+                    disabled={!promoInput.trim() || isCheckingPromo}
+                  >
+                    {isCheckingPromo ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {/* Section 5 – Notes */}
             <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <h2 className="mb-4 text-base font-semibold">Notes optionnelles</h2>
               <Textarea
@@ -390,12 +483,11 @@ export default function CheckoutForm() {
               )}
             </section>
 
-            {/* Mobile submit button */}
             <div className="lg:hidden">
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="h-12 w-full gap-2 text-base font-semibold"
+                className="h-12 w-full gap-2 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 border-0"
               >
                 {isSubmitting ? (
                   <>
@@ -403,27 +495,27 @@ export default function CheckoutForm() {
                     Traitement en cours…
                   </>
                 ) : (
-                  `Payer maintenant — ${total.toLocaleString("fr-FR")} ${currencyMeta.symbol}`
+                  `Payer ${total.toLocaleString("fr-FR")} ${currencyMeta.symbol}`
                 )}
               </Button>
             </div>
           </div>
 
-          {/* ---------------------------------------------------------------- */}
-          {/* RIGHT COLUMN – Order summary                                     */}
-          {/* ---------------------------------------------------------------- */}
+          {/* RIGHT COLUMN */}
           <div className="hidden lg:block">
             <OrderSummary
               items={items}
               shopName={shopName}
               currency={currency}
               shipping={0}
+              discount={discount}
+              discountLabel={appliedPromo?.code}
             >
               <Separator className="my-2" />
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="mt-2 h-12 w-full gap-2 text-base font-semibold"
+                className="mt-2 h-12 w-full gap-2 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 border-0"
               >
                 {isSubmitting ? (
                   <>
@@ -431,11 +523,11 @@ export default function CheckoutForm() {
                     Traitement en cours…
                   </>
                 ) : (
-                  `Payer maintenant — ${formatPrice(total, currency)}`
+                  `Payer ${formatPrice(total, currency)}`
                 )}
               </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Paiement sécurisé via Stripe
+                {paymentBlurb}
               </p>
             </OrderSummary>
           </div>

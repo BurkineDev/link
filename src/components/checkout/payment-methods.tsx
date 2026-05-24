@@ -1,58 +1,150 @@
 "use client";
 
-import { CreditCard, ShieldCheck } from "lucide-react";
+import { CreditCard, ShieldCheck, Smartphone } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-/**
- * Displays the available payment methods for buyer checkout.
- *
- * Currently the platform only routes orders through Stripe (cards).
- * The Mobile Money rail (Orange / MTN / Wave) is shown as "coming soon"
- * so we don't promise something we can't deliver.
- */
-export function PaymentMethods() {
+export type PaymentType = "card" | "mobile_money";
+
+export type MobileProvider =
+  | "wave"
+  | "orange_money"
+  | "mtn_money"
+  | "moov_money"
+  | "airtel_money";
+
+interface PaymentMethodsProps {
+  value: { type: PaymentType; mobileProvider?: MobileProvider };
+  onChange: (v: { type: PaymentType; mobileProvider?: MobileProvider }) => void;
+  /** When true the Mobile Money option stays visible but disabled. */
+  mobileMoneyDisabled?: boolean;
+}
+
+const PROVIDERS: { id: MobileProvider; label: string; emoji: string }[] = [
+  { id: "wave", label: "Wave", emoji: "🌊" },
+  { id: "orange_money", label: "Orange Money", emoji: "🟠" },
+  { id: "mtn_money", label: "MTN Mobile Money", emoji: "🟡" },
+  { id: "moov_money", label: "Moov Money", emoji: "🔵" },
+];
+
+export function PaymentMethods({
+  value,
+  onChange,
+  mobileMoneyDisabled = false,
+}: PaymentMethodsProps) {
   return (
     <div className="space-y-3">
-      <div className="flex w-full items-center gap-3 rounded-xl border-2 border-primary bg-primary/5 px-4 py-3">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
-          <span className="size-2 rounded-full bg-white" />
+      {/* Carte bancaire (Stripe) */}
+      <button
+        type="button"
+        onClick={() => onChange({ type: "card" })}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors duration-150",
+          value.type === "card"
+            ? "border-primary bg-primary/10"
+            : "border-border bg-background hover:border-foreground/30",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+            value.type === "card" ? "border-primary bg-primary" : "border-border",
+          )}
+        >
+          {value.type === "card" && <span className="size-2 rounded-full bg-primary-foreground" />}
         </span>
 
-        <CreditCard className="size-5 shrink-0 text-muted-foreground" />
+        <CreditCard className="size-5 shrink-0 text-foreground" />
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Carte bancaire</p>
+          <p className="text-sm font-semibold">Carte bancaire</p>
           <p className="text-xs text-muted-foreground">
-            Paiement sécurisé via Stripe — Visa, Mastercard
+            Visa, Mastercard — sécurisé par Stripe
           </p>
         </div>
+      </button>
 
-        <div className="hidden gap-1 sm:flex">
-          <span className="rounded border border-border bg-white px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
-            VISA
-          </span>
-          <span className="rounded border border-border bg-white px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-            MC
-          </span>
-        </div>
-      </div>
-
-      <div className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/30 px-4 py-3">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-muted-foreground/30" />
-        <span className="text-lg shrink-0">📱</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-muted-foreground">
-            Mobile Money (Orange, MTN, Wave)
-          </p>
-          <p className="text-xs text-muted-foreground">Bientôt disponible</p>
-        </div>
-        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-          Bientôt
+      {/* Mobile Money (Genius Pay) */}
+      <button
+        type="button"
+        onClick={() => !mobileMoneyDisabled && onChange({ type: "mobile_money" })}
+        disabled={mobileMoneyDisabled}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors duration-150",
+          mobileMoneyDisabled && "opacity-60 cursor-not-allowed",
+          value.type === "mobile_money"
+            ? "border-primary bg-primary/10"
+            : "border-border bg-background hover:border-foreground/30",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+            value.type === "mobile_money"
+              ? "border-primary bg-primary"
+              : "border-border",
+          )}
+        >
+          {value.type === "mobile_money" && (
+            <span className="size-2 rounded-full bg-primary-foreground" />
+          )}
         </span>
-      </div>
+
+        <Smartphone className="size-5 shrink-0 text-foreground" />
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Mobile Money</p>
+          <p className="text-xs text-muted-foreground">
+            {mobileMoneyDisabled
+              ? "Bientôt disponible"
+              : "Wave, Orange, MTN, Moov — sécurisé par Genius Pay"}
+          </p>
+        </div>
+
+        {mobileMoneyDisabled && (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+            Bientôt
+          </span>
+        )}
+      </button>
+
+      {/* Provider chips — shown only when Mobile Money is selected */}
+      {value.type === "mobile_money" && !mobileMoneyDisabled && (
+        <div className="pl-4 pt-1">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            Choisis ton opérateur (optionnel — détecté automatiquement sinon)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PROVIDERS.map((p) => {
+              const active = value.mobileProvider === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      type: "mobile_money",
+                      mobileProvider: active ? undefined : p.id,
+                    })
+                  }
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150",
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                  )}
+                >
+                  <span>{p.emoji}</span>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-        <ShieldCheck className="size-3.5 text-emerald-500 shrink-0" />
-        Tes informations de paiement sont chiffrées et traitées par Stripe.
+        <ShieldCheck className="size-3.5 text-[var(--success)] shrink-0" />
+        Paiement chiffré. Tes coordonnées ne sont jamais stockées.
       </div>
     </div>
   );

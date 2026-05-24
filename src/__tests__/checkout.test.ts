@@ -311,12 +311,13 @@ describe("POST /api/checkout", () => {
     expect(json.error).toMatch(/stock/i);
   });
 
-  // TC-12b — paiement Mobile Money refusé (provider non disponible)
-  test("TC-12b: paymentMethod type other than 'card' is rejected", async () => {
+  // TC-12b — Mobile Money returns 503 when Genius Pay isn't configured
+  test("TC-12b: mobile_money returns 503 when Genius Pay not configured", async () => {
+    // No GENIUSPAY_* env vars set in beforeEach → isGeniusPayConfigured() → false
     const res = await POST(
       makeRequest(validPayload({ paymentMethod: { type: "mobile_money" } })),
     );
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(503);
   });
 
   // TC-12 — body non-JSON

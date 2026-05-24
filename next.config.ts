@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
       },
+      {
+        protocol: "https",
+        hostname: "api.qrserver.com",
+      },
     ],
     formats: ["image/avif", "image/webp"],
     // Optimize for slow African networks

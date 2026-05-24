@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
+import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
 import type {
   OrderItem,
   SubscriptionStatus,
@@ -143,6 +144,11 @@ async function handleOrderCheckoutEvent(
       console.error("[stripe-webhook] DB update error:", error);
       throw error;
     }
+
+    // Best-effort seller notification — never blocks order confirmation.
+    notifySellerOfPaidOrder(order.id).catch((err) =>
+      console.warn("[stripe-webhook] notify seller failed", err),
+    );
 
     console.info(`[stripe-webhook] order ${order.id} confirmed. session=${session.id}`);
     return;
