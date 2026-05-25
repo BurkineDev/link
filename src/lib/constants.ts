@@ -199,6 +199,108 @@ export const SHOP_THEME_COLORS = [
 export const DEFAULT_THEME_COLOR = "#6366F1";
 
 // ---------------------------------------------------------------------------
+// Shop theming — typography, radius, card style, CTA style
+// ---------------------------------------------------------------------------
+
+export const SHOP_FONTS = [
+  {
+    value: "sans",
+    label: "Sans",
+    sample: "Aa",
+    description: "Inter — moderne et neutre",
+    cssVar: "var(--font-inter)",
+  },
+  {
+    value: "serif",
+    label: "Serif",
+    sample: "Aa",
+    description: "Playfair — élégant, éditorial",
+    cssVar: "var(--font-playfair)",
+  },
+  {
+    value: "mono",
+    label: "Mono",
+    sample: "Aa",
+    description: "JetBrains — technique, code",
+    cssVar: "var(--font-jetbrains-mono)",
+  },
+  {
+    value: "display",
+    label: "Display",
+    sample: "Aa",
+    description: "DM Serif — luxe, mode",
+    cssVar: "var(--font-dm-serif)",
+  },
+] as const;
+
+export const SHOP_BORDER_RADIUS = [
+  { value: "none", label: "Carré",     pxHint: "0px" },
+  { value: "sm",   label: "Subtil",    pxHint: "4px" },
+  { value: "md",   label: "Doux",      pxHint: "8px" },
+  { value: "lg",   label: "Arrondi",   pxHint: "12px" },
+  { value: "xl",   label: "Très rond", pxHint: "16px" },
+  { value: "2xl",  label: "Pillow",    pxHint: "24px" },
+] as const;
+
+export const SHOP_CARD_STYLES = [
+  { value: "flat",     label: "Plat",     description: "Aucune bordure, aucune ombre" },
+  { value: "bordered", label: "Bordé",    description: "Fine bordure + ombre légère" },
+  { value: "elevated", label: "Surélevé", description: "Sans bordure, ombre prononcée" },
+  { value: "glass",    label: "Verre",    description: "Effet glassmorphism, fond translucide" },
+] as const;
+
+export const SHOP_CTA_SHAPES = [
+  { value: "pill",    label: "Pilule",   description: "Boutons totalement arrondis" },
+  { value: "rounded", label: "Arrondi",  description: "Bords légèrement arrondis" },
+  { value: "square",  label: "Carré",    description: "Angles droits, brut" },
+] as const;
+
+export const SHOP_CTA_STYLES = [
+  { value: "filled",  label: "Plein",    description: "Couleur primaire en fond" },
+  { value: "outline", label: "Contour",  description: "Transparent avec bordure colorée" },
+  { value: "soft",    label: "Doux",     description: "Couleur en arrière-plan atténué" },
+] as const;
+
+// Defaults — must match the database CHECK constraint defaults
+export const DEFAULT_ACCENT_COLOR  = "#0F172A";
+export const DEFAULT_FONT_FAMILY   = "sans"     as const;
+export const DEFAULT_BORDER_RADIUS = "lg"       as const;
+export const DEFAULT_CARD_STYLE    = "bordered" as const;
+export const DEFAULT_CTA_SHAPE     = "rounded"  as const;
+export const DEFAULT_CTA_STYLE     = "filled"   as const;
+
+// Runtime maps — read at render time on the storefront
+
+export const BORDER_RADIUS_CLASS: Record<string, string> = {
+  none: "rounded-none",
+  sm:   "rounded-sm",
+  md:   "rounded-md",
+  lg:   "rounded-lg",
+  xl:   "rounded-xl",
+  "2xl": "rounded-2xl",
+};
+
+export const CARD_STYLE_CLASS: Record<string, string> = {
+  flat:     "bg-card",
+  bordered: "bg-card border border-border/60 shadow-sm",
+  elevated: "bg-card shadow-lg shadow-foreground/5",
+  glass:    "bg-card/60 backdrop-blur-md border border-white/30 dark:border-white/10",
+};
+
+export const CTA_SHAPE_CLASS: Record<string, string> = {
+  pill:    "rounded-full",
+  rounded: "rounded-2xl",
+  square:  "rounded-none",
+};
+
+export const FONT_FAMILY_CLASS: Record<string, string> = {
+  sans:    "font-[family-name:var(--font-inter)]",
+  serif:   "font-[family-name:var(--font-playfair)]",
+  mono:    "font-[family-name:var(--font-jetbrains-mono)]",
+  display: "font-[family-name:var(--font-dm-serif)]",
+};
+
+// ---------------------------------------------------------------------------
 // Order statuses
 // ---------------------------------------------------------------------------
 

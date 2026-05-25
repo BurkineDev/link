@@ -9,6 +9,7 @@ import { ShopLinks, type PublicShopLink } from "@/components/shop/shop-links";
 import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
+import { FONT_FAMILY_CLASS } from "@/lib/constants";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 
 interface ShopPageProps {
@@ -44,12 +45,20 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
 
   const hasCategories = categories.length > 0;
   const templateGrid = TEMPLATE_GRIDS[shop.template_id ?? ""] ?? DEFAULT_GRID;
+  const fontClass =
+    FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
 
   return (
-    // Inject shop theme color as CSS custom property
+    // Inject all shop theming as CSS custom properties so any descendant
+    // (cards, buttons, FAB) can consume them via var(--shop-*).
     <div
-      className="min-h-screen bg-background"
-      style={{ "--shop-primary": shop.theme_color } as React.CSSProperties}
+      className={cn("min-h-screen bg-background", fontClass)}
+      style={
+        {
+          "--shop-primary": shop.theme_color,
+          "--shop-accent": shop.accent_color,
+        } as React.CSSProperties
+      }
     >
       {/* ── Retargeting pixels ── */}
       <TrackingPixels
@@ -64,7 +73,13 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
         {/* ── Linktree-style CTA links ── */}
         {links.length > 0 && (
           <div className="mt-4 sm:mt-6">
-            <ShopLinks links={links} />
+            <ShopLinks
+              links={links}
+              primaryColor={shop.theme_color}
+              accentColor={shop.accent_color}
+              ctaShape={shop.cta_shape}
+              ctaStyle={shop.cta_style}
+            />
           </div>
         )}
 
@@ -151,6 +166,8 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
                 shopSlug={shop.slug}
                 shopId={shop.id}
                 currency={shop.currency}
+                borderRadius={shop.border_radius}
+                cardStyle={shop.card_style}
               />
             ))}
           </div>

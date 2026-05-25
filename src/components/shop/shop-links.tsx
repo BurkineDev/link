@@ -11,6 +11,15 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  CTA_SHAPE_CLASS,
+  DEFAULT_CTA_SHAPE,
+  DEFAULT_CTA_STYLE,
+} from "@/lib/constants";
+import type {
+  ShopCtaShape,
+  ShopCtaStyle,
+} from "@/lib/types/database";
 
 export type PublicShopLink = {
   id: string;
@@ -78,28 +87,82 @@ function isExternal(url: string) {
   return url.startsWith("http://") || url.startsWith("https://");
 }
 
-export function ShopLinks({ links }: { links: PublicShopLink[] }) {
+interface ShopLinksProps {
+  links: PublicShopLink[];
+  primaryColor?: string;
+  accentColor?: string;
+  ctaShape?: ShopCtaShape;
+  ctaStyle?: ShopCtaStyle;
+}
+
+export function ShopLinks({
+  links,
+  primaryColor,
+  accentColor,
+  ctaShape = DEFAULT_CTA_SHAPE,
+  ctaStyle = DEFAULT_CTA_STYLE,
+}: ShopLinksProps) {
   if (links.length === 0) return null;
+
+  const shapeClass = CTA_SHAPE_CLASS[ctaShape] ?? CTA_SHAPE_CLASS.rounded;
+  const primary = primaryColor ?? "var(--shop-primary, var(--primary))";
+  const accent = accentColor ?? "var(--shop-accent, var(--primary-foreground))";
+
+  const ctaStyleProps: React.CSSProperties = (() => {
+    if (ctaStyle === "filled") {
+      return {
+        backgroundColor: primary,
+        color: accent,
+        borderWidth: 0,
+      };
+    }
+    if (ctaStyle === "outline") {
+      return {
+        backgroundColor: "transparent",
+        color: primary,
+        borderColor: primary,
+        borderWidth: "2px",
+        borderStyle: "solid",
+      };
+    }
+    return {
+      backgroundColor: primaryColor ? `${primaryColor}1A` : "color-mix(in oklab, var(--shop-primary, var(--primary)) 12%, transparent)",
+      color: primary,
+      borderWidth: 0,
+    };
+  })();
 
   return (
     <ul className="flex flex-col gap-2.5">
       {links.map((link) => {
         const external = isExternal(link.url);
         const sharedClasses = cn(
-          "group flex items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-3.5",
-          "transition-colors duration-150 hover:border-foreground hover:bg-muted/40",
+          "group flex items-center gap-3 px-4 py-3.5",
+          "transition-all duration-150 hover:opacity-90 active:scale-[0.99]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          shapeClass,
         );
+
+        const iconBg =
+          ctaStyle === "filled"
+            ? { backgroundColor: accent, color: primary }
+            : { backgroundColor: primary, color: accent };
 
         const content = (
           <>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <span
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center",
+                shapeClass,
+              )}
+              style={iconBg}
+            >
               <Icon name={link.icon} className="size-4" />
             </span>
-            <span className="flex-1 truncate text-sm font-semibold text-foreground">
+            <span className="flex-1 truncate text-sm font-semibold">
               {link.label}
             </span>
-            <ExternalLink className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            <ExternalLink className="size-4 opacity-60 group-hover:opacity-100 transition-opacity" />
           </>
         );
 
@@ -111,11 +174,16 @@ export function ShopLinks({ links }: { links: PublicShopLink[] }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={sharedClasses}
+                style={ctaStyleProps}
               >
                 {content}
               </a>
             ) : (
-              <Link href={link.url} className={sharedClasses}>
+              <Link
+                href={link.url}
+                className={sharedClasses}
+                style={ctaStyleProps}
+              >
                 {content}
               </Link>
             )}

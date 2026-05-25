@@ -178,6 +178,12 @@ export type CreatorSubscriptionUpdate = Partial<
   Omit<CreatorSubscriptionRow, "id" | "user_id" | "created_at">
 >;
 
+export type ShopFontFamily = "sans" | "serif" | "mono" | "display";
+export type ShopBorderRadius = "none" | "sm" | "md" | "lg" | "xl" | "2xl";
+export type ShopCardStyle = "flat" | "bordered" | "elevated" | "glass";
+export type ShopCtaShape = "pill" | "rounded" | "square";
+export type ShopCtaStyle = "filled" | "outline" | "soft";
+
 export type ShopRow = {
   id: string;
   owner_id: string;
@@ -189,6 +195,12 @@ export type ShopRow = {
   template_id: string | null;
   is_published: boolean;
   theme_color: string;
+  accent_color: string;
+  font_family: ShopFontFamily;
+  border_radius: ShopBorderRadius;
+  card_style: ShopCardStyle;
+  cta_shape: ShopCtaShape;
+  cta_style: ShopCtaStyle;
   currency: Currency;
   contact_email: string | null;
   contact_phone: string | null;
@@ -340,15 +352,32 @@ export type ProfileInsert = Omit<ProfileRow, "created_at" | "onboarding_complete
   onboarding_completed?: boolean;
 };
 
-// Pixel + WhatsApp fields are optional on insert — sellers configure
-// them later from the Marketing dashboard.
+// Pixel + WhatsApp + theming fields are optional on insert — they fall back
+// to DB defaults when omitted.
 export type ShopInsert = Omit<
   ShopRow,
-  "id" | "created_at" | "updated_at" | "tiktok_pixel_id" | "meta_pixel_id" | "whatsapp_number"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "tiktok_pixel_id"
+  | "meta_pixel_id"
+  | "whatsapp_number"
+  | "accent_color"
+  | "font_family"
+  | "border_radius"
+  | "card_style"
+  | "cta_shape"
+  | "cta_style"
 > & {
   tiktok_pixel_id?: string | null;
   meta_pixel_id?: string | null;
   whatsapp_number?: string | null;
+  accent_color?: string;
+  font_family?: ShopFontFamily;
+  border_radius?: ShopBorderRadius;
+  card_style?: ShopCardStyle;
+  cta_shape?: ShopCtaShape;
+  cta_style?: ShopCtaStyle;
 };
 
 export type TemplateInsert = Omit<TemplateRow, "id">;
