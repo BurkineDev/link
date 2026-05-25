@@ -29,6 +29,16 @@ export async function proxy(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // If the env vars aren't present (e.g. preview deployment with vars
+  // scoped to Production only), pass the request through without auth
+  // checks instead of crashing the runtime with a Supabase client error.
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
     supabaseUrl,
     supabaseAnonKey,
