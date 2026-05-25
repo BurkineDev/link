@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { createProductSchema } from "@/lib/validations/product";
+import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
 import type { ProductInsert, ProductVariantInsert } from "@/lib/types/database";
 
 // GET /api/products?shopId=xxx — list products for a shop
@@ -81,6 +83,36 @@ export async function POST(request: NextRequest) {
 
   if (!shop) {
     return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+  }
+
+  // Enforce plan product limit (Free plan: 5 products max).
+  const admin = getAdminClient();
+  const { data: sub } = await admin
+    .from("creator_subscriptions")
+    .select("plan, status")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const plan = getEffectivePlan(sub);
+  const limits = getPlanLimits(plan);
+
+  if (Number.isFinite(limits.maxProducts)) {
+    const { count } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId);
+
+    if ((count ?? 0) >= limits.maxProducts) {
+      return NextResponse.json(
+        {
+          error: `Tu as atteint la limite de ${limits.maxProducts} produits du plan Gratuit. Passe en Pro pour des produits illimités.`,
+          code: "PLAN_LIMIT_REACHED",
+          plan,
+          limit: limits.maxProducts,
+        },
+        { status: 402 },
+      );
+    }
   }
 
   const { variants, ...productData } = parsed.data;

@@ -12,6 +12,7 @@ import { ProductCard } from "@/components/shop/product-card";
 import { CartDrawer } from "@/components/shop/cart-drawer";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
+import { FONT_FAMILY_CLASS } from "@/lib/constants";
 import type {
   ShopRow,
   ProductRow,
@@ -85,10 +86,18 @@ export function ProductPage({
     setCartOpen(true);
   }
 
+  const fontClass =
+    FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
+
   return (
     <div
-      className="min-h-screen bg-background"
-      style={{ "--shop-primary": shop.theme_color } as React.CSSProperties}
+      className={cn("min-h-screen bg-background", fontClass)}
+      style={
+        {
+          "--shop-primary": shop.theme_color,
+          "--shop-accent": shop.accent_color,
+        } as React.CSSProperties
+      }
     >
       {/* ── Breadcrumb ── */}
       <nav
@@ -314,6 +323,8 @@ export function ProductPage({
                   shopSlug={shop.slug}
                   shopId={shop.id}
                   currency={shop.currency}
+                  borderRadius={shop.border_radius}
+                  cardStyle={shop.card_style}
                 />
               ))}
             </div>

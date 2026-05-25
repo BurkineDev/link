@@ -4,8 +4,26 @@ import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import type { Row } from "@/lib/types/database";
-import { CURRENCIES, CURRENCY_META, TEMPLATES, SHOP_THEME_COLORS } from "@/lib/constants";
+import type { ShopRow, ShopLinkRow } from "@/lib/types/database";
+import type {
+  ShopFontFamily,
+  ShopBorderRadius,
+  ShopCardStyle,
+  ShopCtaShape,
+  ShopCtaStyle,
+} from "@/lib/types/database";
+import {
+  CURRENCIES,
+  CURRENCY_META,
+  TEMPLATES,
+  SHOP_THEME_COLORS,
+  SHOP_FONTS,
+  SHOP_BORDER_RADIUS,
+  SHOP_CARD_STYLES,
+  SHOP_CTA_SHAPES,
+  SHOP_CTA_STYLES,
+  FONT_FAMILY_CLASS,
+} from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -46,13 +64,21 @@ import {
   Check,
   Loader2,
   EyeOff,
-  Store,
+  Sparkles,
+  Type,
+  Square,
+  Layers,
+  MousePointerClick,
+  Palette,
+  RotateCcw,
 } from "lucide-react";
 
-type Shop = Row<"shops">;
+import { ThemePreview } from "@/components/dashboard/theme-preview";
+import { LinksSection } from "@/components/dashboard/links-section";
 
 interface SettingsClientProps {
-  shop: Shop;
+  shop: ShopRow;
+  links: ShopLinkRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +133,7 @@ function ImageField({
       <div
         className={cn(
           "relative overflow-hidden rounded-xl border border-border bg-muted cursor-pointer hover:border-primary/50 transition-colors",
-          aspectClass
+          aspectClass,
         )}
         onClick={() => !uploading && inputRef.current?.click()}
       >
@@ -179,7 +205,7 @@ function ColorPicker({
               "size-8 rounded-full ring-offset-2 transition-all",
               value === c.value
                 ? "ring-2 ring-foreground"
-                : "hover:scale-110"
+                : "hover:scale-110",
             )}
             style={{ backgroundColor: c.value }}
           >
@@ -189,7 +215,6 @@ function ColorPicker({
           </button>
         ))}
       </div>
-      {/* Custom hex input */}
       <div className="flex items-center gap-2">
         <div
           className="size-8 rounded-full border border-border shrink-0"
@@ -207,34 +232,115 @@ function ColorPicker({
 }
 
 // ---------------------------------------------------------------------------
+// Generic option-grid (used by Bordures, Card style, CTA shape, CTA style)
+// ---------------------------------------------------------------------------
+
+interface OptionGridProps<T extends string> {
+  value: T;
+  onChange: (v: T) => void;
+  options: ReadonlyArray<{
+    value: T;
+    label: string;
+    description?: string;
+    pxHint?: string;
+  }>;
+  cols?: 2 | 3 | 4 | 6;
+  renderPreview?: (value: T, selected: boolean) => React.ReactNode;
+}
+
+function OptionGrid<T extends string>({
+  value,
+  onChange,
+  options,
+  cols = 3,
+  renderPreview,
+}: OptionGridProps<T>) {
+  const colsClass = {
+    2: "grid-cols-2",
+    3: "grid-cols-3",
+    4: "grid-cols-2 sm:grid-cols-4",
+    6: "grid-cols-3 sm:grid-cols-6",
+  }[cols];
+
+  return (
+    <div className={cn("grid gap-2", colsClass)}>
+      {options.map((opt) => {
+        const selected = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "group flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-all",
+              "hover:border-foreground/40",
+              selected
+                ? "border-foreground bg-foreground/5 ring-2 ring-foreground"
+                : "border-border",
+            )}
+          >
+            {renderPreview ? (
+              renderPreview(opt.value, selected)
+            ) : null}
+            <span className="text-xs font-semibold text-foreground">
+              {opt.label}
+            </span>
+            {opt.description && (
+              <span className="text-[10px] text-muted-foreground line-clamp-1">
+                {opt.description}
+              </span>
+            )}
+            {opt.pxHint && (
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {opt.pxHint}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main SettingsClient
 // ---------------------------------------------------------------------------
 
-export function SettingsClient({ shop }: SettingsClientProps) {
+export function SettingsClient({ shop, links }: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
-  // Form state — general
+  // ---- General ----
   const [name, setName] = useState(shop.name);
   const [slug, setSlug] = useState(shop.slug);
   const [description, setDescription] = useState(shop.description ?? "");
   const [logoUrl, setLogoUrl] = useState(shop.logo_url);
   const [bannerUrl, setBannerUrl] = useState(shop.banner_url);
 
-  // Appearance
+  // ---- Appearance ----
   const [templateId, setTemplateId] = useState(shop.template_id ?? "minimal");
   const [themeColor, setThemeColor] = useState(shop.theme_color);
+  const [accentColor, setAccentColor] = useState(shop.accent_color);
+  const [fontFamily, setFontFamily] = useState<ShopFontFamily>(shop.font_family);
+  const [borderRadius, setBorderRadius] = useState<ShopBorderRadius>(
+    shop.border_radius,
+  );
+  const [cardStyle, setCardStyle] = useState<ShopCardStyle>(shop.card_style);
+  const [ctaShape, setCtaShape] = useState<ShopCtaShape>(shop.cta_shape);
+  const [ctaStyle, setCtaStyle] = useState<ShopCtaStyle>(shop.cta_style);
 
-  // Contact
+  // ---- Contact ----
   const [contactEmail, setContactEmail] = useState(shop.contact_email ?? "");
   const [contactPhone, setContactPhone] = useState(shop.contact_phone ?? "");
-  const [instagram, setInstagram] = useState(shop.social_links?.instagram ?? "");
+  const [instagram, setInstagram] = useState(
+    shop.social_links?.instagram ?? "",
+  );
   const [facebook, setFacebook] = useState(shop.social_links?.facebook ?? "");
   const [tiktok, setTiktok] = useState(shop.social_links?.tiktok ?? "");
   const [twitter, setTwitter] = useState(shop.social_links?.twitter ?? "");
 
-  // Payments
+  // ---- Payments ----
   const [currency, setCurrency] = useState(shop.currency);
   const [flutterwaveKey, setFlutterwaveKey] = useState<string>("");
 
@@ -260,7 +366,15 @@ export function SettingsClient({ shop }: SettingsClientProps) {
 
     setSaving(false);
     if (error) {
-      toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+      if (error.code === "23505") {
+        toast.error("Cette adresse est déjà utilisée. Choisis-en une autre.");
+      } else if (error.code === "23514") {
+        toast.error(
+          "Adresse invalide. Utilise uniquement lettres minuscules, chiffres et tirets.",
+        );
+      } else {
+        toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+      }
     } else {
       toast.success("Informations mises à jour.");
       router.refresh();
@@ -274,12 +388,34 @@ export function SettingsClient({ shop }: SettingsClientProps) {
       .update({
         template_id: templateId,
         theme_color: themeColor,
+        accent_color: accentColor,
+        font_family: fontFamily,
+        border_radius: borderRadius,
+        card_style: cardStyle,
+        cta_shape: ctaShape,
+        cta_style: ctaStyle,
         updated_at: new Date().toISOString(),
       })
       .eq("id", shop.id);
+
     setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Apparence mise à jour.");
+    if (error) {
+      toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+    } else {
+      toast.success("Apparence mise à jour.");
+      router.refresh();
+    }
+  };
+
+  const resetAppearance = () => {
+    setTemplateId(shop.template_id ?? "minimal");
+    setThemeColor(shop.theme_color);
+    setAccentColor(shop.accent_color);
+    setFontFamily(shop.font_family);
+    setBorderRadius(shop.border_radius);
+    setCardStyle(shop.card_style);
+    setCtaShape(shop.cta_shape);
+    setCtaStyle(shop.cta_style);
   };
 
   const saveContact = async () => {
@@ -330,10 +466,7 @@ export function SettingsClient({ shop }: SettingsClientProps) {
   };
 
   const handleDeleteShop = async () => {
-    const { error } = await supabase
-      .from("shops")
-      .delete()
-      .eq("id", shop.id);
+    const { error } = await supabase.from("shops").delete().eq("id", shop.id);
     if (error) {
       toast.error(error.message);
     } else {
@@ -341,6 +474,17 @@ export function SettingsClient({ shop }: SettingsClientProps) {
       router.push("/dashboard");
     }
   };
+
+  // Detect unsaved appearance changes
+  const appearanceDirty =
+    templateId !== (shop.template_id ?? "minimal") ||
+    themeColor !== shop.theme_color ||
+    accentColor !== shop.accent_color ||
+    fontFamily !== shop.font_family ||
+    borderRadius !== shop.border_radius ||
+    cardStyle !== shop.card_style ||
+    ctaShape !== shop.cta_shape ||
+    ctaStyle !== shop.cta_style;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -358,10 +502,20 @@ export function SettingsClient({ shop }: SettingsClientProps) {
       <Tabs defaultValue="general">
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="general">Général</TabsTrigger>
-          <TabsTrigger value="appearance">Apparence</TabsTrigger>
+          <TabsTrigger value="appearance" className="gap-1.5">
+            <Sparkles className="size-3.5" />
+            Apparence
+          </TabsTrigger>
+          <TabsTrigger value="links" className="gap-1.5">
+            <MousePointerClick className="size-3.5" />
+            Liens CTA
+          </TabsTrigger>
           <TabsTrigger value="contact">Contact</TabsTrigger>
           <TabsTrigger value="payments">Paiements</TabsTrigger>
-          <TabsTrigger value="danger" className="text-destructive data-active:text-destructive">
+          <TabsTrigger
+            value="danger"
+            className="text-destructive data-active:text-destructive"
+          >
             Zone de danger
           </TabsTrigger>
         </TabsList>
@@ -438,71 +592,383 @@ export function SettingsClient({ shop }: SettingsClientProps) {
         </TabsContent>
 
         {/* ---------------------------------------------------------------- */}
-        {/* APPARENCE */}
+        {/* APPARENCE — split-pane editor + live preview */}
         {/* ---------------------------------------------------------------- */}
-        <TabsContent value="appearance" className="space-y-6 pt-6">
-          <div className="space-y-6 max-w-2xl">
-            {/* Template selector */}
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">
-                Thème de la boutique
-              </Label>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => setTemplateId(tpl.id)}
-                    className={cn(
-                      "rounded-xl border overflow-hidden text-left transition-all",
-                      templateId === tpl.id
-                        ? "border-primary ring-2 ring-primary"
-                        : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <div className="aspect-video bg-muted relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={tpl.preview_image}
-                        alt={tpl.name}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                      {templateId === tpl.id && (
-                        <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5">
-                          <Check className="size-3 text-primary-foreground" />
+        <TabsContent value="appearance" className="pt-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            {/* ── Left column: controls ── */}
+            <div className="space-y-8 min-w-0">
+              {/* Template */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Layers className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Template
+                  </h3>
+                </header>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {TEMPLATES.map((tpl) => {
+                    const selected = templateId === tpl.id;
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => setTemplateId(tpl.id)}
+                        className={cn(
+                          "group overflow-hidden rounded-xl border text-left transition-all",
+                          selected
+                            ? "border-foreground ring-2 ring-foreground"
+                            : "border-border hover:border-foreground/40",
+                        )}
+                      >
+                        <div className="relative aspect-[4/3] bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={tpl.preview_image}
+                            alt={tpl.name}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                          {selected && (
+                            <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background">
+                              <Check className="size-3" />
+                            </div>
+                          )}
                         </div>
+                        <div className="p-2.5">
+                          <p className="text-xs font-semibold">{tpl.name}</p>
+                          <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                            {tpl.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* Couleurs */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Palette className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Couleurs
+                  </h3>
+                </header>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Couleur primaire</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Boutons d&apos;achat, accents, navigation
+                    </p>
+                    <ColorPicker value={themeColor} onChange={setThemeColor} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Couleur d&apos;accent</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Texte sur boutons primaires & contrastes
+                    </p>
+                    <ColorPicker
+                      value={accentColor}
+                      onChange={setAccentColor}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* Typographie */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Type className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Typographie
+                  </h3>
+                </header>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {SHOP_FONTS.map((f) => {
+                    const selected = fontFamily === f.value;
+                    return (
+                      <button
+                        key={f.value}
+                        type="button"
+                        onClick={() => setFontFamily(f.value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 rounded-xl border p-3 transition-all",
+                          FONT_FAMILY_CLASS[f.value],
+                          selected
+                            ? "border-foreground bg-foreground/5 ring-2 ring-foreground"
+                            : "border-border hover:border-foreground/40",
+                        )}
+                      >
+                        <span className="text-3xl leading-none">
+                          {f.sample}
+                        </span>
+                        <span className="text-xs font-semibold">{f.label}</span>
+                        <span className="text-[10px] text-muted-foreground line-clamp-1 font-sans">
+                          {f.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* Bordures */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Square className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Bordures des cartes
+                  </h3>
+                </header>
+                <OptionGrid
+                  value={borderRadius}
+                  onChange={setBorderRadius}
+                  cols={6}
+                  options={SHOP_BORDER_RADIUS.map((r) => ({
+                    value: r.value,
+                    label: r.label,
+                    pxHint: r.pxHint,
+                  }))}
+                  renderPreview={(value) => (
+                    <div
+                      className={cn(
+                        "size-8 border-2 border-foreground/70 bg-foreground/5",
+                        {
+                          "rounded-none": value === "none",
+                          "rounded-sm": value === "sm",
+                          "rounded-md": value === "md",
+                          "rounded-lg": value === "lg",
+                          "rounded-xl": value === "xl",
+                          "rounded-2xl": value === "2xl",
+                        },
                       )}
-                    </div>
-                    <div className="p-3">
-                      <p className="text-sm font-medium">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {tpl.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                    />
+                  )}
+                />
+              </section>
+
+              <Separator />
+
+              {/* Style des cartes */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Layers className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Style des cartes produits
+                  </h3>
+                </header>
+                <OptionGrid
+                  value={cardStyle}
+                  onChange={setCardStyle}
+                  cols={4}
+                  options={SHOP_CARD_STYLES.map((s) => ({
+                    value: s.value,
+                    label: s.label,
+                    description: s.description,
+                  }))}
+                  renderPreview={(value) => (
+                    <div
+                      className={cn(
+                        "size-10 rounded-md bg-background",
+                        value === "flat" && "",
+                        value === "bordered" &&
+                          "border border-border/60 shadow-sm",
+                        value === "elevated" && "shadow-md",
+                        value === "glass" &&
+                          "border border-white/30 bg-white/40 backdrop-blur",
+                      )}
+                    />
+                  )}
+                />
+              </section>
+
+              <Separator />
+
+              {/* Boutons CTA */}
+              <section className="space-y-4">
+                <header className="flex items-center gap-2">
+                  <MousePointerClick className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Boutons CTA
+                  </h3>
+                </header>
+                <div className="space-y-3">
+                  <Label className="text-xs">Forme</Label>
+                  <OptionGrid
+                    value={ctaShape}
+                    onChange={setCtaShape}
+                    cols={3}
+                    options={SHOP_CTA_SHAPES.map((s) => ({
+                      value: s.value,
+                      label: s.label,
+                      description: s.description,
+                    }))}
+                    renderPreview={(value) => (
+                      <div
+                        className={cn(
+                          "h-7 w-16 bg-foreground",
+                          value === "pill" && "rounded-full",
+                          value === "rounded" && "rounded-xl",
+                          value === "square" && "rounded-none",
+                        )}
+                      />
+                    )}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-xs">Style</Label>
+                  <OptionGrid
+                    value={ctaStyle}
+                    onChange={setCtaStyle}
+                    cols={3}
+                    options={SHOP_CTA_STYLES.map((s) => ({
+                      value: s.value,
+                      label: s.label,
+                      description: s.description,
+                    }))}
+                    renderPreview={(value) => {
+                      const baseStyle: React.CSSProperties = {
+                        backgroundColor:
+                          value === "filled"
+                            ? themeColor
+                            : value === "soft"
+                              ? `${themeColor}25`
+                              : "transparent",
+                        color:
+                          value === "filled" ? accentColor : themeColor,
+                        border:
+                          value === "outline"
+                            ? `2px solid ${themeColor}`
+                            : "none",
+                      };
+                      return (
+                        <div
+                          className="flex h-7 w-16 items-center justify-center rounded-xl text-[10px] font-bold"
+                          style={baseStyle}
+                        >
+                          CTA
+                        </div>
+                      );
+                    }}
+                  />
+                </div>
+              </section>
+
+              {/* Save bar */}
+              <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-1 py-3">
+                <p className="text-xs text-muted-foreground">
+                  {appearanceDirty
+                    ? "Modifications non enregistrées"
+                    : "Tout est synchronisé"}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetAppearance}
+                    disabled={!appearanceDirty || saving}
+                  >
+                    <RotateCcw className="size-4" />
+                    Annuler
+                  </Button>
+                  <Button
+                    onClick={saveAppearance}
+                    disabled={!appearanceDirty || saving}
+                  >
+                    {saving ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Check className="size-4" />
+                    )}
+                    Enregistrer l&apos;apparence
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <Separator />
+            {/* ── Right column: live preview ── */}
+            <aside className="hidden lg:block">
+              <div className="sticky top-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Aperçu en direct
+                  </p>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                      appearanceDirty
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {appearanceDirty ? "Non publié" : "À jour"}
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+                  <div className="h-[560px]">
+                    <ThemePreview
+                      shopName={name || "Ma boutique"}
+                      logoUrl={logoUrl}
+                      primaryColor={themeColor}
+                      accentColor={accentColor}
+                      fontFamily={fontFamily}
+                      borderRadius={borderRadius}
+                      cardStyle={cardStyle}
+                      ctaShape={ctaShape}
+                      ctaStyle={ctaStyle}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  La boutique publique se mettra à jour après enregistrement.
+                </p>
+              </div>
+            </aside>
 
-            {/* Theme color */}
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Couleur principale</Label>
-              <ColorPicker value={themeColor} onChange={setThemeColor} />
+            {/* Mobile preview (below controls on small screens) */}
+            <div className="lg:hidden">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Aperçu
+              </p>
+              <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="h-[480px]">
+                  <ThemePreview
+                    shopName={name || "Ma boutique"}
+                    logoUrl={logoUrl}
+                    primaryColor={themeColor}
+                    accentColor={accentColor}
+                    fontFamily={fontFamily}
+                    borderRadius={borderRadius}
+                    cardStyle={cardStyle}
+                    ctaShape={ctaShape}
+                    ctaStyle={ctaStyle}
+                  />
+                </div>
+              </div>
             </div>
+          </div>
+        </TabsContent>
 
-            <Button onClick={saveAppearance} disabled={saving}>
-              {saving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Check className="size-4" />
-              )}
-              Enregistrer l&apos;apparence
-            </Button>
+        {/* ---------------------------------------------------------------- */}
+        {/* LIENS CTA */}
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="links" className="space-y-6 pt-6">
+          <div className="max-w-3xl">
+            <LinksSection
+              shopId={shop.id}
+              initialLinks={links}
+              onChanged={() => router.refresh()}
+            />
           </div>
         </TabsContent>
 
@@ -654,12 +1120,13 @@ export function SettingsClient({ shop }: SettingsClientProps) {
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="danger" className="space-y-6 pt-6">
           <div className="space-y-4 max-w-xl">
-            {/* Unpublish shop */}
             <div className="rounded-xl border border-border p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <EyeOff className="size-5 text-muted-foreground shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold">Dépublier la boutique</p>
+                  <p className="text-sm font-semibold">
+                    Dépublier la boutique
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     Votre boutique ne sera plus visible par vos clients. Vous
                     pourrez la republier à tout moment.
@@ -676,7 +1143,9 @@ export function SettingsClient({ shop }: SettingsClientProps) {
                     />
                   }
                 >
-                  {shop.is_published ? "Dépublier la boutique" : "Déjà hors ligne"}
+                  {shop.is_published
+                    ? "Dépublier la boutique"
+                    : "Déjà hors ligne"}
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -702,7 +1171,6 @@ export function SettingsClient({ shop }: SettingsClientProps) {
 
             <Separator />
 
-            {/* Delete shop */}
             <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
@@ -718,7 +1186,9 @@ export function SettingsClient({ shop }: SettingsClientProps) {
               </div>
 
               <AlertDialog>
-                <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+                <AlertDialogTrigger
+                  render={<Button variant="destructive" size="sm" />}
+                >
                   <Trash2 className="size-4" />
                   Supprimer la boutique
                 </AlertDialogTrigger>

@@ -5,17 +5,34 @@ import { ShoppingBag } from "lucide-react";
 import { ShopHeader } from "@/components/shop/shop-header";
 import { ProductCard } from "@/components/shop/product-card";
 import { CartDrawer } from "@/components/shop/cart-drawer";
+import { ShopLinks, type PublicShopLink } from "@/components/shop/shop-links";
+import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
+import { FONT_FAMILY_CLASS } from "@/lib/constants";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 
 interface ShopPageProps {
   shop: ShopRow;
   products: ProductRow[];
   categories: CategoryRow[];
+  links?: PublicShopLink[];
 }
 
-export function ShopPage({ shop, products, categories }: ShopPageProps) {
+/**
+ * Per-template grid layout. Falls back to the standard 2/3/4-column grid
+ * when the shop's template_id isn't recognised.
+ */
+const TEMPLATE_GRIDS: Record<string, string> = {
+  minimal:  "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4",
+  boutique: "grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6",
+  market:   "grid-cols-1 sm:grid-cols-2 gap-3",
+  artisan:  "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4 sm:gap-5",
+};
+
+const DEFAULT_GRID = TEMPLATE_GRIDS.minimal;
+
+export function ShopPage({ shop, products, categories, links = [] }: ShopPageProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const itemCount = useCart((s) => s.getItemCount());
@@ -27,17 +44,45 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
   }, [products, activeCategory]);
 
   const hasCategories = categories.length > 0;
+  const templateGrid = TEMPLATE_GRIDS[shop.template_id ?? ""] ?? DEFAULT_GRID;
+  const fontClass =
+    FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
 
   return (
-    // Inject shop theme color as CSS custom property
+    // Inject all shop theming as CSS custom properties so any descendant
+    // (cards, buttons, FAB) can consume them via var(--shop-*).
     <div
-      className="min-h-screen bg-background"
-      style={{ "--shop-primary": shop.theme_color } as React.CSSProperties}
+      className={cn("min-h-screen bg-background", fontClass)}
+      style={
+        {
+          "--shop-primary": shop.theme_color,
+          "--shop-accent": shop.accent_color,
+        } as React.CSSProperties
+      }
     >
+      {/* ── Retargeting pixels ── */}
+      <TrackingPixels
+        tiktokPixelId={shop.tiktok_pixel_id}
+        metaPixelId={shop.meta_pixel_id}
+      />
+
       {/* ── Shop header: banner, logo, name, bio, socials ── */}
       <ShopHeader shop={shop} />
 
       <main className="mx-auto max-w-6xl px-3 sm:px-4 pb-24">
+        {/* ── Linktree-style CTA links ── */}
+        {links.length > 0 && (
+          <div className="mt-4 sm:mt-6">
+            <ShopLinks
+              links={links}
+              primaryColor={shop.theme_color}
+              accentColor={shop.accent_color}
+              ctaShape={shop.cta_shape}
+              ctaStyle={shop.cta_style}
+            />
+          </div>
+        )}
+
         {/* ── Category filter tabs ── */}
         {hasCategories && (
           <div className="mt-6 mb-2">
@@ -52,15 +97,15 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
                 onClick={() => setActiveCategory(null)}
                 className={cn(
                   "shrink-0 rounded-full border px-4 py-2 text-sm font-medium",
-                  "transition-all duration-150 whitespace-nowrap",
+                  "transition-colors duration-150 whitespace-nowrap",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   activeCategory === null
-                    ? "border-transparent text-white shadow-sm"
-                    : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                    ? "border-transparent text-white"
+                    : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
                 )}
                 style={
                   activeCategory === null
-                    ? { backgroundColor: "var(--shop-primary, #6366f1)" }
+                    ? { backgroundColor: "var(--shop-primary, var(--primary))" }
                     : undefined
                 }
               >
@@ -75,15 +120,15 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
                   onClick={() => setActiveCategory(cat.id)}
                   className={cn(
                     "shrink-0 rounded-full border px-4 py-2 text-sm font-medium",
-                    "transition-all duration-150 whitespace-nowrap",
+                    "transition-colors duration-150 whitespace-nowrap",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     activeCategory === cat.id
-                      ? "border-transparent text-white shadow-sm"
-                      : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                      ? "border-transparent text-white"
+                      : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
                   )}
                   style={
                     activeCategory === cat.id
-                      ? { backgroundColor: "var(--shop-primary, #6366f1)" }
+                      ? { backgroundColor: "var(--shop-primary, var(--primary))" }
                       : undefined
                   }
                 >
@@ -111,11 +156,8 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
           </div>
         ) : (
           <div
-            className={cn(
-              "mt-6 grid gap-3 sm:gap-4",
-              // 2 cols on mobile (360px+), 3 on tablet, 4 on desktop
-              "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-            )}
+            className={cn("mt-6 grid", templateGrid)}
+            data-template={shop.template_id ?? "minimal"}
           >
             {filteredProducts.map((product) => (
               <ProductCard
@@ -124,6 +166,8 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
                 shopSlug={shop.slug}
                 shopId={shop.id}
                 currency={shop.currency}
+                borderRadius={shop.border_radius}
+                cardStyle={shop.card_style}
               />
             ))}
           </div>
@@ -151,15 +195,15 @@ export function ShopPage({ shop, products, categories }: ShopPageProps) {
         onClick={() => setCartOpen(true)}
         aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
         className={cn(
-          "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg sm:right-6",
-          "transition-all duration-200 hover:scale-105 active:scale-95",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-md sm:right-6",
+          "transition-transform duration-150 active:scale-95",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         )}
-        style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}
+        style={{ backgroundColor: "var(--shop-primary, var(--primary))" }}
       >
         <ShoppingBag className="h-6 w-6 text-white" />
         {itemCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white shadow-sm">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold text-white">
             {itemCount > 99 ? "99+" : itemCount}
           </span>
         )}

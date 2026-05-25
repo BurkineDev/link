@@ -12,6 +12,7 @@ import { NextRequest } from "next/server";
 let _shop: Record<string, unknown> | null = null;
 let _products: Record<string, unknown>[] = [];
 let _orderError: unknown = null;
+let _reserveResult: { ok: boolean; reason?: string; product_name?: string; available?: number } = { ok: true };
 
 const mockCreateClient = jest.fn().mockImplementation(async () => ({
   from: (table: string) => {
@@ -46,9 +47,36 @@ const mockCreateClient = jest.fn().mockImplementation(async () => ({
     }
     return {};
   },
+  rpc: (fn: string) => {
+    if (fn === "reserve_stock") {
+      return Promise.resolve({ data: _reserveResult, error: null });
+    }
+    return Promise.resolve({ data: null, error: null });
+  },
 }));
 
 jest.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
+
+// Admin client (subscription past_due check + stock RPCs since the 006
+// security hardening migration revoked EXECUTE from public roles).
+const mockAdminClient = {
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      }),
+    }),
+  }),
+  rpc: (fn: string) => {
+    if (fn === "reserve_stock") {
+      return Promise.resolve({ data: _reserveResult, error: null });
+    }
+    return Promise.resolve({ data: null, error: null });
+  },
+};
+jest.mock("@/lib/supabase/admin", () => ({
+  getAdminClient: () => mockAdminClient,
+}));
 
 const mockCreateSession = jest.fn();
 jest.mock("@/lib/stripe", () => ({
@@ -100,10 +128,12 @@ function setup(opts: {
   shop?: typeof BASE_SHOP | null;
   products?: typeof BASE_PRODUCT[];
   orderError?: unknown;
+  reserveResult?: { ok: boolean; reason?: string; product_name?: string; available?: number };
 } = {}) {
   _shop = opts.shop !== undefined ? (opts.shop as Record<string, unknown> | null) : (BASE_SHOP as Record<string, unknown>);
   _products = (opts.products !== undefined ? opts.products : [BASE_PRODUCT]) as Record<string, unknown>[];
   _orderError = opts.orderError ?? null;
+  _reserveResult = opts.reserveResult ?? { ok: true };
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -125,7 +155,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
       country: "BF",
     },
     items: [{ product_id: PRODUCT_ID, quantity: 2, unit_price: BASE_PRODUCT.price }],
-    paymentMethod: { type: "mobile_money", mobileProvider: "orange" },
+    paymentMethod: { type: "card" },
     currency: "XOF",
     ...overrides,
   };
@@ -268,6 +298,33 @@ describe("POST /api/checkout", () => {
 
     const res = await POST(makeRequest(validPayload()));
     expect(res.status).toBe(502);
+  });
+
+  // TC-12a — stock insuffisant
+  test("TC-12a: insufficient stock returns 409", async () => {
+    setup({
+      reserveResult: {
+        ok: false,
+        reason: "insufficient_stock",
+        product_name: "Tissu wax",
+        available: 1,
+      },
+    });
+
+    const res = await POST(makeRequest(validPayload()));
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toMatch(/stock/i);
+  });
+
+  // TC-12b — Mobile Money returns 503 when Genius Pay isn't configured
+  test("TC-12b: mobile_money returns 503 when Genius Pay not configured", async () => {
+    // No GENIUSPAY_* env vars set in beforeEach → isGeniusPayConfigured() → false
+    const res = await POST(
+      makeRequest(validPayload({ paymentMethod: { type: "mobile_money" } })),
+    );
+    expect(res.status).toBe(503);
   });
 
   // TC-12 — body non-JSON

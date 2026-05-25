@@ -17,10 +17,14 @@ const sizes = {
 
 export function Logo({ className, size = "md", href = "/" }: LogoProps) {
   return (
-    <Link href={href} className={cn("flex items-center gap-1.5 font-black", sizes[size], className)}>
-      <span className="gradient-brand-text">Link</span>
-      <span className="text-foreground">Boutik</span>
-      <span className="gradient-brand text-transparent rounded-sm px-1 text-[0.6em] font-bold leading-none py-0.5">
+    <Link
+      href={href}
+      className={cn("inline-flex items-center gap-1.5 font-black", sizes[size], className)}
+    >
+      {/* Inherits color from parent — works on both light and dark surfaces. */}
+      <span>Link</span>
+      <span className="text-primary">Boutik</span>
+      <span className="bg-primary text-primary-foreground rounded-sm px-1 text-[0.6em] font-bold leading-none py-0.5">
         AF
       </span>
     </Link>

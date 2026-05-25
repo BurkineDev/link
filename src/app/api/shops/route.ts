@@ -63,7 +63,6 @@ export async function POST(request: NextRequest) {
     contact_email: null,
     contact_phone: null,
     social_links: null,
-    metadata: {},
   };
 
   const { data: shop, error } = await supabase

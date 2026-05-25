@@ -39,7 +39,24 @@ export type PaymentStatus =
   | "refunded"
   | "partially_refunded";
 
-export type PaymentProvider = "flutterwave" | "manual" | "free" | "pawapay" | "stripe";
+export type PaymentProvider =
+  | "flutterwave"
+  | "manual"
+  | "free"
+  | "pawapay"
+  | "stripe"
+  | "geniuspay";
+
+export type SubscriptionPlan = "free" | "pro";
+
+export type PromoDiscountType = "percent" | "fixed";
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "cancelled"
+  | "incomplete";
 
 // ---------------------------------------------------------------------------
 // JSONB object shapes
@@ -135,8 +152,37 @@ export type ProfileRow = {
   full_name: string | null;
   avatar_url: string | null;
   bio: string | null;
+  onboarding_completed: boolean;
   created_at: string;
 };
+
+export type CreatorSubscriptionRow = {
+  id: string;
+  user_id: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreatorSubscriptionInsert = Omit<
+  CreatorSubscriptionRow,
+  "id" | "created_at" | "updated_at"
+>;
+
+export type CreatorSubscriptionUpdate = Partial<
+  Omit<CreatorSubscriptionRow, "id" | "user_id" | "created_at">
+>;
+
+export type ShopFontFamily = "sans" | "serif" | "mono" | "display";
+export type ShopBorderRadius = "none" | "sm" | "md" | "lg" | "xl" | "2xl";
+export type ShopCardStyle = "flat" | "bordered" | "elevated" | "glass";
+export type ShopCtaShape = "pill" | "rounded" | "square";
+export type ShopCtaStyle = "filled" | "outline" | "soft";
 
 export type ShopRow = {
   id: string;
@@ -149,14 +195,74 @@ export type ShopRow = {
   template_id: string | null;
   is_published: boolean;
   theme_color: string;
+  accent_color: string;
+  font_family: ShopFontFamily;
+  border_radius: ShopBorderRadius;
+  card_style: ShopCardStyle;
+  cta_shape: ShopCtaShape;
+  cta_style: ShopCtaStyle;
   currency: Currency;
   contact_email: string | null;
   contact_phone: string | null;
   social_links: SocialLinks | null;
-  metadata: Record<string, Json>;
+  tiktok_pixel_id: string | null;
+  meta_pixel_id: string | null;
+  whatsapp_number: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type ShopLinkRow = {
+  id: string;
+  shop_id: string;
+  label: string;
+  url: string;
+  icon: string;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ShopLinkInsert = Omit<ShopLinkRow, "id" | "created_at" | "updated_at">;
+export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
+
+export type PromoCodeRow = {
+  id: string;
+  shop_id: string;
+  code: string;
+  discount_type: PromoDiscountType;
+  discount_value: number;
+  min_order_amount: number | null;
+  max_uses: number | null;
+  uses_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PromoCodeInsert = Omit<
+  PromoCodeRow,
+  | "id"
+  | "uses_count"
+  | "created_at"
+  | "updated_at"
+  | "min_order_amount"
+  | "max_uses"
+  | "expires_at"
+  | "is_active"
+> & {
+  uses_count?: number;
+  is_active?: boolean;
+  min_order_amount?: number | null;
+  max_uses?: number | null;
+  expires_at?: string | null;
+};
+
+export type PromoCodeUpdate = Partial<
+  Omit<PromoCodeRow, "id" | "shop_id" | "created_at">
+>;
 
 export type TemplateRow = {
   id: string;
@@ -216,12 +322,13 @@ export type OrderRow = {
   payment_status: PaymentStatus;
   payment_provider: PaymentProvider | null;
   payment_ref: string | null;
-  flw_tx_id: string | null;
   total_amount: number;
   currency: Currency;
   items: OrderItem[];
   shipping_address: ShippingAddress | null;
   notes: string | null;
+  promo_code: string | null;
+  discount_amount: number;
   created_at: string;
   updated_at: string;
 };
@@ -241,9 +348,37 @@ export type OrderItemRow = {
 // Insert types (omit server-generated fields)
 // ---------------------------------------------------------------------------
 
-export type ProfileInsert = Omit<ProfileRow, "created_at">;
+export type ProfileInsert = Omit<ProfileRow, "created_at" | "onboarding_completed"> & {
+  onboarding_completed?: boolean;
+};
 
-export type ShopInsert = Omit<ShopRow, "id" | "created_at" | "updated_at">;
+// Pixel + WhatsApp + theming fields are optional on insert — they fall back
+// to DB defaults when omitted.
+export type ShopInsert = Omit<
+  ShopRow,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "tiktok_pixel_id"
+  | "meta_pixel_id"
+  | "whatsapp_number"
+  | "accent_color"
+  | "font_family"
+  | "border_radius"
+  | "card_style"
+  | "cta_shape"
+  | "cta_style"
+> & {
+  tiktok_pixel_id?: string | null;
+  meta_pixel_id?: string | null;
+  whatsapp_number?: string | null;
+  accent_color?: string;
+  font_family?: ShopFontFamily;
+  border_radius?: ShopBorderRadius;
+  card_style?: ShopCardStyle;
+  cta_shape?: ShopCtaShape;
+  cta_style?: ShopCtaStyle;
+};
 
 export type TemplateInsert = Omit<TemplateRow, "id">;
 
@@ -253,9 +388,7 @@ export type ProductInsert = Omit<ProductRow, "id" | "created_at" | "updated_at">
 
 export type ProductVariantInsert = Omit<ProductVariantRow, "id">;
 
-export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "updated_at" | "flw_tx_id"> & {
-  flw_tx_id?: string | null;
-};
+export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "updated_at">;
 
 export type OrderItemInsert = Omit<OrderItemRow, "id">;
 
@@ -323,9 +456,37 @@ export interface Database {
         Insert: OrderItemInsert;
         Update: Partial<OrderItemRow>;
       } & NoRelationships;
+      creator_subscriptions: {
+        Row: CreatorSubscriptionRow;
+        Insert: CreatorSubscriptionInsert;
+        Update: CreatorSubscriptionUpdate;
+      } & NoRelationships;
+      shop_links: {
+        Row: ShopLinkRow;
+        Insert: ShopLinkInsert;
+        Update: ShopLinkUpdate;
+      } & NoRelationships;
+      promo_codes: {
+        Row: PromoCodeRow;
+        Insert: PromoCodeInsert;
+        Update: PromoCodeUpdate;
+      } & NoRelationships;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      reserve_stock: {
+        Args: { items: Json };
+        Returns: Json;
+      };
+      release_stock: {
+        Args: { items: Json };
+        Returns: void;
+      };
+      redeem_promo_code: {
+        Args: { p_shop_id: string; p_code: string; p_order_total: number };
+        Returns: Json;
+      };
+    };
     Enums: {
       currency: Currency;
       order_status: OrderStatus;

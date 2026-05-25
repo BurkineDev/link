@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar, BottomNav } from "@/components/dashboard/sidebar";
@@ -32,6 +33,15 @@ export default async function DashboardLayout({
 
   if (!user) {
     redirect("/login");
+  }
+
+  // The proxy already forces unfinished onboarding to /dashboard/onboarding.
+  // When we ARE on that page, render children without the dashboard chrome
+  // (the onboarding page provides its own full-screen layout).
+  const reqHeaders = await headers();
+  const pathname = reqHeaders.get("x-pathname") ?? "";
+  if (pathname === "/dashboard/onboarding") {
+    return <>{children}</>;
   }
 
   const [profileResult, shopResult] = await Promise.all([

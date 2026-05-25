@@ -114,13 +114,11 @@ export function ShopHeader({ shop, className }: ShopHeaderProps) {
         ) : (
           <div
             className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${shop.theme_color}cc 0%, ${shop.theme_color} 100%)`,
-            }}
+            style={{ backgroundColor: shop.theme_color }}
           />
         )}
-        {/* Gradient overlay for readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        {/* Solid scrim for text legibility on the banner image */}
+        <div className="absolute inset-0 bg-black/30" />
       </div>
 
       {/* ── Logo + Info ── */}

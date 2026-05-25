@@ -129,7 +129,7 @@ export default async function DashboardPage() {
           </p>
           <h1 className="mt-1 text-[26px] font-black leading-tight tracking-tight">
             Bonjour,{" "}
-            <span className="gradient-brand-text">{displayName}</span>{" "}
+            <span className="text-primary">{displayName}</span>{" "}
             <span className="not-gradient">👋</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -152,20 +152,20 @@ export default async function DashboardPage() {
 
       {/* Unpublished shop alert */}
       {shop && !shop.is_published && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4 backdrop-blur-sm">
-          <AlertCircleIcon className="mt-0.5 size-5 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 px-5 py-4">
+          <AlertCircleIcon className="mt-0.5 size-5 shrink-0 text-foreground" />
           <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-amber-800">
+              <p className="text-sm font-semibold text-foreground">
                 Ta boutique n&apos;est pas encore publiée
               </p>
-              <p className="mt-0.5 text-xs text-amber-700">
+              <p className="mt-0.5 text-xs text-foreground/70">
                 Active ta boutique pour que tes clients puissent la voir et commander.
               </p>
             </div>
             <Button
               size="sm"
-              className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white border-0 rounded-xl"
+              className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 border-0 rounded-xl font-semibold"
               asChild
             >
               <Link href="/dashboard/shop">Publier ma boutique</Link>
@@ -181,32 +181,28 @@ export default async function DashboardPage() {
           value={formatCurrency(totalRevenue, currency)}
           icon={BanknoteIcon}
           trendLabel={ordersCount === 0 ? "Aucune vente pour l'instant" : undefined}
-          iconGradient={["#22c55e", "#15803d"]}
-          accentColor="#16a34a"
+          iconClassName="bg-primary text-primary-foreground"
         />
         <StatsCard
           label="Commandes"
           value={ordersCount}
           icon={ShoppingBagIcon}
           trendLabel={ordersCount === 0 ? "Aucune commande" : undefined}
-          iconGradient={["#4ade80", "#16a34a"]}
-          accentColor="#22c55e"
+          iconClassName="bg-[var(--success)] text-[var(--success-foreground)]"
         />
         <StatsCard
           label="Produits"
           value={productsCount}
           icon={PackageIcon}
           trendLabel={productsCount === 0 ? "Ajoute ton premier produit" : undefined}
-          iconGradient={["#86efac", "#4ade80"]}
-          accentColor="#4ade80"
+          iconClassName="bg-foreground text-background"
         />
         <StatsCard
           label="Visites boutique"
           value={0}
           icon={EyeIcon}
           trendLabel="Bientôt disponible"
-          iconGradient={["#a3e635", "#65a30d"]}
-          accentColor="#84cc16"
+          iconClassName="bg-muted text-muted-foreground"
         />
       </div>
 

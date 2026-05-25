@@ -21,5 +21,11 @@ export default async function SettingsPage() {
 
   if (!shop) redirect("/dashboard");
 
-  return <SettingsClient shop={shop} />;
+  const { data: links } = await supabase
+    .from("shop_links")
+    .select("*")
+    .eq("shop_id", shop.id)
+    .order("position", { ascending: true });
+
+  return <SettingsClient shop={shop} links={links ?? []} />;
 }

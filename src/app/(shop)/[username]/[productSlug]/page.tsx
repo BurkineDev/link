@@ -14,6 +14,9 @@ interface Props {
   params: Promise<{ username: string; productSlug: string }>;
 }
 
+/** Revalidate every 60 seconds — see /(shop)/[username]/page.tsx for rationale. */
+export const revalidate = 60;
+
 // ---------------------------------------------------------------------------
 // Metadata
 // ---------------------------------------------------------------------------

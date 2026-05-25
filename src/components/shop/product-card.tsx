@@ -7,14 +7,26 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
+import {
+  BORDER_RADIUS_CLASS,
+  CARD_STYLE_CLASS,
+  DEFAULT_BORDER_RADIUS,
+  DEFAULT_CARD_STYLE,
+} from "@/lib/constants";
 import type { ProductRow } from "@/lib/types/database";
-import type { Currency } from "@/lib/types/database";
+import type {
+  Currency,
+  ShopBorderRadius,
+  ShopCardStyle,
+} from "@/lib/types/database";
 
 interface ProductCardProps {
   product: ProductRow;
   shopSlug: string;
   shopId: string;
   currency: Currency;
+  borderRadius?: ShopBorderRadius;
+  cardStyle?: ShopCardStyle;
   className?: string;
 }
 
@@ -23,8 +35,14 @@ export function ProductCard({
   shopSlug,
   shopId,
   currency,
+  borderRadius = DEFAULT_BORDER_RADIUS,
+  cardStyle = DEFAULT_CARD_STYLE,
   className,
 }: ProductCardProps) {
+  const radiusClass =
+    BORDER_RADIUS_CLASS[borderRadius] ?? BORDER_RADIUS_CLASS.lg;
+  const cardClass =
+    CARD_STYLE_CLASS[cardStyle] ?? CARD_STYLE_CLASS.bordered;
   const addItem = useCart((s) => s.addItem);
 
   const primaryImage = product.images?.[0];
@@ -63,12 +81,13 @@ export function ProductCard({
     <Link
       href={`/${shopSlug}/${product.slug}`}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl bg-card",
-        "border border-border/60 shadow-sm",
-        "transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
+        "group relative flex flex-col overflow-hidden",
+        radiusClass,
+        cardClass,
+        "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isOutOfStock && "opacity-70",
-        className
+        className,
       )}
     >
       {/* ── Image ── */}
@@ -147,12 +166,12 @@ export function ProductCard({
               aria-label={`Ajouter ${product.name} au panier`}
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:hidden",
-                "shop-primary-bg text-white shadow-sm active:scale-95",
-                "transition-transform"
+                "shadow-sm active:scale-95 transition-transform",
               )}
-              style={
-                { "--btn-bg": "var(--shop-primary, #6366f1)" } as React.CSSProperties
-              }
+              style={{
+                backgroundColor: "var(--shop-primary, var(--primary))",
+                color: "var(--shop-accent, white)",
+              }}
             >
               <Plus className="h-5 w-5" strokeWidth={2.5} />
             </button>

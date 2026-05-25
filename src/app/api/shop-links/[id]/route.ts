@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+
+const updateSchema = z.object({
+  label: z.string().trim().min(1).max(60).optional(),
+  url: z.string().trim().min(1).max(500).optional(),
+  icon: z.string().trim().min(1).max(30).optional(),
+  position: z.number().int().min(0).max(100).optional(),
+  is_active: z.boolean().optional(),
+});
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function PATCH(request: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
+  }
+
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Données invalides" }, { status: 422 });
+  }
+
+  const { data, error } = await supabase
+    .from("shop_links")
+    .update(parsed.data)
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
+  return NextResponse.json({ link: data });
+}
+
+export async function DELETE(_request: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+
+  const { error } = await supabase.from("shop_links").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}

@@ -390,7 +390,7 @@ export function OutilsClient() {
               Ces outils t&apos;aident à préparer la vente. LinkBoutik t&apos;aide à
               encaisser et suivre les commandes.
             </p>
-            <Button className="mt-4 w-full gradient-brand text-white" asChild>
+            <Button className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0" asChild>
               <Link href="/register">
                 Créer ma boutique
                 <ArrowRight className="size-4" />

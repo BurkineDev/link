@@ -10,8 +10,6 @@ interface StatsCardProps {
   trendLabel?: string;
   className?: string;
   iconClassName?: string;
-  iconGradient?: [string, string];
-  accentColor?: string;
 }
 
 export function StatsCard({
@@ -22,8 +20,6 @@ export function StatsCard({
   trendLabel,
   className,
   iconClassName,
-  iconGradient,
-  accentColor,
 }: StatsCardProps) {
   const hasTrend = trend !== undefined;
   const isPositive = hasTrend && trend > 0;
@@ -36,46 +32,30 @@ export function StatsCard({
       : MinusIcon;
 
   const trendColorClass = isPositive
-    ? "text-emerald-600"
+    ? "text-[var(--success)]"
     : isNegative
-      ? "text-red-500"
+      ? "text-destructive"
       : "text-muted-foreground";
 
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-4 overflow-hidden rounded-2xl bg-card p-5 border border-border/70 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-default",
-        className
+        "relative flex flex-col gap-4 rounded-2xl bg-card p-5 border border-border shadow-sm transition-shadow duration-200 hover:shadow-md cursor-default",
+        className,
       )}
     >
-      {/* Accent glow */}
-      {accentColor && (
-        <div
-          className="pointer-events-none absolute -right-8 -top-8 size-32 rounded-full blur-2xl opacity-[0.11] transition-opacity duration-300 group-hover:opacity-[0.18]"
-          style={{ backgroundColor: accentColor }}
-        />
-      )}
-
       {/* Label + icon row */}
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
           {label}
         </p>
         <span
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-xl shadow-sm",
-            !iconGradient && (iconClassName ?? "bg-primary/10 text-primary")
+            "flex size-9 shrink-0 items-center justify-center rounded-xl",
+            iconClassName ?? "bg-primary text-primary-foreground",
           )}
-          style={
-            iconGradient
-              ? {
-                  background: `linear-gradient(135deg, ${iconGradient[0]}, ${iconGradient[1]})`,
-                  boxShadow: `0 4px 14px ${iconGradient[1]}40`,
-                }
-              : undefined
-          }
         >
-          <Icon className={cn("size-[17px]", iconGradient ? "text-white" : "")} />
+          <Icon className="size-[17px]" />
         </span>
       </div>
 
