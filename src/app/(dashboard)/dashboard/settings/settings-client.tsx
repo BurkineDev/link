@@ -342,7 +342,6 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   // ---- Payments ----
   const [currency, setCurrency] = useState(shop.currency);
-  const [flutterwaveKey, setFlutterwaveKey] = useState<string>("");
 
   const supabase = createClient();
 
@@ -435,8 +434,21 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
       })
       .eq("id", shop.id);
     setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Contact mis à jour.");
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Contact mis à jour.");
+      router.refresh();
+    }
+  };
+
+  const resetContact = () => {
+    setContactEmail(shop.contact_email ?? "");
+    setContactPhone(shop.contact_phone ?? "");
+    setInstagram(shop.social_links?.instagram ?? "");
+    setFacebook(shop.social_links?.facebook ?? "");
+    setTiktok(shop.social_links?.tiktok ?? "");
+    setTwitter(shop.social_links?.twitter ?? "");
   };
 
   const savePayments = async () => {
@@ -449,8 +461,16 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
       })
       .eq("id", shop.id);
     setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Paramètres de paiement mis à jour.");
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Paramètres de paiement mis à jour.");
+      router.refresh();
+    }
+  };
+
+  const resetPayments = () => {
+    setCurrency(shop.currency);
   };
 
   const handleUnpublish = async () => {
@@ -485,6 +505,16 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
     cardStyle !== shop.card_style ||
     ctaShape !== shop.cta_shape ||
     ctaStyle !== shop.cta_style;
+
+  const contactDirty =
+    contactEmail !== (shop.contact_email ?? "") ||
+    contactPhone !== (shop.contact_phone ?? "") ||
+    instagram !== (shop.social_links?.instagram ?? "") ||
+    facebook !== (shop.social_links?.facebook ?? "") ||
+    tiktok !== (shop.social_links?.tiktok ?? "") ||
+    twitter !== (shop.social_links?.twitter ?? "");
+
+  const paymentsDirty = currency !== shop.currency;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -1045,14 +1075,36 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               </div>
             ))}
 
-            <Button onClick={saveContact} disabled={saving}>
-              {saving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Check className="size-4" />
-              )}
-              Enregistrer
-            </Button>
+            <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-1 py-3">
+              <p className="text-xs text-muted-foreground">
+                {contactDirty
+                  ? "Modifications non enregistrées"
+                  : "Tout est synchronisé"}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetContact}
+                  disabled={!contactDirty || saving}
+                >
+                  <RotateCcw className="size-4" />
+                  Annuler
+                </Button>
+                <Button
+                  onClick={saveContact}
+                  disabled={!contactDirty || saving}
+                >
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Check className="size-4" />
+                  )}
+                  Enregistrer
+                </Button>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
@@ -1080,38 +1132,55 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Toutes vos commandes et vos prix seront affichés dans cette
+                devise.
+              </p>
             </div>
 
             <Separator />
 
-            <div className="space-y-1.5">
-              <Label htmlFor="flutterwave-key">
-                Clé publique Flutterwave{" "}
-                <span className="text-muted-foreground font-normal text-xs">
-                  (optionnel)
-                </span>
-              </Label>
-              <Input
-                id="flutterwave-key"
-                type="text"
-                placeholder="FLWPUBK_TEST-…"
-                value={flutterwaveKey}
-                onChange={(e) => setFlutterwaveKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Trouvez votre clé dans le tableau de bord Flutterwave →
-                Paramètres → API.
+            <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+              <p className="text-sm font-semibold">Méthodes de paiement</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Vos clients peuvent payer par carte bancaire (Visa, Mastercard)
+                et Mobile Money (Wave, Orange, MTN, Moov). La configuration des
+                moyens de paiement est gérée par l&apos;équipe LinkBoutik —
+                vous n&apos;avez rien à installer. Les fonds sont reversés sur
+                le compte que vous fournirez à l&apos;équipe.
               </p>
             </div>
 
-            <Button onClick={savePayments} disabled={saving}>
-              {saving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Check className="size-4" />
-              )}
-              Enregistrer
-            </Button>
+            <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-1 py-3">
+              <p className="text-xs text-muted-foreground">
+                {paymentsDirty
+                  ? "Modifications non enregistrées"
+                  : "Tout est synchronisé"}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetPayments}
+                  disabled={!paymentsDirty || saving}
+                >
+                  <RotateCcw className="size-4" />
+                  Annuler
+                </Button>
+                <Button
+                  onClick={savePayments}
+                  disabled={!paymentsDirty || saving}
+                >
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Check className="size-4" />
+                  )}
+                  Enregistrer
+                </Button>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
