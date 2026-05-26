@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Plus, ShoppingBag } from "lucide-react";
+import { ProductVectorIllustration } from "./product-vector-illustration";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/use-cart";
@@ -90,21 +91,13 @@ export function ProductCard({
         className,
       )}
     >
-      {/* ── Image ── */}
+      {/* ── Image replaced with Vector Illustration ── */}
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
-        {primaryImage?.url ? (
-          <Image
-            src={primaryImage.url}
-            alt={primaryImage.alt ?? product.name}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted">
-            <ShoppingBag className="h-10 w-10 text-muted-foreground/30" />
-          </div>
-        )}
+        <ProductVectorIllustration
+          name={product.name}
+          description={product.description ?? ""}
+          className="transition-transform duration-300 group-hover:scale-105"
+        />
 
         {/* Badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1.5">

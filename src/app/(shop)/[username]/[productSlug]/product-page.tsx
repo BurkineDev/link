@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { VariantSelector } from "@/components/shop/variant-selector";
 import { ProductCard } from "@/components/shop/product-card";
+import { ProductVectorIllustration } from "@/components/shop/product-vector-illustration";
 import { CartDrawer } from "@/components/shop/cart-drawer";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
@@ -131,22 +132,12 @@ export function ProductPage({
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
           {/* ── Left: Image gallery ── */}
           <div className="space-y-3">
-            {/* Main image */}
+            {/* Main image replaced with Vector Illustration */}
             <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted">
-              {primaryImage?.url ? (
-                <Image
-                  src={primaryImage.url}
-                  alt={primaryImage.alt ?? product.name}
-                  fill
-                  priority
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <ShoppingBag className="h-16 w-16 text-muted-foreground/20" />
-                </div>
-              )}
+              <ProductVectorIllustration
+                name={product.name}
+                description={product.description ?? ""}
+              />
 
               {/* Badges */}
               <div className="absolute top-3 left-3 flex flex-col gap-2">
@@ -162,36 +153,6 @@ export function ProductPage({
                 )}
               </div>
             </div>
-
-            {/* Thumbnails */}
-            {images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {images.map((img, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setSelectedImage(idx)}
-                    aria-label={`Image ${idx + 1}`}
-                    aria-pressed={selectedImage === idx}
-                    className={cn(
-                      "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      selectedImage === idx
-                        ? "border-[var(--shop-primary,#6366f1)] shadow-sm"
-                        : "border-transparent opacity-70 hover:opacity-100"
-                    )}
-                  >
-                    <Image
-                      src={img.url}
-                      alt={img.alt ?? `Image ${idx + 1}`}
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* ── Right: Details ── */}
