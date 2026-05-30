@@ -165,6 +165,7 @@ function Navbar() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-8">
           {[
+            { label: "Outils gratuits", href: "/outils" },
             { label: "Fonctionnalités", href: "#features" },
             { label: "Templates", href: "#templates" },
             { label: "Tarifs", href: "/pricing" },
@@ -215,6 +216,7 @@ function Navbar() {
         >
           <nav className="flex flex-col px-4 py-4 gap-1">
             {[
+              { label: "Outils gratuits", href: "/outils" },
               { label: "Fonctionnalités", href: "#features" },
               { label: "Templates", href: "#templates" },
               { label: "Tarifs", href: "/pricing" },

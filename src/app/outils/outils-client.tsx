@@ -36,6 +36,33 @@ const followUpLabels: Record<FollowUpIntent, string> = {
   delivery: "Confirmer la livraison",
 };
 
+const PRODUCT_DRAFT_KEY = "linkboutik:product-draft";
+
+type ProductDraft = {
+  name?: string;
+  description?: string;
+  price?: number;
+};
+
+// Stash a draft in localStorage then send the user to the product form, which
+// reads and pre-fills it — bridges the free AI tools to shop creation.
+function saveProductDraft(draft: ProductDraft) {
+  let existing: ProductDraft = {};
+
+  try {
+    existing = JSON.parse(localStorage.getItem(PRODUCT_DRAFT_KEY) ?? "{}");
+  } catch {
+    existing = {};
+  }
+
+  localStorage.setItem(
+    PRODUCT_DRAFT_KEY,
+    JSON.stringify({ ...existing, ...draft }),
+  );
+  toast.success("Brouillon produit sauvegardé.");
+  window.location.assign("/dashboard/products/new");
+}
+
 function copyToClipboard(value: string) {
   if (!value.trim()) return;
   navigator.clipboard
@@ -112,7 +139,19 @@ function DescriptionGenerator() {
         {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
         {loading ? "Génération IA en cours…" : "Générer avec IA"}
       </Button>
-      {result && <Output value={result} />}
+      {result && (
+        <>
+          <Output value={result} />
+          <Button
+            type="button"
+            className="w-full gradient-brand text-white"
+            onClick={() => saveProductDraft({ name, description: result })}
+          >
+            Utiliser dans ma boutique
+            <ArrowRight className="size-4" />
+          </Button>
+        </>
+      )}
     </ToolCard>
   );
 }
@@ -246,6 +285,14 @@ function MarginCalculator() {
         ))}
       </div>
       <Output value={summary} />
+      <Button
+        type="button"
+        className="w-full gradient-brand text-white"
+        onClick={() => saveProductDraft({ price: Math.round(numbers.price) })}
+      >
+        Envoyer ce prix vers ma fiche produit
+        <ArrowRight className="size-4" />
+      </Button>
     </ToolCard>
   );
 }

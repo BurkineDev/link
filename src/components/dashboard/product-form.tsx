@@ -80,6 +80,14 @@ const STEPS = [
   { label: "Variantes & Stock", number: 3 },
 ];
 
+const PRODUCT_DRAFT_KEY = "linkboutik:product-draft";
+
+type ProductDraft = {
+  name?: unknown;
+  description?: unknown;
+  price?: unknown;
+};
+
 // ---------------------------------------------------------------------------
 // VariantBuilder sub-component
 // ---------------------------------------------------------------------------
@@ -367,6 +375,51 @@ export function ProductForm({
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(
     Boolean(defaultValues?.slug)
   );
+
+  // Pre-fill a new product from a draft stashed by the free AI tools (/outils).
+  useEffect(() => {
+    if (isEdit) return;
+
+    let draft: ProductDraft | null = null;
+
+    try {
+      draft = JSON.parse(localStorage.getItem(PRODUCT_DRAFT_KEY) ?? "null");
+    } catch {
+      draft = null;
+    }
+
+    if (!draft) return;
+
+    const nextName = typeof draft.name === "string" ? draft.name.trim() : "";
+    const nextDescription =
+      typeof draft.description === "string" ? draft.description.trim() : "";
+    const nextPrice =
+      typeof draft.price === "number" && Number.isFinite(draft.price)
+        ? draft.price
+        : null;
+
+    if (nextName) {
+      setValue("name", nextName, { shouldDirty: true, shouldValidate: true });
+      setValue("slug", toSlug(nextName), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    if (nextDescription) {
+      setValue("description", nextDescription, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    if (nextPrice !== null) {
+      setValue("price", nextPrice, { shouldDirty: true, shouldValidate: true });
+    }
+
+    localStorage.removeItem(PRODUCT_DRAFT_KEY);
+    toast.success("Brouillon importé depuis les outils LinkBoutik.");
+  }, [isEdit, setValue]);
 
   useEffect(() => {
     if (!slugManuallyEdited && watchName) {
