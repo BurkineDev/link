@@ -516,6 +516,29 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   const paymentsDirty = currency !== shop.currency;
 
+  // ---- General tab: dirty + validation ----
+  const generalDirty =
+    name !== shop.name ||
+    slug !== shop.slug ||
+    description !== (shop.description ?? "") ||
+    logoUrl !== shop.logo_url ||
+    bannerUrl !== shop.banner_url;
+
+  const trimmedName = name.trim();
+  const nameValid = trimmedName.length >= 2 && trimmedName.length <= 80;
+  // Mirrors the DB constraint: lowercase alphanumerics + hyphens, 3–50 chars.
+  const slugValid =
+    slug.length >= 3 &&
+    slug.length <= 50 &&
+    /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(slug);
+  const slugChanged = slug !== shop.slug;
+  const generalValid = nameValid && slugValid;
+
+  // ---- Contact tab: optional email must be well-formed when provided ----
+  const contactEmailValid =
+    contactEmail.trim() === "" ||
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail.trim());
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -562,7 +585,13 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ma boutique"
+                aria-invalid={!nameValid}
               />
+              {!nameValid && (
+                <p className="text-xs text-destructive">
+                  Le nom doit faire entre 2 et 80 caractères.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -575,9 +604,28 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                   id="shop-slug"
                   className="rounded-l-none"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                  aria-invalid={!slugValid}
+                  onChange={(e) =>
+                    setSlug(
+                      e.target.value
+                        .toLowerCase()
+                        .replace(/\s+/g, "-")
+                        .replace(/[^a-z0-9-]/g, ""),
+                    )
+                  }
                 />
               </div>
+              {!slugValid ? (
+                <p className="text-xs text-destructive">
+                  3 à 50 caractères : lettres minuscules, chiffres et tirets,
+                  sans tiret au début ni à la fin.
+                </p>
+              ) : slugChanged ? (
+                <p className="text-xs text-amber-600">
+                  ⚠️ Changer l&apos;URL rendra vos anciens liens et QR codes
+                  invalides.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -610,7 +658,10 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               />
             </div>
 
-            <Button onClick={saveGeneral} disabled={saving}>
+            <Button
+              onClick={saveGeneral}
+              disabled={saving || !generalDirty || !generalValid}
+            >
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
@@ -1015,7 +1066,13 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 placeholder="boutique@exemple.com"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
+                aria-invalid={!contactEmailValid}
               />
+              {!contactEmailValid && (
+                <p className="text-xs text-destructive">
+                  Adresse e-mail invalide.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1094,7 +1151,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </Button>
                 <Button
                   onClick={saveContact}
-                  disabled={!contactDirty || saving}
+                  disabled={!contactDirty || saving || !contactEmailValid}
                 >
                   {saving ? (
                     <Loader2 className="size-4 animate-spin" />
