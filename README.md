@@ -2,14 +2,34 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-Create a local environment file with the app, Supabase, and Stripe values:
+Create a local environment file with the app, Supabase, Stripe, and Anthropic values:
 
 ```bash
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-SUPABASE_SERVICE_ROLE_KEY=...
+# Required by the free AI tools under /api/outils/* (product descriptions, WhatsApp messages)
+ANTHROPIC_API_KEY=sk-ant-...
+# Distributed rate limiting + global budget cap for the AI tools (Upstash Redis).
+# Provision via the Vercel Marketplace (Upstash) and copy the REST credentials.
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
 ```
+
+The `/api/outils/*` endpoints are public and unauthenticated. They are
+protected in three layers (see `src/lib/rate-limit.ts`):
+
+- in-memory per-IP burst (instant, per-instance);
+- distributed per-IP limits via Upstash — 10/min and 30/day;
+- a **global daily budget ceiling of 300 generations/day** shared across all
+  IPs and tools — the real guard on the Anthropic spend.
+
+If the Upstash variables are absent (e.g. local dev) only the in-memory layer
+applies, so **production must set them** for the distributed limits and budget
+cap to take effect.
 
 Stripe Checkout redirects back to `/checkout/success?session_id=...`. Configure
 the Stripe webhook URL as `/api/webhooks/stripe` and subscribe to

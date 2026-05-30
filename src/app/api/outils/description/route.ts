@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { enforceAiLimits } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
 
 const client = new Anthropic();
 
+// Clamp free-text inputs so they cannot inflate token usage or stuff the prompt.
+const clamp = (v: unknown, max: number) =>
+  typeof v === "string" ? v.trim().slice(0, max) : "";
+
 export async function POST(request: NextRequest) {
   try {
+    const blocked = await enforceAiLimits(request, "description");
+    if (blocked) return blocked;
+
     const body = await request.json() as {
       productName?: string;
       category?: string;
@@ -12,16 +22,19 @@ export async function POST(request: NextRequest) {
       tone?: string;
     };
 
-    const { productName, category, keywords, tone = "professionnel" } = body;
+    const productName = clamp(body.productName, 200);
+    const category = clamp(body.category, 100);
+    const keywords = clamp(body.keywords, 200);
+    const tone = clamp(body.tone, 50) || "professionnel";
 
-    if (!productName || typeof productName !== "string" || productName.trim().length < 2) {
+    if (productName.length < 2) {
       return NextResponse.json({ error: "Nom du produit requis." }, { status: 400 });
     }
 
     const prompt = `Tu es un expert en copywriting pour le e-commerce africain.
 Écris une description de produit accrocheuse, en français, pour un vendeur africain.
 
-Produit: ${productName.trim()}
+Produit: ${productName}
 ${category ? `Catégorie: ${category}` : ""}
 ${keywords ? `Mots-clés à inclure: ${keywords}` : ""}
 Ton souhaité: ${tone}

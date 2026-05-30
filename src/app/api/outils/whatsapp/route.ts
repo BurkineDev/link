@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { enforceAiLimits } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
 
 const client = new Anthropic();
+
+// Clamp free-text inputs so they cannot inflate token usage or stuff the prompt.
+const clamp = (v: unknown, max: number) =>
+  typeof v === "string" ? v.trim().slice(0, max) : "";
 
 const MESSAGE_TYPES = {
   relance: "Relance un client qui n'a pas finalisé sa commande",
@@ -15,6 +22,9 @@ type MessageType = keyof typeof MESSAGE_TYPES;
 
 export async function POST(request: NextRequest) {
   try {
+    const blocked = await enforceAiLimits(request, "whatsapp");
+    if (blocked) return blocked;
+
     const body = await request.json() as {
       type?: string;
       shopName?: string;
@@ -22,7 +32,10 @@ export async function POST(request: NextRequest) {
       details?: string;
     };
 
-    const { type, shopName, productName, details } = body;
+    const { type } = body;
+    const shopName = clamp(body.shopName, 100);
+    const productName = clamp(body.productName, 200);
+    const details = clamp(body.details, 500);
 
     if (!type || !(type in MESSAGE_TYPES)) {
       return NextResponse.json({ error: "Type de message invalide." }, { status: 400 });
