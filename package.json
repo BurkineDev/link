@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:p0": "jest --testPathPatterns checkout webhook-geniuspay"
+    "test:p0": "jest --testPathPatterns checkout webhook"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
