@@ -186,8 +186,8 @@ function SuccessContent() {
         <h1 className="mb-2 text-2xl font-bold">Paiement réussi !</h1>
         <p className="mb-8 text-muted-foreground">
           Merci <strong>{order.buyer_name}</strong>. Votre commande a bien été
-          enregistrée. Un email de confirmation a été envoyé à{" "}
-          <strong>{order.buyer_email}</strong>.
+          enregistrée. Le vendeur en a été informé et vous contactera pour la
+          suite. Conservez votre numéro de référence ci-dessous.
         </p>
       </motion.div>
 
