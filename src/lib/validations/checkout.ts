@@ -195,30 +195,6 @@ export const initiatePaymentSchema = z.object({
 export type InitiatePaymentInput = z.infer<typeof initiatePaymentSchema>;
 
 // ---------------------------------------------------------------------------
-// Flutterwave webhook payload verification
-// ---------------------------------------------------------------------------
-
-export const flutterwaveWebhookSchema = z.object({
-  event: z.string(),
-  data: z.object({
-    id: z.number(),
-    tx_ref: z.string(),
-    flw_ref: z.string(),
-    amount: z.number(),
-    currency: z.string(),
-    status: z.enum(["successful", "failed", "pending"]),
-    customer: z.object({
-      email: z.string().email(),
-      name: z.string().optional(),
-      phone_number: z.string().optional(),
-    }),
-    meta: z.record(z.string(), z.unknown()).optional(),
-  }),
-});
-
-export type FlutterwaveWebhookPayload = z.infer<typeof flutterwaveWebhookSchema>;
-
-// ---------------------------------------------------------------------------
 // Order status update (admin / seller)
 // ---------------------------------------------------------------------------
 
