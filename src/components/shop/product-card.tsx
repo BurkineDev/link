@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Plus, ShoppingBag } from "lucide-react";
 import { ProductVectorIllustration } from "./product-vector-illustration";

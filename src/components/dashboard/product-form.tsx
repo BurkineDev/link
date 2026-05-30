@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -21,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -328,9 +327,8 @@ export function ProductForm({
 
   const isEdit = Boolean(productId);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<CreateProductInput>({
-    resolver: zodResolver(createProductSchema) as any,
+    resolver: zodResolver(createProductSchema) as Resolver<CreateProductInput>,
     defaultValues: {
       name: "",
       slug: "",
@@ -360,7 +358,6 @@ export function ProductForm({
   } = form;
 
   const watchName = watch("name");
-  const watchSlug = watch("slug");
   const watchHasVariants = watch("has_variants");
   const watchVariants = watch("variants") ?? [];
   const watchImages = watch("images");
@@ -394,12 +391,6 @@ export function ProductForm({
       const supabase = createClient();
 
       try {
-        const payload = {
-          ...data,
-          is_published: publish,
-          shop_id: shopId,
-        };
-
         if (isEdit && productId) {
           const { error } = await supabase
             .from("products")

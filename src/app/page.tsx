@@ -15,11 +15,7 @@ import {
   ArrowRight,
   Menu,
   X,
-  Globe,
-  Send,
-  Rss,
   ChevronRight,
-  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -681,7 +677,7 @@ function Templates() {
             <span className="text-primary">qui vendent</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            3 templates professionnels, personnalisables à l'infini. Lance ta
+            3 templates professionnels, personnalisables à l&apos;infini. Lance ta
             boutique avec style.
           </p>
         </FadeIn>
@@ -899,7 +895,7 @@ function Pricing() {
                 </ul>
 
                 <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                  Une commission de 5% s'applique sur chaque vente pour couvrir
+                  Une commission de 5% s&apos;applique sur chaque vente pour couvrir
                   les frais de la plateforme.
                 </p>
               </CardContent>

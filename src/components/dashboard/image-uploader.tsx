@@ -64,7 +64,7 @@ export function ImageUploader({
   );
 
   const uploadFile = useCallback(
-    async (file: File, slotId: string) => {
+    async (file: File) => {
       const supabase = createClient();
       const path = `${shopId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
 
@@ -119,11 +119,11 @@ export function ImageUploader({
       );
 
       const results = await Promise.all(
-        compressed.map((file, i) => uploadFile(file, newSlots[i].id))
+        compressed.map((file) => uploadFile(file))
       );
 
       setSlots((prev) => {
-        let next = [...prev];
+        const next = [...prev];
         newSlots.forEach((slot, i) => {
           const idx = next.findIndex((s) => s.id === slot.id);
           if (idx === -1) return;

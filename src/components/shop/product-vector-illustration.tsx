@@ -1,13 +1,13 @@
 "use client";
 
 import React from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   Cpu,
   Brain,
   Sparkles,
   Binary,
   Terminal,
-  Activity,
   Shirt,
   Gem,
   Crown,
@@ -19,17 +19,14 @@ import {
   Palette,
   Brush,
   Hammer,
-  Compass,
   Feather,
   BookOpen,
   GraduationCap,
   Briefcase,
   TrendingUp,
-  Award,
   Home,
   Flower2,
   Leaf,
-  ShoppingBag,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -40,7 +37,7 @@ interface ProductVectorIllustrationProps {
 }
 
 interface Universe {
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   gradientClass: string;
   glowColor: string;
   label: string;

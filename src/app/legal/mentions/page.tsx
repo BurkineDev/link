@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export const metadata = {
   title: "Mentions légales | LinkBoutik",
   description: "Informations légales sur l'éditeur du service LinkBoutik.",
@@ -66,14 +68,14 @@ export default function MentionsPage() {
       <h2>Données personnelles</h2>
       <p>
         Les modalités de collecte et de traitement des données personnelles sont
-        décrites dans notre <a href="/legal/privacy">Politique de confidentialité</a>.
+        décrites dans notre <Link href="/legal/privacy">Politique de confidentialité</Link>.
       </p>
 
       <h2>Litiges</h2>
       <p>
         Tout litige relatif à l&apos;utilisation du service est régi par les Conditions
         Générales d&apos;Utilisation, disponibles à l&apos;adresse{" "}
-        <a href="/legal/terms">/legal/terms</a>.
+        <Link href="/legal/terms">/legal/terms</Link>.
       </p>
     </>
   );

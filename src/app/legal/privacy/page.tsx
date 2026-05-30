@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export const metadata = {
   title: "Politique de confidentialité | LinkBoutik",
   description:
@@ -133,7 +135,7 @@ export default function PrivacyPage() {
       <h2>10. Modifications</h2>
       <p>
         Cette politique peut être mise à jour. La version en vigueur est toujours
-        accessible à l&apos;adresse <a href="/legal/privacy">/legal/privacy</a>.
+        accessible à l&apos;adresse <Link href="/legal/privacy">/legal/privacy</Link>.
       </p>
 
       <h2>11. Contact</h2>

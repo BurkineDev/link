@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ShoppingBag, Zap, Minus, Plus, Home } from "lucide-react";
 import { toast } from "sonner";
@@ -33,7 +32,6 @@ export function ProductPage({
   variants,
   related,
 }: ProductPageProps) {
-  const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariantRow | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [cartOpen, setCartOpen] = useState(false);
@@ -42,7 +40,6 @@ export function ProductPage({
   const itemCount = useCart((s) => s.getItemCount());
 
   const images = product.images ?? [];
-  const primaryImage = images[selectedImage];
 
   const effectivePrice = selectedVariant?.price ?? product.price;
   const isOnSale =

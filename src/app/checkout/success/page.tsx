@@ -55,13 +55,14 @@ function SuccessContent() {
 
   const sessionId = searchParams.get("session_id");
 
-  const [state, setState] = useState<VerifyState>({ status: "loading" });
+  const [state, setState] = useState<VerifyState>(() =>
+    sessionId
+      ? { status: "loading" }
+      : { status: "error", message: "Référence de transaction manquante." },
+  );
 
   useEffect(() => {
-    if (!sessionId) {
-      setState({ status: "error", message: "Référence de transaction manquante." });
-      return;
-    }
+    if (!sessionId) return;
 
     const params = new URLSearchParams({ session_id: sessionId });
 

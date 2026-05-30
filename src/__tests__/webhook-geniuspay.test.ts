@@ -4,12 +4,12 @@ import { NextRequest } from "next/server";
 // Mocking DB, verifyWebhookSignature, and notifySellerOfPaidOrder
 // ---------------------------------------------------------------------------
 
-let _order: Record<string, any> | null = null;
-let _orderError: any = null;
-let _updateResult: any = null;
-let _updateError: any = null;
-let _rpcResult: any = null;
-let _rpcError: any = null;
+let _order: Record<string, unknown> | null = null;
+let _orderError: unknown = null;
+let _updateResult: unknown = null;
+let _updateError: unknown = null;
+let _rpcResult: unknown = null;
+let _rpcError: unknown = null;
 
 const mockAdminClient = {
   from: (table: string) => {
@@ -23,7 +23,7 @@ const mockAdminClient = {
                 : Promise.resolve({ data: _order, error: null }),
           }),
         }),
-        update: (payload: any) => ({
+        update: (payload: unknown) => ({
           eq: () => {
             _updateResult = payload;
             return Promise.resolve({ error: _updateError });
@@ -33,7 +33,7 @@ const mockAdminClient = {
     }
     return {};
   },
-  rpc: (fn: string, payload: any) => {
+  rpc: (fn: string, payload: unknown) => {
     if (fn === "release_stock") {
       _rpcResult = payload;
       return Promise.resolve({ error: _rpcError });
@@ -110,7 +110,7 @@ function makeRequest(body: unknown, headers: Record<string, string> = {}): NextR
   });
 }
 
-function validPayload(overrides: Record<string, any> = {}) {
+function validPayload(overrides: Record<string, unknown> = {}) {
   return {
     id: "gp-evt-001",
     event: "payment.success",
@@ -151,7 +151,7 @@ describe("POST /api/webhooks/geniuspay", () => {
 
   test("returns 200 if metadata is missing orderId", async () => {
     const payload = validPayload();
-    payload.data.metadata = {} as any;
+    payload.data.metadata = {} as { orderId: string };
     const res = await POST(makeRequest(payload));
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
