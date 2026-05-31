@@ -303,6 +303,108 @@ function OptionGrid<T extends string>({
 }
 
 // ---------------------------------------------------------------------------
+// TemplateThumb — color-reactive mini storefront mockup (no static images)
+// ---------------------------------------------------------------------------
+
+type TemplateLayout = "minimal" | "boutique" | "market" | "artisan";
+
+function MockTile({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-[3px] bg-white shadow-sm ring-1 ring-black/[0.04]",
+        className,
+      )}
+    />
+  );
+}
+
+function TemplateThumb({
+  layout,
+  primary,
+  accent,
+}: {
+  layout: TemplateLayout;
+  primary: string;
+  accent: string;
+}) {
+  const Bar = (
+    <div
+      className="flex items-center gap-1 px-2 py-1.5"
+      style={{ backgroundColor: primary }}
+    >
+      <span className="size-1.5 rounded-full bg-white/90" />
+      <span className="h-1 w-7 rounded-full bg-white/60" />
+      <span
+        className="ml-auto h-2 w-4 rounded-full"
+        style={{ backgroundColor: accent }}
+      />
+    </div>
+  );
+
+  return (
+    <div className="flex h-full w-full flex-col bg-[#f4f4f5]">
+      {layout === "boutique" || layout === "artisan" ? (
+        <div
+          className="flex h-1/3 flex-col items-center justify-center gap-1"
+          style={{ backgroundColor: primary }}
+        >
+          {layout === "artisan" && (
+            <span className="size-3 rounded-full bg-white/90" />
+          )}
+          <span className="h-1.5 w-12 rounded-full bg-white/70" />
+          <span
+            className="h-2 w-8 rounded-full"
+            style={{ backgroundColor: accent }}
+          />
+        </div>
+      ) : (
+        Bar
+      )}
+
+      <div className="flex-1 p-2">
+        {layout === "market" ? (
+          <div className="flex flex-col gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <MockTile className="size-5 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <span className="block h-1 w-3/4 rounded-full bg-black/15" />
+                  <span
+                    className="block h-1 w-1/3 rounded-full"
+                    style={{ backgroundColor: accent }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : layout === "boutique" ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            <MockTile className="h-10" />
+            <MockTile className="h-7" />
+            <MockTile className="h-7" />
+            <MockTile className="h-10" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {[0, 1, 2, 3].map((i) => (
+              <MockTile key={i} className="h-8" />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="px-2 pb-2">
+        <div
+          className="h-2.5 w-full rounded-full"
+          style={{ backgroundColor: accent }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main SettingsClient
 // ---------------------------------------------------------------------------
 
@@ -695,25 +797,22 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                         key={tpl.id}
                         type="button"
                         onClick={() => setTemplateId(tpl.id)}
+                        aria-pressed={selected}
                         className={cn(
-                          "group overflow-hidden rounded-xl border text-left transition-all",
+                          "group cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-200",
                           selected
                             ? "border-foreground ring-2 ring-foreground"
-                            : "border-border hover:border-foreground/40",
+                            : "border-border hover:border-foreground/40 hover:shadow-sm",
                         )}
                       >
-                        <div className="relative aspect-[4/3] bg-muted">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={tpl.preview_image}
-                            alt={tpl.name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
+                        <div className="relative aspect-[4/3] overflow-hidden">
+                          <TemplateThumb
+                            layout={tpl.id as TemplateLayout}
+                            primary={themeColor}
+                            accent={accentColor}
                           />
                           {selected && (
-                            <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background">
+                            <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
                               <Check className="size-3" />
                             </div>
                           )}
