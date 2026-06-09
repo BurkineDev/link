@@ -34,7 +34,7 @@ export function PricingClient({
   currentPlan,
 }: {
   isAuthenticated: boolean;
-  currentPlan: "free" | "pro";
+  currentPlan: "free" | "starter" | "pro";
 }) {
   const searchParams = useSearchParams();
   const [isCheckingOut, setIsCheckingOut] = useState(false);

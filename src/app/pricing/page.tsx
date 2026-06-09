@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getEffectivePlan } from "@/lib/subscription";
+import type { SubscriptionPlan } from "@/lib/types/database";
 import { PricingClient } from "./pricing-client";
 
 export const metadata: Metadata = {
   title: "Tarifs — LinkBoutik",
   description:
-    "Commence gratuitement avec LinkBoutik. Passe en Pro pour des produits illimités, 0% de commission et des outils avancés.",
+    "Commence gratuitement avec LinkBoutik. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
 };
 
 export default async function PricingPage() {
@@ -15,7 +16,7 @@ export default async function PricingPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let currentPlan: "free" | "pro" = "free";
+  let currentPlan: SubscriptionPlan = "free";
   if (user) {
     const { data: sub } = await supabase
       .from("creator_subscriptions")

@@ -47,7 +47,13 @@ export type PaymentProvider =
   | "stripe"
   | "geniuspay";
 
-export type SubscriptionPlan = "free" | "pro";
+export type SubscriptionPlan = "free" | "starter" | "pro";
+
+export type BillingInterval = "month" | "year";
+
+export type BoostType = "featured_24h" | "custom_domain" | "premium_templates";
+
+export type BoostStatus = "pending" | "paid" | "failed" | "expired";
 
 export type PromoDiscountType = "percent" | "fixed";
 
@@ -161,6 +167,7 @@ export type CreatorSubscriptionRow = {
   user_id: string;
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
+  billing_interval: BillingInterval | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   current_period_end: string | null;
@@ -171,8 +178,10 @@ export type CreatorSubscriptionRow = {
 
 export type CreatorSubscriptionInsert = Omit<
   CreatorSubscriptionRow,
-  "id" | "created_at" | "updated_at"
->;
+  "id" | "created_at" | "updated_at" | "billing_interval"
+> & {
+  billing_interval?: BillingInterval | null;
+};
 
 export type CreatorSubscriptionUpdate = Partial<
   Omit<CreatorSubscriptionRow, "id" | "user_id" | "created_at">
@@ -208,9 +217,36 @@ export type ShopRow = {
   tiktok_pixel_id: string | null;
   meta_pixel_id: string | null;
   whatsapp_number: string | null;
+  featured_until: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type BoostPurchaseRow = {
+  id: string;
+  shop_id: string;
+  user_id: string;
+  type: BoostType;
+  amount: number;
+  currency: string;
+  status: BoostStatus;
+  stripe_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  activated_at: string | null;
+  expires_at: string | null;
+  metadata: Json | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BoostPurchaseInsert = Omit<
+  BoostPurchaseRow,
+  "id" | "created_at" | "updated_at"
+>;
+
+export type BoostPurchaseUpdate = Partial<
+  Omit<BoostPurchaseRow, "id" | "shop_id" | "user_id" | "created_at">
+>;
 
 export type ShopLinkRow = {
   id: string;
@@ -368,6 +404,7 @@ export type ShopInsert = Omit<
   | "card_style"
   | "cta_shape"
   | "cta_style"
+  | "featured_until"
 > & {
   tiktok_pixel_id?: string | null;
   meta_pixel_id?: string | null;
@@ -378,6 +415,7 @@ export type ShopInsert = Omit<
   card_style?: ShopCardStyle;
   cta_shape?: ShopCtaShape;
   cta_style?: ShopCtaStyle;
+  featured_until?: string | null;
 };
 
 export type TemplateInsert = Omit<TemplateRow, "id">;
@@ -470,6 +508,11 @@ export interface Database {
         Row: PromoCodeRow;
         Insert: PromoCodeInsert;
         Update: PromoCodeUpdate;
+      } & NoRelationships;
+      boost_purchases: {
+        Row: BoostPurchaseRow;
+        Insert: BoostPurchaseInsert;
+        Update: BoostPurchaseUpdate;
       } & NoRelationships;
     };
     Views: Record<string, never>;

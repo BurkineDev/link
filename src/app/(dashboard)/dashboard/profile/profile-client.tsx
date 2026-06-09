@@ -26,7 +26,7 @@ type ProfileData = {
 } | null;
 
 type SubscriptionData = {
-  plan: "free" | "pro";
+  plan: "free" | "starter" | "pro";
   status: "active" | "trialing" | "past_due" | "cancelled" | "incomplete";
   current_period_end: string | null;
   cancel_at_period_end: boolean;
