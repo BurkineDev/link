@@ -15,7 +15,7 @@ const FREE_FEATURES = [
   "Jusqu'à 5 produits",
   "Lien @username unique",
   "Templates inclus",
-  "Paiements par carte bancaire (Mobile Money bientôt)",
+  "Paiements carte bancaire + Mobile Money (Wave, Orange, MTN, Moov)",
   "Analytics de base",
   "Support par email",
 ];
@@ -243,7 +243,7 @@ export function PricingClient({
               },
               {
                 q: "Le Mobile Money est-il disponible ?",
-                a: "Pas encore. Pour l'instant, les acheteurs paient par carte bancaire via Stripe. L'intégration Orange Money, MTN MoMo et Wave arrive bientôt.",
+                a: "Oui. Tes clients peuvent payer par Wave, Orange Money, MTN Mobile Money et Moov Money via Genius Pay — en plus de la carte bancaire (Stripe).",
               },
             ].map((item) => (
               <details

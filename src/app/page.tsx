@@ -121,7 +121,7 @@ function PhoneMockup() {
             <div>
               <p className="text-[9px] font-semibold text-gray-700">Paiement sécurisé</p>
               <p className="text-[8px] text-muted-foreground">
-                Carte bancaire · Mobile Money bientôt
+                Carte bancaire · Mobile Money
               </p>
             </div>
           </div>
@@ -297,8 +297,8 @@ function Hero() {
               className="text-lg sm:text-xl text-white/85 mb-8 leading-relaxed max-w-lg"
             >
               Partage ton lien unique sur TikTok et Instagram. Encaisse par
-              carte bancaire dès aujourd&apos;hui, et bientôt Mobile Money
-              (Orange, MTN, Wave). Vends partout en Afrique.
+              carte bancaire et Mobile Money (Wave, Orange, MTN, Moov).
+              Vends partout en Afrique.
             </motion.p>
 
             <motion.div
@@ -484,7 +484,7 @@ function Features() {
       icon: Smartphone,
       title: "Paiement sécurisé",
       description:
-        "Tes clients paient par carte bancaire via Stripe — sécurisé et fiable. Intégration Mobile Money (Orange, MTN, Wave) en cours.",
+        "Tes clients paient par carte bancaire via Stripe ou par Mobile Money (Wave, Orange, MTN, Moov) via Genius Pay — sécurisé et fiable.",
       color: "text-foreground",
       bg: "bg-[var(--primary)]/15",
     },
