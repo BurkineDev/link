@@ -3,8 +3,12 @@ import type Stripe from "stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
+import { BOOSTS } from "@/lib/subscription";
 import type {
+  BillingInterval,
+  BoostType,
   OrderItem,
+  SubscriptionPlan,
   SubscriptionStatus,
 } from "@/lib/types/database";
 
@@ -55,6 +59,8 @@ export async function POST(request: NextRequest) {
         const session = event.data.object;
         if (session.mode === "subscription") {
           await handleSubscriptionCheckout(session);
+        } else if (session.metadata?.kind === "boost") {
+          await handleBoostCheckoutEvent(event.type, session);
         } else {
           await handleOrderCheckoutEvent(event.type, session);
         }
@@ -275,10 +281,12 @@ async function upsertSubscriptionFromStripe(
     sub.items?.data?.[0]?.current_period_end ??
     null;
 
-  const plan: "free" | "pro" =
-    sub.status === "canceled" || sub.status === "incomplete_expired"
-      ? "free"
-      : "pro";
+  const isInactive =
+    sub.status === "canceled" || sub.status === "incomplete_expired";
+
+  const { plan, interval } = isInactive
+    ? { plan: "free" as SubscriptionPlan, interval: null as BillingInterval | null }
+    : resolvePlanFromSubscription(sub);
 
   const supabase = getAdminClient();
   const { error } = await supabase
@@ -288,6 +296,7 @@ async function upsertSubscriptionFromStripe(
         user_id: userId,
         plan,
         status: mapStripeStatus(sub.status),
+        billing_interval: interval,
         stripe_customer_id: customerId,
         stripe_subscription_id: sub.id,
         current_period_end: periodEndUnix
@@ -302,6 +311,138 @@ async function upsertSubscriptionFromStripe(
     console.error("[stripe-webhook] subscription upsert error:", error);
     throw error;
   }
+}
+
+/**
+ * Determines the LinkBoutik plan + interval from a Stripe Subscription.
+ *
+ * Strategy, in order of preference:
+ *   1. Read `metadata.plan` and `metadata.interval` (we set these on
+ *      checkout creation — most reliable);
+ *   2. Match the Price ID against env vars (covers Stripe Dashboard
+ *      portal upgrades that don't go through our checkout API);
+ *   3. Fall back to ('pro', 'month') so paying customers never get
+ *      silently downgraded to 'free'.
+ */
+function resolvePlanFromSubscription(sub: Stripe.Subscription): {
+  plan: SubscriptionPlan;
+  interval: BillingInterval | null;
+} {
+  const metaPlan = sub.metadata?.plan;
+  const metaInterval = sub.metadata?.interval;
+
+  if (
+    (metaPlan === "starter" || metaPlan === "pro") &&
+    (metaInterval === "month" || metaInterval === "year")
+  ) {
+    return { plan: metaPlan, interval: metaInterval };
+  }
+
+  const item = sub.items?.data?.[0];
+  const priceId = item?.price?.id;
+  const intervalFromPrice = (item?.price?.recurring?.interval ?? null) as
+    | BillingInterval
+    | null;
+
+  if (priceId) {
+    const map: Record<string, SubscriptionPlan> = {
+      [process.env.STRIPE_STARTER_MONTHLY_PRICE_ID ?? ""]: "starter",
+      [process.env.STRIPE_STARTER_YEARLY_PRICE_ID ?? ""]: "starter",
+      [process.env.STRIPE_PRO_MONTHLY_PRICE_ID ?? ""]: "pro",
+      [process.env.STRIPE_PRO_YEARLY_PRICE_ID ?? ""]: "pro",
+      [process.env.STRIPE_PRO_PRICE_ID ?? ""]: "pro", // legacy single-Price config
+    };
+    delete map[""]; // env vars not set → don't accept an empty-key match.
+    const matched = map[priceId];
+    if (matched) {
+      return { plan: matched, interval: intervalFromPrice };
+    }
+  }
+
+  return { plan: "pro", interval: intervalFromPrice ?? "month" };
+}
+
+// ---------------------------------------------------------------------------
+// Boost checkout handlers
+// ---------------------------------------------------------------------------
+
+async function handleBoostCheckoutEvent(
+  eventType: "checkout.session.completed" | "checkout.session.expired",
+  session: Stripe.Checkout.Session,
+) {
+  const boostPurchaseId = session.metadata?.boostPurchaseId;
+  const boostType = session.metadata?.boostType as BoostType | undefined;
+  const shopId = session.metadata?.shopId;
+
+  if (!boostPurchaseId || !boostType || !shopId) {
+    console.warn(
+      "[stripe-webhook] boost session missing required metadata:",
+      session.id,
+    );
+    return;
+  }
+
+  const supabase = getAdminClient();
+
+  if (eventType === "checkout.session.expired") {
+    await supabase
+      .from("boost_purchases")
+      .update({ status: "expired" })
+      .eq("id", boostPurchaseId)
+      .eq("status", "pending");
+    return;
+  }
+
+  if (session.payment_status !== "paid") {
+    console.warn(
+      "[stripe-webhook] boost session completed but not paid:",
+      session.id,
+    );
+    return;
+  }
+
+  const boost = BOOSTS[boostType];
+  const now = new Date();
+  const expiresAt =
+    boost.durationHours !== null
+      ? new Date(now.getTime() + boost.durationHours * 60 * 60 * 1000)
+      : null;
+
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+
+  const { error: updateError } = await supabase
+    .from("boost_purchases")
+    .update({
+      status: "paid",
+      stripe_payment_intent_id: paymentIntentId,
+      activated_at: now.toISOString(),
+      expires_at: expiresAt ? expiresAt.toISOString() : null,
+    })
+    .eq("id", boostPurchaseId);
+
+  if (updateError) {
+    console.error("[stripe-webhook] boost update error:", updateError);
+    throw updateError;
+  }
+
+  // Apply the boost's side-effects on the shop.
+  if (boostType === "featured_24h" && expiresAt) {
+    const { error: shopError } = await supabase
+      .from("shops")
+      .update({ featured_until: expiresAt.toISOString() })
+      .eq("id", shopId);
+    if (shopError) {
+      console.error("[stripe-webhook] shop featured_until update error:", shopError);
+      throw shopError;
+    }
+  }
+
+  console.info(
+    `[stripe-webhook] boost ${boostType} activated for shop ${shopId} (purchase=${boostPurchaseId})`,
+  );
 }
 
 function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
