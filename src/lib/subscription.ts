@@ -1,12 +1,17 @@
 /**
  * Subscription plan limits, pricing, and helpers.
  *
- * Tiers:
+ * Tiers (creator-facing subscriptions, billed via the Canadian Stripe
+ * account in CAD):
  *   • Découverte (free)   — 5 produits, 5% commission, gratuit
- *   • Starter             — 20 produits, 3% commission, 2 000 XOF/mois
- *   • Pro                 — illimité, 0% commission, 5 000 XOF/mois or 30 000 XOF/an
+ *   • Starter             — 20 produits, 3% commission, 4,99 CAD/mois
+ *   • Pro                 — illimité, 0% commission, 9,99 CAD/mois or 59 CAD/an
  *
- * All prices are stored in the smallest unit of XOF (zero-decimal — so 1 XOF = 1).
+ * All prices are stored in the smallest unit of CAD (cents — CAD is a
+ * 2-decimal currency), so 4,99 CAD = 499 cents.
+ *
+ * Note: this currency is the *creator subscription* currency. Buyer-side
+ * product checkouts stay in XOF — Stripe handles the conversion.
  */
 
 import type {
@@ -45,14 +50,14 @@ export const PLAN_LIMITS = {
 // Subscription pricing
 // ---------------------------------------------------------------------------
 
-/** Pricing in the smallest unit of XOF (zero-decimal). */
+/** Pricing in the smallest unit of CAD (cents). 499 = 4,99 CAD. */
 export const PLAN_PRICES = {
   free: { month: 0, year: 0 },
-  starter: { month: 2_000, year: 20_000 },
-  pro: { month: 5_000, year: 30_000 },
+  starter: { month: 499, year: 4_900 },
+  pro: { month: 999, year: 5_900 },
 } as const satisfies Record<SubscriptionPlan, Record<BillingInterval, number>>;
 
-export const PLAN_CURRENCY = "XOF" as const;
+export const PLAN_CURRENCY = "CAD" as const;
 
 /**
  * Resolves the Stripe Price ID for a paid plan + interval.
@@ -110,14 +115,14 @@ export function isUpgrade(from: SubscriptionPlan, to: SubscriptionPlan): boolean
 }
 
 // ---------------------------------------------------------------------------
-// Boost catalogue (one-shot Stripe payments)
+// Boost catalogue (one-shot Stripe payments, billed in CAD)
 // ---------------------------------------------------------------------------
 
 export interface BoostDefinition {
   type: BoostType;
   label: string;
   description: string;
-  /** Price in the smallest unit of XOF. */
+  /** Price in the smallest unit of CAD (cents). 199 = 1,99 CAD. */
   amount: number;
   currency: typeof PLAN_CURRENCY;
   /** Duration the boost stays active. Null = permanent unlock. */
@@ -131,7 +136,7 @@ export const BOOSTS = {
     type: "featured_24h",
     label: "Mise en avant 24h",
     description: "Ta boutique apparaît en tête de l'explore pendant 24 heures.",
-    amount: 500,
+    amount: 199,
     currency: PLAN_CURRENCY,
     durationHours: 24,
     available: true,
@@ -140,7 +145,7 @@ export const BOOSTS = {
     type: "custom_domain",
     label: "Domaine personnalisé",
     description: "Connecte ton propre domaine (ex. maboutique.ci).",
-    amount: 1_000,
+    amount: 299,
     currency: PLAN_CURRENCY,
     durationHours: null,
     available: false,
@@ -149,7 +154,7 @@ export const BOOSTS = {
     type: "premium_templates",
     label: "Pack templates premium",
     description: "Débloque 5 templates exclusifs pour ta boutique.",
-    amount: 10_000,
+    amount: 2_499,
     currency: PLAN_CURRENCY,
     durationHours: null,
     available: false,
@@ -160,13 +165,3 @@ export function getBoost(type: BoostType): BoostDefinition {
   return BOOSTS[type];
 }
 
-// ---------------------------------------------------------------------------
-// Legacy exports — kept so we don't break older callers.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use PLAN_PRICES.pro.month instead. */
-export const PRO_PLAN_PRICE_XOF = PLAN_PRICES.pro.month;
-/** @deprecated Use PLAN_CURRENCY instead. */
-export const PRO_PLAN_CURRENCY = PLAN_CURRENCY;
-/** @deprecated Use the explicit interval argument on getStripePriceId. */
-export const PRO_PLAN_INTERVAL = "month" as const;

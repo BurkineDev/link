@@ -33,15 +33,15 @@ describe("PLAN_LIMITS", () => {
   });
 });
 
-describe("PLAN_PRICES", () => {
-  it("prices Starter at 2000/month and 20000/year", () => {
-    expect(PLAN_PRICES.starter.month).toBe(2_000);
-    expect(PLAN_PRICES.starter.year).toBe(20_000);
+describe("PLAN_PRICES (CAD cents)", () => {
+  it("prices Starter at 4,99 CAD/month and 49 CAD/year", () => {
+    expect(PLAN_PRICES.starter.month).toBe(499);
+    expect(PLAN_PRICES.starter.year).toBe(4_900);
   });
 
-  it("prices Pro at 5000/month and 30000/year (50% off yearly)", () => {
-    expect(PLAN_PRICES.pro.month).toBe(5_000);
-    expect(PLAN_PRICES.pro.year).toBe(30_000);
+  it("prices Pro at 9,99 CAD/month and 59 CAD/year (~50% off yearly)", () => {
+    expect(PLAN_PRICES.pro.month).toBe(999);
+    expect(PLAN_PRICES.pro.year).toBe(5_900);
     expect(PLAN_PRICES.pro.year).toBeLessThan(PLAN_PRICES.pro.month * 12);
   });
 
@@ -143,9 +143,9 @@ describe("BOOSTS catalogue", () => {
     expect(BOOSTS.premium_templates.available).toBe(false);
   });
 
-  it("prices Featured 24h at 500 XOF for 24 hours", () => {
-    expect(BOOSTS.featured_24h.amount).toBe(500);
-    expect(BOOSTS.featured_24h.currency).toBe("XOF");
+  it("prices Featured 24h at 1,99 CAD for 24 hours", () => {
+    expect(BOOSTS.featured_24h.amount).toBe(199);
+    expect(BOOSTS.featured_24h.currency).toBe("CAD");
     expect(BOOSTS.featured_24h.durationHours).toBe(24);
   });
 

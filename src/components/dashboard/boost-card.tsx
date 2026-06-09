@@ -91,7 +91,7 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
         ) : (
           <>
             <div className="flex items-baseline justify-between">
-              <p className="text-2xl font-black">500 FCFA</p>
+              <p className="text-2xl font-black">1,99 $CA</p>
               <p className="text-xs text-muted-foreground">paiement unique</p>
             </div>
             <Button

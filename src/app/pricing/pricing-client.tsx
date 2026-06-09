@@ -48,8 +48,8 @@ const PRO_FEATURES = [
 ];
 
 const PRICE_LABELS = {
-  starter: { month: "2 000", year: "20 000" },
-  pro: { month: "5 000", year: "30 000" },
+  starter: { month: "4,99", year: "49" },
+  pro: { month: "9,99", year: "59" },
 } as const;
 
 export function PricingClient({
@@ -177,7 +177,7 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                0 FCFA
+                0 $CA
                 <span className="text-base font-normal text-muted-foreground ml-1">
                   / mois
                 </span>
@@ -231,7 +231,7 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {PRICE_LABELS.starter[interval]} FCFA
+                {PRICE_LABELS.starter[interval]} $CA
                 <span className="text-base font-normal text-muted-foreground ml-1">
                   / {interval === "month" ? "mois" : "an"}
                 </span>
@@ -302,7 +302,7 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {PRICE_LABELS.pro[interval]} FCFA
+                {PRICE_LABELS.pro[interval]} $CA
                 <span className="text-base font-normal text-muted-foreground ml-1">
                   / {interval === "month" ? "mois" : "an"}
                 </span>
@@ -370,7 +370,7 @@ export function PricingClient({
                 Ta boutique en haut de l&apos;explore pendant 24 heures.
               </p>
             </div>
-            <p className="font-bold whitespace-nowrap">500 FCFA</p>
+            <p className="font-bold whitespace-nowrap">1,99 $CA</p>
           </div>
         </div>
 
@@ -381,7 +381,7 @@ export function PricingClient({
             {[
               {
                 q: "Quelle est la différence entre les plans ?",
-                a: "Découverte (gratuit, 5 produits, 5 % de commission) sert à tester. Starter (2 000 FCFA/mois, 20 produits, 3 %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (5 000 FCFA/mois, illimité, 0 %) est le plan optimal dès que tu vends régulièrement.",
+                a: "Découverte (gratuit, 5 produits, 5 % de commission) sert à tester. Starter (4,99 $CA/mois, 20 produits, 3 %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (9,99 $CA/mois, illimité, 0 %) est le plan optimal dès que tu vends régulièrement.",
               },
               {
                 q: "Comment fonctionne la commission ?",
@@ -389,7 +389,7 @@ export function PricingClient({
               },
               {
                 q: "L'abonnement annuel est-il vraiment moins cher ?",
-                a: "Oui. 30 000 FCFA/an au lieu de 60 000 FCFA si tu payes au mois — soit ~50 % d'économie. Tu peux annuler à la fin de la période ; aucune donnée n'est supprimée.",
+                a: "Oui. 59 $CA/an au lieu de ~120 $CA si tu payes au mois — soit ~50 % d'économie. Tu peux annuler à la fin de la période ; aucune donnée n'est supprimée. La facturation est en dollars canadiens, ta carte convertit automatiquement en FCFA.",
               },
               {
                 q: "Le Mobile Money est-il disponible ?",
