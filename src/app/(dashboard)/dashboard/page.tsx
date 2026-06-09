@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { OrderStatusBadge } from "@/components/dashboard/order-status-badge";
+import { BoostCard } from "@/components/dashboard/boost-card";
 import {
   Card,
   CardHeader,
@@ -64,7 +65,7 @@ export default async function DashboardPage() {
       .single(),
     supabase
       .from("shops")
-      .select("id, name, slug, is_published, currency")
+      .select("id, name, slug, is_published, currency, featured_until")
       .eq("owner_id", user.id)
       .single(),
   ]);
@@ -358,6 +359,15 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Boost */}
+      {shop?.id && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-1">
+            <BoostCard shopId={shop.id} featuredUntil={shop.featured_until} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

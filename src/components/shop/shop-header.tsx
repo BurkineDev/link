@@ -50,6 +50,11 @@ interface ShopHeaderProps {
   className?: string;
 }
 
+function isShopFeatured(featuredUntil: string | null): boolean {
+  if (!featuredUntil) return false;
+  return new Date(featuredUntil).getTime() > Date.now();
+}
+
 const SOCIAL_CONFIG = [
   {
     key: "instagram" as const,
@@ -97,6 +102,7 @@ export function ShopHeader({ shop, className }: ShopHeaderProps) {
   const activeSocials = SOCIAL_CONFIG.filter(
     (s) => socialLinks[s.key]
   );
+  const isFeatured = isShopFeatured(shop.featured_until);
 
   return (
     <header className={cn("relative w-full", className)}>
@@ -141,6 +147,21 @@ export function ShopHeader({ shop, className }: ShopHeaderProps) {
               style={{ backgroundColor: shop.theme_color }}
             >
               {shop.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+
+          {/* Featured badge */}
+          {isFeatured && (
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-sm">
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="size-3"
+                aria-hidden="true"
+              >
+                <path d="M12 2l2.39 7.36H22l-6.18 4.49 2.36 7.36L12 16.72l-6.18 4.49 2.36-7.36L2 9.36h7.61L12 2z" />
+              </svg>
+              À la une
             </div>
           )}
 
