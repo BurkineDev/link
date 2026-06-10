@@ -4,7 +4,7 @@ import { MarketingClient } from "./marketing-client";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
 
 export const metadata = {
-  title: "Marketing — LinkBoutik",
+  title: "Marketing — Bio-Lien",
 };
 
 export default async function MarketingPage() {

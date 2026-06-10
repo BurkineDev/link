@@ -4,7 +4,7 @@ import type { Row } from "@/lib/types/database";
 import { ProductsClient } from "./products-client";
 
 export const metadata = {
-  title: "Produits — LinkBoutik",
+  title: "Produits — Bio-Lien",
 };
 
 export default async function ProductsPage() {

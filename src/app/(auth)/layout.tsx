@@ -5,8 +5,8 @@ import { ShoppingBag, BarChart3, Zap, Globe } from "lucide-react";
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | LinkBoutik",
-    default: "Authentification | LinkBoutik",
+    template: "%s | Bio-Lien",
+    default: "Authentification | Bio-Lien",
   },
   description:
     "Créez votre boutique en ligne africaine en quelques minutes. Vendez partout, encaissez facilement.",
@@ -56,7 +56,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <ShoppingBag className="w-5 h-5" />
             </div>
             <span className="text-2xl font-black text-background tracking-tight">
-              Link<span className="text-background/70">Boutik</span>
+              Bio<span className="text-background/70">-Lien</span>
               <span className="ml-1.5 text-xs font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-md leading-none align-middle">
                 AF
               </span>
@@ -130,7 +130,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <footer className="text-center text-xs text-muted-foreground pb-6 px-5">
-          © {new Date().getFullYear()} LinkBoutik.{" "}
+          © {new Date().getFullYear()} Bio-Lien.{" "}
           <Link href="/legal/privacy" className="hover:text-foreground transition-colors underline-offset-2 hover:underline">
             Confidentialité
           </Link>{" "}

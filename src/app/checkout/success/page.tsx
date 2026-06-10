@@ -127,7 +127,7 @@ function SuccessContent() {
             Réessayer
           </Button>
           <Button variant="outline" className="gap-2" asChild>
-            <a href="mailto:support@linkboutik.com">
+            <a href="mailto:support@bio-lien.com">
               <Mail className="size-4" />
               Contacter le support
             </a>

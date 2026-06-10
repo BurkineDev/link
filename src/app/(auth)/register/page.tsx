@@ -375,7 +375,7 @@ export default function RegisterPage() {
           <p className="text-xs text-muted-foreground">
             Votre boutique sera accessible à{" "}
             <span className="font-mono text-foreground">
-              linkboutik.com/
+              bio-lien.com/
               {usernameValue || "votre-boutique"}
             </span>
           </p>

@@ -7,7 +7,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Nouveau produit — LinkBoutik",
+  title: "Nouveau produit — Bio-Lien",
 };
 
 export default async function NewProductPage() {

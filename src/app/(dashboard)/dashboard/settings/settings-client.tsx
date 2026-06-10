@@ -700,7 +700,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               <Label htmlFor="shop-slug">URL de la boutique</Label>
               <div className="flex items-center gap-0">
                 <span className="inline-flex h-8 items-center rounded-l-lg border border-r-0 border-border bg-muted px-2.5 text-xs text-muted-foreground">
-                  linkboutik.com/
+                  bio-lien.com/
                 </span>
                 <Input
                   id="shop-slug"
@@ -1301,7 +1301,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Vos clients peuvent payer par carte bancaire (Visa, Mastercard)
                 et Mobile Money (Wave, Orange, MTN, Moov). La configuration des
-                moyens de paiement est gérée par l&apos;équipe LinkBoutik —
+                moyens de paiement est gérée par l&apos;équipe Bio-Lien —
                 vous n&apos;avez rien à installer. Les fonds sont reversés sur
                 le compte que vous fournirez à l&apos;équipe.
               </p>

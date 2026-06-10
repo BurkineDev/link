@@ -1,7 +1,7 @@
 export const metadata = {
-  title: "Conditions Générales d'Utilisation | LinkBoutik",
+  title: "Conditions Générales d'Utilisation | Bio-Lien",
   description:
-    "Conditions générales d'utilisation de la plateforme LinkBoutik pour les créateurs et acheteurs.",
+    "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",
 };
 
 const LAST_UPDATED = "24 mai 2026";
@@ -17,7 +17,7 @@ export default function TermsPage() {
       <h2>1. Objet</h2>
       <p>
         Les présentes Conditions Générales d&apos;Utilisation (« CGU ») régissent l&apos;accès et
-        l&apos;utilisation de la plateforme LinkBoutik (« la Plateforme »), un service en
+        l&apos;utilisation de la plateforme Bio-Lien (« la Plateforme »), un service en
         ligne permettant aux créateurs et entrepreneurs (« Vendeurs ») de créer une
         boutique en ligne et d&apos;y vendre leurs produits à leurs clients (« Acheteurs »).
       </p>
@@ -39,12 +39,12 @@ export default function TermsPage() {
       <ul>
         <li>Le Vendeur doit être âgé d&apos;au moins 18 ans (ou de l&apos;âge légal de la majorité dans son pays).</li>
         <li>Un seul compte par personne physique est autorisé.</li>
-        <li>LinkBoutik se réserve le droit de suspendre tout compte en cas d&apos;usage frauduleux.</li>
+        <li>Bio-Lien se réserve le droit de suspendre tout compte en cas d&apos;usage frauduleux.</li>
       </ul>
 
       <h2>4. Plans et facturation</h2>
       <p>
-        LinkBoutik propose deux plans :
+        Bio-Lien propose deux plans :
       </p>
       <ul>
         <li>
@@ -62,11 +62,11 @@ export default function TermsPage() {
         fin de la période de facturation en cours.
       </p>
 
-      <h2>5. Rôle de LinkBoutik</h2>
+      <h2>5. Rôle de Bio-Lien</h2>
       <p>
-        LinkBoutik agit en tant que prestataire technique et intermédiaire de paiement.
+        Bio-Lien agit en tant que prestataire technique et intermédiaire de paiement.
         Le contrat de vente est conclu directement entre le Vendeur et l&apos;Acheteur.
-        LinkBoutik n&apos;est pas partie à ce contrat de vente et n&apos;est pas responsable des
+        Bio-Lien n&apos;est pas partie à ce contrat de vente et n&apos;est pas responsable des
         produits vendus, de leur conformité, de leur livraison ou de leur après-vente.
       </p>
 
@@ -82,7 +82,7 @@ export default function TermsPage() {
 
       <h2>7. Paiements et reversements</h2>
       <p>
-        Les paiements sont traités par Stripe. LinkBoutik collecte les paiements pour le
+        Les paiements sont traités par Stripe. Bio-Lien collecte les paiements pour le
         compte du Vendeur puis lui reverse les sommes dues, déduction faite de la
         commission applicable et des frais de paiement Stripe. Les conditions de
         reversement sont communiquées au Vendeur lors de la configuration de sa boutique.
@@ -92,20 +92,20 @@ export default function TermsPage() {
       <p>
         Le Vendeur conserve l&apos;intégralité des droits sur le contenu (textes, images,
         marques) qu&apos;il publie sur sa boutique. En publiant ce contenu, il concède à
-        LinkBoutik une licence non exclusive et gratuite pour l&apos;héberger, l&apos;afficher
+        Bio-Lien une licence non exclusive et gratuite pour l&apos;héberger, l&apos;afficher
         publiquement et le distribuer dans le cadre du fonctionnement de la Plateforme.
       </p>
 
       <h2>9. Suspension et résiliation</h2>
       <p>
-        LinkBoutik se réserve le droit de suspendre ou résilier un compte en cas de
+        Bio-Lien se réserve le droit de suspendre ou résilier un compte en cas de
         manquement grave aux présentes CGU, sans préavis et sans indemnité. Le Vendeur
         peut résilier son compte à tout moment depuis ses paramètres.
       </p>
 
       <h2>10. Responsabilité</h2>
       <p>
-        LinkBoutik est tenue à une obligation de moyens et ne saurait être responsable
+        Bio-Lien est tenue à une obligation de moyens et ne saurait être responsable
         des préjudices indirects subis par le Vendeur ou par un Acheteur. Sa
         responsabilité ne pourra excéder le montant des sommes versées par le Vendeur au
         titre de son abonnement au cours des 12 derniers mois.
@@ -113,7 +113,7 @@ export default function TermsPage() {
 
       <h2>11. Modification des CGU</h2>
       <p>
-        LinkBoutik peut modifier les présentes CGU à tout moment. Les utilisateurs
+        Bio-Lien peut modifier les présentes CGU à tout moment. Les utilisateurs
         seront informés par email au moins 15 jours avant l&apos;entrée en vigueur des
         modifications.
       </p>
@@ -121,14 +121,14 @@ export default function TermsPage() {
       <h2>12. Droit applicable et juridiction</h2>
       <p>
         Les présentes CGU sont soumises au droit en vigueur dans le pays du siège social
-        de LinkBoutik. Tout litige sera soumis aux tribunaux compétents de ce ressort,
+        de Bio-Lien. Tout litige sera soumis aux tribunaux compétents de ce ressort,
         sauf disposition légale impérative contraire.
       </p>
 
       <h2>13. Contact</h2>
       <p>
         Pour toute question relative aux présentes CGU, contactez-nous à l&apos;adresse{" "}
-        <a href="mailto:support@linkboutik.com">support@linkboutik.com</a>.
+        <a href="mailto:support@bio-lien.com">support@bio-lien.com</a>.
       </p>
     </>
   );

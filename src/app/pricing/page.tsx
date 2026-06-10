@@ -5,9 +5,9 @@ import type { SubscriptionPlan } from "@/lib/types/database";
 import { PricingClient } from "./pricing-client";
 
 export const metadata: Metadata = {
-  title: "Tarifs — LinkBoutik",
+  title: "Tarifs — Bio-Lien",
   description:
-    "Commence gratuitement avec LinkBoutik. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
+    "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
 };
 
 export default async function PricingPage() {

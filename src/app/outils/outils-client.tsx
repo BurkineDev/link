@@ -434,7 +434,7 @@ export function OutilsClient() {
           <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
             <p className="text-sm font-bold">Prochaine étape</p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Ces outils t&apos;aident à préparer la vente. LinkBoutik t&apos;aide à
+              Ces outils t&apos;aident à préparer la vente. Bio-Lien t&apos;aide à
               encaisser et suivre les commandes.
             </p>
             <Button className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0" asChild>
@@ -468,7 +468,7 @@ export function OutilsClient() {
           </div>
           <Button className="bg-background text-foreground hover:bg-background/90" asChild>
             <Link href="/register">
-              Lancer LinkBoutik
+              Lancer Bio-Lien
               <ArrowRight className="size-4" />
             </Link>
           </Button>

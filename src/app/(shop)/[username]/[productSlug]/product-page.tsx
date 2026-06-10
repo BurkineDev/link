@@ -295,12 +295,12 @@ export function ProductPage({
         <p className="text-xs text-muted-foreground">
           Boutique propulsée par{" "}
           <a
-            href="https://linkboutik.com"
+            href="https://www.bio-lien.com"
             target="_blank"
             rel="noopener noreferrer"
             className="font-semibold hover:text-foreground transition-colors"
           >
-            LinkBoutik
+            Bio-Lien
           </a>
         </p>
       </footer>

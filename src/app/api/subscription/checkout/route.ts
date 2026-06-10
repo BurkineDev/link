@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const priceId = getStripePriceId(parsed.plan, parsed.interval);
 
-  const planLabel = parsed.plan === "pro" ? "LinkBoutik Pro" : "LinkBoutik Starter";
+  const planLabel = parsed.plan === "pro" ? "Bio-Lien Pro" : "Bio-Lien Starter";
   const planDescription =
     parsed.plan === "pro"
       ? "Produits illimités, 0% de commission, analytics avancés et support prioritaire."

@@ -312,7 +312,7 @@ export default function OnboardingPage() {
             >
               <Card className="p-6 space-y-6">
                 <div className="text-center space-y-1">
-                  <h1 className="text-2xl font-bold">Bienvenue sur LinkBoutik 👋</h1>
+                  <h1 className="text-2xl font-bold">Bienvenue sur Bio-Lien 👋</h1>
                   <p className="text-muted-foreground">
                     Commençons par configurer ton profil
                   </p>
@@ -407,7 +407,7 @@ export default function OnboardingPage() {
                     <Label htmlFor="shopSlug">Adresse de ta boutique</Label>
                     <div className="flex items-center gap-2 border rounded-md px-3 focus-within:ring-2 focus-within:ring-ring">
                       <span className="text-muted-foreground text-sm shrink-0">
-                        linkboutik.com/
+                        bio-lien.com/
                       </span>
                       <input
                         id="shopSlug"
@@ -578,7 +578,7 @@ export default function OnboardingPage() {
           <Link href="/terms" className="underline hover:text-primary">
             conditions d&apos;utilisation
           </Link>{" "}
-          de LinkBoutik
+          de Bio-Lien
         </p>
       </div>
     </div>

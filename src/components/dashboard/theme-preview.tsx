@@ -94,7 +94,7 @@ export function ThemePreview({
         <div className="size-2.5 rounded-full bg-emerald-400" />
         <div className="ml-2 flex flex-1 items-center gap-1.5 rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
           <Globe className="size-2.5" />
-          linkboutik.com/{shopName.toLowerCase().replace(/\s+/g, "-")}
+          bio-lien.com/{shopName.toLowerCase().replace(/\s+/g, "-")}
         </div>
       </div>
 

@@ -41,15 +41,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
 
   if (!shop) {
-    return { title: "Boutique introuvable | LinkBoutik" };
+    return { title: "Boutique introuvable | Bio-Lien" };
   }
 
   return {
-    title: `${shop.name} | LinkBoutik`,
-    description: shop.description ?? `Découvrez la boutique ${shop.name} sur LinkBoutik.`,
+    title: `${shop.name} | Bio-Lien`,
+    description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
     openGraph: {
       title: shop.name,
-      description: shop.description ?? `Découvrez la boutique ${shop.name} sur LinkBoutik.`,
+      description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
       ...(shop.banner_url && {
         images: [{ url: shop.banner_url, width: 1200, height: 630, alt: shop.name }],
       }),

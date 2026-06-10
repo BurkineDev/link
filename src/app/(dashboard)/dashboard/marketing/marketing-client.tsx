@@ -503,7 +503,7 @@ function ShareSection({ url }: { url: string }) {
           </div>
           <a
             href={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(url)}&size=600x600&margin=1&qzone=1&format=png&color=0F0F0F&bgcolor=FFFFFF`}
-            download={`linkboutik-qr.png`}
+            download={`bio-lien-qr.png`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors w-full justify-center"

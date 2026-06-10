@@ -434,7 +434,7 @@ export type AfricanCountryCode = (typeof AFRICAN_COUNTRIES)[number]["code"];
 // App metadata
 // ---------------------------------------------------------------------------
 
-export const APP_NAME = "LinkBoutik";
+export const APP_NAME = "Bio-Lien";
 export const APP_DESCRIPTION =
   "The all-in-one storefront platform built for African creators and entrepreneurs.";
 

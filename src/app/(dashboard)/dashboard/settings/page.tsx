@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SettingsClient } from "./settings-client";
 
 export const metadata = {
-  title: "Paramètres de la boutique — LinkBoutik",
+  title: "Paramètres de la boutique — Bio-Lien",
 };
 
 export default async function SettingsPage() {

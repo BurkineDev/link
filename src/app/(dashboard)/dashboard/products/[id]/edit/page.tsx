@@ -8,7 +8,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Modifier le produit — LinkBoutik",
+  title: "Modifier le produit — Bio-Lien",
 };
 
 interface EditProductPageProps {

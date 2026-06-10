@@ -22,8 +22,8 @@ export function Logo({ className, size = "md", href = "/" }: LogoProps) {
       className={cn("inline-flex items-center gap-1.5 font-black", sizes[size], className)}
     >
       {/* Inherits color from parent — works on both light and dark surfaces. */}
-      <span>Link</span>
-      <span className="text-primary">Boutik</span>
+      <span>Bio</span>
+      <span className="text-primary">-Lien</span>
       <span className="bg-primary text-primary-foreground rounded-sm px-1 text-[0.6em] font-bold leading-none py-0.5">
         AF
       </span>

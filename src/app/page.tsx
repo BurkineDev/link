@@ -414,7 +414,7 @@ function HowItWorks() {
       title: "Partage et encaisse",
       subtitle: "Lien @username unique",
       description:
-        "Copie ton lien linkboutik.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse par carte bancaire dès aujourd'hui.",
+        "Copie ton lien bio-lien.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse par carte bancaire dès aujourd'hui.",
       emoji: "💰",
       bg: "bg-[var(--success)]/10",
       border: "border-[var(--success)]/30",
@@ -516,7 +516,7 @@ function Features() {
       icon: Link2,
       title: "Lien @username unique",
       description:
-        "linkboutik.com/@ton-nom — facile à partager, à retenir et à promouvoir sur tous tes réseaux.",
+        "bio-lien.com/@ton-nom — facile à partager, à retenir et à promouvoir sur tous tes réseaux.",
       color: "text-foreground",
       bg: "bg-muted",
     },
@@ -724,7 +724,7 @@ function Testimonials() {
       avatarBg: "bg-primary",
       avatarText: "text-primary-foreground",
       quote:
-        "En 10 minutes j'avais ma boutique en ligne. Le premier mois j'ai fait 380 000 FCFA de chiffre d'affaires. LinkBoutik a transformé mon business !",
+        "En 10 minutes j'avais ma boutique en ligne. Le premier mois j'ai fait 380 000 FCFA de chiffre d'affaires. Bio-Lien a transformé mon business !",
       stars: 5,
       product: "Mode & Accessoires",
     },
@@ -748,7 +748,7 @@ function Testimonials() {
       avatarBg: "bg-foreground",
       avatarText: "text-background",
       quote:
-        "Je poste sur Instagram, mes clientes cliquent sur mon lien LinkBoutik et finalisent leur commande en quelques secondes. C'est trop simple ! Je recommande à toutes les entrepreneures.",
+        "Je poste sur Instagram, mes clientes cliquent sur mon lien Bio-Lien et finalisent leur commande en quelques secondes. C'est trop simple ! Je recommande à toutes les entrepreneures.",
       stars: 5,
       product: "Cosmétiques naturels",
     },
@@ -763,10 +763,10 @@ function Testimonials() {
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
             Ils vendent déjà avec{" "}
-            <span className="text-primary">LinkBoutik</span>
+            <span className="text-primary">Bio-Lien</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Des milliers de créateurs africains font confiance à LinkBoutik
+            Des milliers de créateurs africains font confiance à Bio-Lien
             pour leur boutique en ligne.
           </p>
         </FadeIn>
@@ -837,7 +837,7 @@ function Pricing() {
     "Produits illimités",
     "0% de commission sur tes ventes",
     "Analytics avancés (top produits, AOV)",
-    "Suppression du badge LinkBoutik",
+    "Suppression du badge Bio-Lien",
     "Templates premium",
     "Support prioritaire",
   ];
@@ -1126,7 +1126,7 @@ function Footer() {
 
         {/* Bottom bar */}
         <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
-          <p>© {currentYear} LinkBoutik. Tous droits réservés.</p>
+          <p>© {currentYear} Bio-Lien. Tous droits réservés.</p>
           <div className="flex items-center gap-2 font-semibold text-gray-500">
             <span>🌍</span>
             <span>Made in Africa, for Africa</span>

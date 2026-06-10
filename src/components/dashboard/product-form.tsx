@@ -418,7 +418,7 @@ export function ProductForm({
     }
 
     localStorage.removeItem(PRODUCT_DRAFT_KEY);
-    toast.success("Brouillon importé depuis les outils LinkBoutik.");
+    toast.success("Brouillon importé depuis les outils Bio-Lien.");
   }, [isEdit, setValue]);
 
   useEffect(() => {

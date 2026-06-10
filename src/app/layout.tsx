@@ -51,9 +51,9 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "LinkBoutik | Crée ta boutique en ligne",
+  title: "Bio-Lien | Crée ta boutique en ligne",
   description:
-    "LinkBoutik te permet de créer ta boutique en ligne en 5 minutes. Partage ton lien sur TikTok et Instagram, accepte les paiements Mobile Money (Orange, MTN, Wave) et vends partout en Afrique.",
+    "Bio-Lien te permet de créer ta boutique en ligne en 5 minutes. Partage ton lien sur TikTok et Instagram, accepte les paiements Mobile Money (Orange, MTN, Wave) et vends partout en Afrique.",
   keywords: [
     "boutique en ligne Afrique",
     "Mobile Money",
@@ -64,29 +64,29 @@ export const metadata: Metadata = {
     "créateur africain",
     "lien bio shop",
   ],
-  authors: [{ name: "LinkBoutik" }],
-  creator: "LinkBoutik",
-  metadataBase: new URL("https://linkboutik.com"),
+  authors: [{ name: "Bio-Lien" }],
+  creator: "Bio-Lien",
+  metadataBase: new URL("https://www.bio-lien.com"),
   openGraph: {
     type: "website",
     locale: "fr_FR",
-    url: "https://linkboutik.com",
-    title: "LinkBoutik | Crée ta boutique en ligne",
+    url: "https://www.bio-lien.com",
+    title: "Bio-Lien | Crée ta boutique en ligne",
     description:
       "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money et vends via TikTok & Instagram.",
-    siteName: "LinkBoutik",
+    siteName: "Bio-Lien",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "LinkBoutik — Ta boutique en ligne africaine",
+        alt: "Bio-Lien — Ta boutique en ligne africaine",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "LinkBoutik | Crée ta boutique en ligne",
+    title: "Bio-Lien | Crée ta boutique en ligne",
     description:
       "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money.",
     images: ["/og-image.png"],

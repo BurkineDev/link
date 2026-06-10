@@ -4,7 +4,7 @@ import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Boutique introuvable | LinkBoutik",
+  title: "Boutique introuvable | Bio-Lien",
   description: "Cette boutique n'existe pas ou n'est pas encore publiée.",
 };
 
@@ -53,7 +53,7 @@ export default function NotFound() {
       </main>
 
       <footer className="border-t border-border text-center py-4 text-xs text-muted-foreground">
-        © {new Date().getFullYear()} LinkBoutik
+        © {new Date().getFullYear()} Bio-Lien
       </footer>
     </div>
   );

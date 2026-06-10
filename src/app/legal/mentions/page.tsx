@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Mentions légales | LinkBoutik",
-  description: "Informations légales sur l'éditeur du service LinkBoutik.",
+  title: "Mentions légales | Bio-Lien",
+  description: "Informations légales sur l'éditeur du service Bio-Lien.",
 };
 
 const LAST_UPDATED = "24 mai 2026";
@@ -17,14 +17,14 @@ export default function MentionsPage() {
 
       <h2>Éditeur du service</h2>
       <p>
-        <strong>LinkBoutik</strong>
+        <strong>Bio-Lien</strong>
         <br />
         Plateforme e-commerce pour créateurs et entrepreneurs africains.
       </p>
       <p>
-        Email : <a href="mailto:support@linkboutik.com">support@linkboutik.com</a>
+        Email : <a href="mailto:support@bio-lien.com">support@bio-lien.com</a>
         <br />
-        Site : <a href="https://linkboutik.com">linkboutik.com</a>
+        Site : <a href="https://www.bio-lien.com">bio-lien.com</a>
       </p>
       <p className="text-sm text-muted-foreground italic">
         Les informations légales détaillées (raison sociale, capital, numéro
@@ -33,7 +33,7 @@ export default function MentionsPage() {
       </p>
 
       <h2>Directeur de la publication</h2>
-      <p>Le représentant légal de LinkBoutik.</p>
+      <p>Le représentant légal de Bio-Lien.</p>
 
       <h2>Hébergement</h2>
       <p>
@@ -60,7 +60,7 @@ export default function MentionsPage() {
       <h2>Propriété intellectuelle</h2>
       <p>
         L&apos;ensemble du contenu de la Plateforme (textes, graphismes, logos, icônes,
-        images, code source) est la propriété exclusive de LinkBoutik ou de ses
+        images, code source) est la propriété exclusive de Bio-Lien ou de ses
         partenaires et est protégé par les lois en vigueur sur la propriété
         intellectuelle. Toute reproduction non autorisée est interdite.
       </p>

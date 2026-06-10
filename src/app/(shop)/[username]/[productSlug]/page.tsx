@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("is_published", true)
     .single();
 
-  if (!shop) return { title: "Produit introuvable | LinkBoutik" };
+  if (!shop) return { title: "Produit introuvable | Bio-Lien" };
 
   const { data: product } = await supabase
     .from("products")
@@ -42,12 +42,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("is_published", true)
     .single();
 
-  if (!product) return { title: "Produit introuvable | LinkBoutik" };
+  if (!product) return { title: "Produit introuvable | Bio-Lien" };
 
   const primaryImage = product.images?.[0];
 
   return {
-    title: `${product.name} — ${shop.name} | LinkBoutik`,
+    title: `${product.name} — ${shop.name} | Bio-Lien`,
     description:
       product.description ??
       `Découvrez ${product.name} sur la boutique ${shop.name}.`,

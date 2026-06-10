@@ -34,7 +34,7 @@ const FREE_FEATURES = [
 const STARTER_FEATURES = [
   "Jusqu'à 20 produits",
   "Commission réduite à 3 %",
-  "Suppression du badge LinkBoutik",
+  "Suppression du badge Bio-Lien",
   "Analytics standard",
   "Support email",
 ];

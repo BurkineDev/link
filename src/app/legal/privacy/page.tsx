@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Politique de confidentialité | LinkBoutik",
+  title: "Politique de confidentialité | Bio-Lien",
   description:
-    "Comment LinkBoutik collecte, utilise et protège vos données personnelles.",
+    "Comment Bio-Lien collecte, utilise et protège vos données personnelles.",
 };
 
 const LAST_UPDATED = "24 mai 2026";
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       </p>
 
       <p>
-        LinkBoutik (« nous », « notre ») accorde une grande importance à la
+        Bio-Lien (« nous », « notre ») accorde une grande importance à la
         protection de votre vie privée. Cette politique explique quelles données nous
         collectons, comment nous les utilisons et quels sont vos droits.
       </p>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
       <h2>2. Finalités du traitement</h2>
       <p>Vos données sont traitées pour :</p>
       <ul>
-        <li>Fournir et améliorer le service LinkBoutik.</li>
+        <li>Fournir et améliorer le service Bio-Lien.</li>
         <li>Traiter les commandes et les paiements.</li>
         <li>Communiquer avec vous (confirmation de commande, support, notifications).</li>
         <li>Prévenir la fraude et garantir la sécurité de la plateforme.</li>
@@ -108,7 +108,7 @@ export default function PrivacyPage() {
       </ul>
       <p>
         Pour exercer ces droits, contactez{" "}
-        <a href="mailto:privacy@linkboutik.com">privacy@linkboutik.com</a>. Nous
+        <a href="mailto:privacy@bio-lien.com">privacy@bio-lien.com</a>. Nous
         répondrons dans un délai d&apos;un mois.
       </p>
 
@@ -141,7 +141,7 @@ export default function PrivacyPage() {
       <h2>11. Contact</h2>
       <p>
         Délégué à la protection des données :{" "}
-        <a href="mailto:privacy@linkboutik.com">privacy@linkboutik.com</a>.
+        <a href="mailto:privacy@bio-lien.com">privacy@bio-lien.com</a>.
       </p>
     </>
   );

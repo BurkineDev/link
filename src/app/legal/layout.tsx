@@ -36,7 +36,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       </main>
 
       <footer className="border-t border-border text-center py-4 text-xs text-muted-foreground">
-        © {new Date().getFullYear()} LinkBoutik ·{" "}
+        © {new Date().getFullYear()} Bio-Lien ·{" "}
         <Link href="/legal/terms" className="hover:text-foreground">CGU</Link> ·{" "}
         <Link href="/legal/privacy" className="hover:text-foreground">Confidentialité</Link> ·{" "}
         <Link href="/legal/mentions" className="hover:text-foreground">Mentions légales</Link>
