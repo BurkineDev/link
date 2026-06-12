@@ -36,7 +36,10 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     .select()
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[api/promo-codes PATCH] update error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
   if (!data) return NextResponse.json({ error: "Code introuvable" }, { status: 404 });
   return NextResponse.json({ code: data });
 }
@@ -50,6 +53,9 @@ export async function DELETE(_request: NextRequest, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   const { error } = await supabase.from("promo_codes").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[api/promo-codes DELETE] db error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

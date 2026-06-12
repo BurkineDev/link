@@ -108,14 +108,30 @@ const step1Schema = z.object({
     .regex(/^[a-z0-9_]+$/, "Lettres minuscules, chiffres et _ uniquement"),
 });
 
-const step2Schema = z.object({
-  shopName: z.string().min(2, "Minimum 2 caractères"),
-  shopSlug: z.string()
-    .min(3, "Minimum 3 caractères")
-    .regex(/^[a-z0-9_-]+$/, "Lettres, chiffres, - et _ uniquement"),
-  description: z.string().max(500, "Maximum 500 caractères").optional(),
-  currency: z.string().min(1),
-});
+const step2Schema = z
+  .object({
+    shopName: z.string().min(2, "Minimum 2 caractères"),
+    shopSlug: z
+      .string()
+      .min(3, "Minimum 3 caractères")
+      .regex(/^[a-z0-9_-]+$/, "Lettres, chiffres, - et _ uniquement"),
+    description: z.string().max(500, "Maximum 500 caractères").optional(),
+    currency: z.string().min(1),
+    checkoutMode: z.enum(["whatsapp", "online"]),
+    whatsappNumber: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.checkoutMode === "whatsapp") {
+      const digits = (data.whatsappNumber ?? "").replace(/\D/g, "");
+      if (digits.length < 8 || digits.length > 15) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["whatsappNumber"],
+          message: "Numéro WhatsApp invalide (avec indicatif pays)",
+        });
+      }
+    }
+  });
 
 type Step1Values = z.infer<typeof step1Schema>;
 type Step2Values = z.infer<typeof step2Schema>;
@@ -139,7 +155,11 @@ export default function OnboardingPage() {
   const form1 = useForm<Step1Values>({ resolver: zodResolver(step1Schema) });
   const form2 = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
-    defaultValues: { currency: "XOF" },
+    defaultValues: { currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" },
+  });
+  const watchedCheckoutMode = useWatch({
+    control: form2.control,
+    name: "checkoutMode",
   });
 
   const watchedSlug = useWatch({ control: form2.control, name: "shopSlug" });
@@ -240,6 +260,11 @@ export default function OnboardingPage() {
           contact_email: null,
           contact_phone: null,
           social_links: null,
+          checkout_mode: step2Data.checkoutMode,
+          whatsapp_number:
+            step2Data.checkoutMode === "whatsapp"
+              ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
+              : null,
         });
 
       if (shopError) throw shopError;
@@ -464,6 +489,85 @@ export default function OnboardingPage() {
                       ))}
                     </select>
                   </div>
+
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <Label className="pt-2 block">Comment veux-tu encaisser ?</Label>
+                    <p className="text-xs text-muted-foreground -mt-1 mb-2">
+                      Tu pourras changer plus tard depuis les paramètres.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label
+                        className={cn(
+                          "cursor-pointer rounded-lg border-2 p-3 transition-all",
+                          watchedCheckoutMode === "whatsapp"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          value="whatsapp"
+                          {...form2.register("checkoutMode")}
+                          className="sr-only"
+                        />
+                        <div className="flex items-start gap-2">
+                          <span className="text-xl">💬</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm">WhatsApp</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Tes clients t&apos;écrivent pour commander. Recommandé.
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                      <label
+                        className={cn(
+                          "cursor-pointer rounded-lg border-2 p-3 transition-all",
+                          watchedCheckoutMode === "online"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          value="online"
+                          {...form2.register("checkoutMode")}
+                          className="sr-only"
+                        />
+                        <div className="flex items-start gap-2">
+                          <span className="text-xl">💳</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm">Paiement en ligne</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Carte + Mobile Money. Plus de config.
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {watchedCheckoutMode === "whatsapp" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsappNumber">Ton numéro WhatsApp</Label>
+                      <Input
+                        id="whatsappNumber"
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="+226 70 00 00 00"
+                        {...form2.register("whatsappNumber")}
+                        className="h-12"
+                      />
+                      {form2.formState.errors.whatsappNumber && (
+                        <p className="text-sm text-destructive">
+                          {form2.formState.errors.whatsappNumber.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Inclure l&apos;indicatif pays (ex: +226 pour le Burkina, +221 pour le Sénégal).
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex gap-3 pt-2">
                     <Button

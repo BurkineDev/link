@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ShoppingBag } from "lucide-react";
+import { MessageCircle, ShoppingBag } from "lucide-react";
 import { ShopHeader } from "@/components/shop/shop-header";
 import { ProductCard } from "@/components/shop/product-card";
 import { CartDrawer } from "@/components/shop/cart-drawer";
@@ -10,6 +10,7 @@ import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
 import { FONT_FAMILY_CLASS } from "@/lib/constants";
+import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 
 interface ShopPageProps {
@@ -47,6 +48,13 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
   const templateGrid = TEMPLATE_GRIDS[shop.template_id ?? ""] ?? DEFAULT_GRID;
   const fontClass =
     FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
+  const isWhatsAppMode = shop.checkout_mode === "whatsapp";
+  const whatsAppUrl = isWhatsAppMode
+    ? buildWhatsAppOrderUrl({
+        whatsappNumber: shop.whatsapp_number,
+        shopName: shop.name,
+      })
+    : null;
 
   return (
     // Inject all shop theming as CSS custom properties so any descendant
@@ -189,33 +197,55 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
         </p>
       </footer>
 
-      {/* ── Cart FAB ── */}
-      <button
-        type="button"
-        onClick={() => setCartOpen(true)}
-        aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
-        className={cn(
-          "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-md sm:right-6",
-          "transition-transform duration-150 active:scale-95",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        )}
-        style={{ backgroundColor: "var(--shop-primary, var(--primary))" }}
-      >
-        <ShoppingBag className="h-6 w-6 text-white" />
-        {itemCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold text-white">
-            {itemCount > 99 ? "99+" : itemCount}
-          </span>
-        )}
-      </button>
+      {/* ── Floating CTA: WhatsApp mode shows a wa.me link, online mode shows a cart ── */}
+      {isWhatsAppMode ? (
+        whatsAppUrl && (
+          <a
+            href={whatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Commander sur WhatsApp"
+            className={cn(
+              "fixed bottom-6 right-4 z-40 flex h-14 items-center gap-2 rounded-full px-5 shadow-md sm:right-6",
+              "transition-transform duration-150 active:scale-95",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            )}
+            style={{ backgroundColor: "#25D366" }}
+          >
+            <MessageCircle className="h-5 w-5 text-white" />
+            <span className="text-sm font-semibold text-white">WhatsApp</span>
+          </a>
+        )
+      ) : (
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
+          className={cn(
+            "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-md sm:right-6",
+            "transition-transform duration-150 active:scale-95",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          )}
+          style={{ backgroundColor: "var(--shop-primary, var(--primary))" }}
+        >
+          <ShoppingBag className="h-6 w-6 text-white" />
+          {itemCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold text-white">
+              {itemCount > 99 ? "99+" : itemCount}
+            </span>
+          )}
+        </button>
+      )}
 
-      {/* ── Cart drawer ── */}
-      <CartDrawer
-        open={cartOpen}
-        onOpenChange={setCartOpen}
-        currency={shop.currency}
-        shopSlug={shop.slug}
-      />
+      {/* ── Cart drawer (online checkout mode only) ── */}
+      {!isWhatsAppMode && (
+        <CartDrawer
+          open={cartOpen}
+          onOpenChange={setCartOpen}
+          currency={shop.currency}
+          shopSlug={shop.slug}
+        />
+      )}
     </div>
   );
 }

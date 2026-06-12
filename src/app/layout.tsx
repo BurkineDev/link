@@ -75,21 +75,13 @@ export const metadata: Metadata = {
     description:
       "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money et vends via TikTok & Instagram.",
     siteName: "Bio-Lien",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Bio-Lien — Ta boutique en ligne africaine",
-      },
-    ],
+    // OG image is generated dynamically from src/app/opengraph-image.tsx
   },
   twitter: {
     card: "summary_large_image",
     title: "Bio-Lien | Crée ta boutique en ligne",
     description:
       "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money.",
-    images: ["/og-image.png"],
   },
   robots: {
     index: true,

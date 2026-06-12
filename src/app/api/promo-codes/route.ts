@@ -43,7 +43,10 @@ export async function GET(request: NextRequest) {
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[api/promo-codes GET] db error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
   return NextResponse.json({ codes });
 }
 
@@ -93,7 +96,8 @@ export async function POST(request: NextRequest) {
     if (error.code === "23505") {
       return NextResponse.json({ error: "Ce code existe déjà." }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/promo-codes POST] insert error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
   return NextResponse.json({ code: data }, { status: 201 });
 }

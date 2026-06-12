@@ -192,6 +192,7 @@ export type ShopBorderRadius = "none" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type ShopCardStyle = "flat" | "bordered" | "elevated" | "glass";
 export type ShopCtaShape = "pill" | "rounded" | "square";
 export type ShopCtaStyle = "filled" | "outline" | "soft";
+export type ShopCheckoutMode = "whatsapp" | "online";
 
 export type ShopRow = {
   id: string;
@@ -217,6 +218,7 @@ export type ShopRow = {
   tiktok_pixel_id: string | null;
   meta_pixel_id: string | null;
   whatsapp_number: string | null;
+  checkout_mode: ShopCheckoutMode;
   featured_until: string | null;
   created_at: string;
   updated_at: string;

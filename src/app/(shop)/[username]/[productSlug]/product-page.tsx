@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ShoppingBag, Zap, Minus, Plus, Home } from "lucide-react";
+import { ChevronLeft, MessageCircle, ShoppingBag, Zap, Minus, Plus, Home } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { CartDrawer } from "@/components/shop/cart-drawer";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
 import { FONT_FAMILY_CLASS } from "@/lib/constants";
+import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
 import type {
   ShopRow,
   ProductRow,
@@ -86,6 +87,23 @@ export function ProductPage({
 
   const fontClass =
     FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
+
+  const isWhatsAppMode = shop.checkout_mode === "whatsapp";
+  const whatsAppUrl = isWhatsAppMode
+    ? buildWhatsAppOrderUrl({
+        whatsappNumber: shop.whatsapp_number,
+        shopName: shop.name,
+        productName: product.name,
+        price: effectivePrice,
+        currency: product.currency,
+        variantLabel,
+        quantity,
+        shopUrl:
+          typeof window === "undefined"
+            ? `https://www.bio-lien.com/${shop.slug}/${product.slug}`
+            : window.location.href,
+      })
+    : null;
 
   return (
     <div
@@ -220,29 +238,50 @@ export function ProductPage({
             </div>
 
             {/* CTAs */}
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button
-                size="lg"
-                className="h-12 flex-1 gap-2 text-base font-semibold text-white"
-                style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}
-                disabled={isOutOfStock}
-                onClick={handleAddToCart}
-              >
-                <ShoppingBag className="h-5 w-5" />
-                {isOutOfStock ? "Épuisé" : "Ajouter au panier"}
-              </Button>
-              {!isOutOfStock && (
+            {isWhatsAppMode ? (
+              whatsAppUrl ? (
+                <Button
+                  asChild
+                  size="lg"
+                  className="h-12 gap-2 text-base font-semibold text-white"
+                  style={{ backgroundColor: "#25D366" }}
+                  disabled={isOutOfStock}
+                >
+                  <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
+                    <MessageCircle className="h-5 w-5" />
+                    {isOutOfStock ? "Épuisé" : "Commander sur WhatsApp"}
+                  </a>
+                </Button>
+              ) : (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Le vendeur n&apos;a pas encore configuré son numéro WhatsApp.
+                </div>
+              )
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <Button
                   size="lg"
-                  variant="outline"
-                  className="h-12 flex-1 gap-2 text-base font-semibold"
-                  onClick={handleBuyNow}
+                  className="h-12 flex-1 gap-2 text-base font-semibold text-white"
+                  style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}
+                  disabled={isOutOfStock}
+                  onClick={handleAddToCart}
                 >
-                  <Zap className="h-5 w-5" />
-                  Acheter maintenant
+                  <ShoppingBag className="h-5 w-5" />
+                  {isOutOfStock ? "Épuisé" : "Ajouter au panier"}
                 </Button>
-              )}
-            </div>
+                {!isOutOfStock && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="h-12 flex-1 gap-2 text-base font-semibold"
+                    onClick={handleBuyNow}
+                  >
+                    <Zap className="h-5 w-5" />
+                    Acheter maintenant
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* Description */}
             {product.description && (
@@ -305,33 +344,36 @@ export function ProductPage({
         </p>
       </footer>
 
-      {/* ── Cart FAB ── */}
-      <button
-        type="button"
-        onClick={() => setCartOpen(true)}
-        aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
-        className={cn(
-          "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg sm:right-6",
-          "transition-all duration-200 hover:scale-105 active:scale-95",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        )}
-        style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}
-      >
-        <ShoppingBag className="h-6 w-6 text-white" />
-        {itemCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white shadow-sm">
-            {itemCount > 99 ? "99+" : itemCount}
-          </span>
-        )}
-      </button>
+      {/* ── Cart FAB + drawer: online checkout mode only ── */}
+      {!isWhatsAppMode && (
+        <>
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
+            className={cn(
+              "fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg sm:right-6",
+              "transition-all duration-200 hover:scale-105 active:scale-95",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            )}
+            style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}
+          >
+            <ShoppingBag className="h-6 w-6 text-white" />
+            {itemCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white shadow-sm">
+                {itemCount > 99 ? "99+" : itemCount}
+              </span>
+            )}
+          </button>
 
-      {/* ── Cart drawer ── */}
-      <CartDrawer
-        open={cartOpen}
-        onOpenChange={setCartOpen}
-        currency={shop.currency}
-        shopSlug={shop.slug}
-      />
+          <CartDrawer
+            open={cartOpen}
+            onOpenChange={setCartOpen}
+            currency={shop.currency}
+            shopSlug={shop.slug}
+          />
+        </>
+      )}
     </div>
   );
 }

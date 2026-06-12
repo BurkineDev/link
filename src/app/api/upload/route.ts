@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/upload] storage error", error);
+    return NextResponse.json({ error: "Échec de l'upload" }, { status: 500 });
   }
 
   const { data: { publicUrl } } = supabase.storage

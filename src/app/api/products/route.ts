@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/products GET] db error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 
   return NextResponse.json({ products });
@@ -147,7 +148,8 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/products POST] insert error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 
   // Insert variants if any
@@ -169,7 +171,8 @@ export async function POST(request: NextRequest) {
     if (variantError) {
       // Rollback product
       await supabase.from("products").delete().eq("id", product.id);
-      return NextResponse.json({ error: variantError.message }, { status: 500 });
+      console.error("[api/products POST] variant insert error", variantError);
+      return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
     }
   }
 

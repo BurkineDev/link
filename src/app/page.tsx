@@ -165,9 +165,9 @@ function Navbar() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-8">
           {[
+            { label: "Explorer", href: "/explore" },
             { label: "Outils gratuits", href: "/outils" },
             { label: "Fonctionnalités", href: "#features" },
-            { label: "Templates", href: "#templates" },
             { label: "Tarifs", href: "/pricing" },
           ].map((item) => (
             <a
@@ -216,9 +216,9 @@ function Navbar() {
         >
           <nav className="flex flex-col px-4 py-4 gap-1">
             {[
+              { label: "Explorer", href: "/explore" },
               { label: "Outils gratuits", href: "/outils" },
               { label: "Fonctionnalités", href: "#features" },
-              { label: "Templates", href: "#templates" },
               { label: "Tarifs", href: "/pricing" },
             ].map((item) => (
               <a
