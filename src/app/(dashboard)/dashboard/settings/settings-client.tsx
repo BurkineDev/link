@@ -11,6 +11,7 @@ import type {
   ShopCardStyle,
   ShopCtaShape,
   ShopCtaStyle,
+  ShopCheckoutMode,
 } from "@/lib/types/database";
 import {
   CURRENCIES,
@@ -71,6 +72,8 @@ import {
   MousePointerClick,
   Palette,
   RotateCcw,
+  MessageCircle,
+  CreditCard,
 } from "lucide-react";
 
 import { ThemePreview } from "@/components/dashboard/theme-preview";
@@ -444,6 +447,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   // ---- Payments ----
   const [currency, setCurrency] = useState(shop.currency);
+  const [checkoutMode, setCheckoutMode] = useState<ShopCheckoutMode>(
+    shop.checkout_mode,
+  );
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    shop.whatsapp_number ?? "",
+  );
 
   const supabase = createClient();
 
@@ -554,17 +563,26 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   };
 
   const savePayments = async () => {
+    // In WhatsApp mode the number is required and must look like E.164.
+    const digits = whatsappNumber.replace(/\D/g, "");
+    if (checkoutMode === "whatsapp" && (digits.length < 8 || digits.length > 15)) {
+      toast.error("Entre un numéro WhatsApp valide (avec l'indicatif pays).");
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase
       .from("shops")
       .update({
         currency,
+        checkout_mode: checkoutMode,
+        whatsapp_number: checkoutMode === "whatsapp" ? digits : whatsappNumber.trim() ? digits : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", shop.id);
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error("Impossible d'enregistrer. Réessaie.");
     } else {
       toast.success("Paramètres de paiement mis à jour.");
       router.refresh();
@@ -573,6 +591,8 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   const resetPayments = () => {
     setCurrency(shop.currency);
+    setCheckoutMode(shop.checkout_mode);
+    setWhatsappNumber(shop.whatsapp_number ?? "");
   };
 
   const handleUnpublish = async () => {
@@ -616,7 +636,10 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
     tiktok !== (shop.social_links?.tiktok ?? "") ||
     twitter !== (shop.social_links?.twitter ?? "");
 
-  const paymentsDirty = currency !== shop.currency;
+  const paymentsDirty =
+    currency !== shop.currency ||
+    checkoutMode !== shop.checkout_mode ||
+    whatsappNumber !== (shop.whatsapp_number ?? "");
 
   // ---- General tab: dirty + validation ----
   const generalDirty =
@@ -1269,6 +1292,74 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="payments" className="space-y-6 pt-6">
           <div className="space-y-4 max-w-xl">
+            {/* ---- Checkout mode ---- */}
+            <div className="space-y-2">
+              <Label>Comment tes clients commandent</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMode("whatsapp")}
+                  className={cn(
+                    "text-left rounded-lg border-2 p-3 transition-all",
+                    checkoutMode === "whatsapp"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40",
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <MessageCircle className="size-5 shrink-0 text-[#25D366]" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">WhatsApp</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Les clients t&apos;écrivent pour commander. Recommandé.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMode("online")}
+                  className={cn(
+                    "text-left rounded-lg border-2 p-3 transition-all",
+                    checkoutMode === "online"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40",
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <CreditCard className="size-5 shrink-0 text-foreground" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">Paiement en ligne</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Panier + carte et Mobile Money à la validation.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {checkoutMode === "whatsapp" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="whatsapp-number">Ton numéro WhatsApp</Label>
+                <Input
+                  id="whatsapp-number"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="+226 70 00 00 00"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Inclure l&apos;indicatif pays (ex: +226 Burkina, +221 Sénégal,
+                  +225 Côte d&apos;Ivoire). C&apos;est ici que les commandes
+                  arrivent.
+                </p>
+              </div>
+            )}
+
+            <Separator />
+
             <div className="space-y-1.5">
               <Label>Devise principale</Label>
               <Select
@@ -1294,18 +1385,22 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               </p>
             </div>
 
-            <Separator />
-
-            <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
-              <p className="text-sm font-semibold">Méthodes de paiement</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Vos clients peuvent payer par carte bancaire (Visa, Mastercard)
-                et Mobile Money (Wave, Orange, MTN, Moov). La configuration des
-                moyens de paiement est gérée par l&apos;équipe Bio-Lien —
-                vous n&apos;avez rien à installer. Les fonds sont reversés sur
-                le compte que vous fournirez à l&apos;équipe.
-              </p>
-            </div>
+            {checkoutMode === "online" && (
+              <>
+                <Separator />
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                  <p className="text-sm font-semibold">Méthodes de paiement</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Vos clients peuvent payer par carte bancaire (Visa,
+                    Mastercard) et Mobile Money (Wave, Orange, MTN, Moov). La
+                    configuration des moyens de paiement est gérée par
+                    l&apos;équipe Bio-Lien — vous n&apos;avez rien à installer.
+                    Les fonds sont reversés sur le compte que vous fournirez à
+                    l&apos;équipe.
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-background/95 backdrop-blur px-1 py-3">
               <p className="text-xs text-muted-foreground">
