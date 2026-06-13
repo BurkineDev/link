@@ -406,6 +406,7 @@ export type ShopInsert = Omit<
   | "card_style"
   | "cta_shape"
   | "cta_style"
+  | "checkout_mode"
   | "featured_until"
 > & {
   tiktok_pixel_id?: string | null;
@@ -417,6 +418,7 @@ export type ShopInsert = Omit<
   card_style?: ShopCardStyle;
   cta_shape?: ShopCtaShape;
   cta_style?: ShopCtaStyle;
+  checkout_mode?: ShopCheckoutMode;
   featured_until?: string | null;
 };
 
