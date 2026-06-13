@@ -12,6 +12,31 @@ const updateSchema = z.object({
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/**
+ * Confirms the link exists and belongs to a shop owned by `userId`.
+ * Defence-in-depth alongside the RLS owner policies on shop_links.
+ */
+async function assertLinkOwnership(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  linkId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data: link } = await supabase
+    .from("shop_links")
+    .select("shop_id")
+    .eq("id", linkId)
+    .maybeSingle();
+  if (!link) return false;
+
+  const { data: shop } = await supabase
+    .from("shops")
+    .select("id")
+    .eq("id", link.shop_id)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  return !!shop;
+}
+
 export async function PATCH(request: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const supabase = await createClient();
@@ -30,6 +55,10 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Données invalides" }, { status: 422 });
+  }
+
+  if (!(await assertLinkOwnership(supabase, id, user.id))) {
+    return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
   }
 
   const { data, error } = await supabase
@@ -54,6 +83,10 @@ export async function DELETE(_request: NextRequest, ctx: Ctx) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+
+  if (!(await assertLinkOwnership(supabase, id, user.id))) {
+    return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
+  }
 
   const { error } = await supabase.from("shop_links").delete().eq("id", id);
   if (error) {
