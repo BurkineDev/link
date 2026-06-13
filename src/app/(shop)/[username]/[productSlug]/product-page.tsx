@@ -88,22 +88,25 @@ export function ProductPage({
   const fontClass =
     FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
 
-  const isWhatsAppMode = shop.checkout_mode === "whatsapp";
-  const whatsAppUrl = isWhatsAppMode
-    ? buildWhatsAppOrderUrl({
-        whatsappNumber: shop.whatsapp_number,
-        shopName: shop.name,
-        productName: product.name,
-        price: effectivePrice,
-        currency: product.currency,
-        variantLabel,
-        quantity,
-        shopUrl:
-          typeof window === "undefined"
-            ? `https://www.bio-lien.com/${shop.slug}/${product.slug}`
-            : window.location.href,
-      })
-    : null;
+  // WhatsApp mode only when a usable number exists; otherwise fall back to
+  // the cart so the product is never a dead end (mirrors shop-page).
+  const whatsAppUrl =
+    shop.checkout_mode === "whatsapp"
+      ? buildWhatsAppOrderUrl({
+          whatsappNumber: shop.whatsapp_number,
+          shopName: shop.name,
+          productName: product.name,
+          price: effectivePrice,
+          currency: product.currency,
+          variantLabel,
+          quantity,
+          shopUrl:
+            typeof window === "undefined"
+              ? `https://www.bio-lien.com/${shop.slug}/${product.slug}`
+              : window.location.href,
+        })
+      : null;
+  const isWhatsAppMode = whatsAppUrl !== null;
 
   return (
     <div

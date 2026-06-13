@@ -79,6 +79,18 @@ const TEMPLATES: Template[] = [
       heroStyle: "banner",
     },
   },
+  {
+    id: "artisan",
+    name: "Artisan",
+    description: "Aspect fait-main et chaleureux pour les créateurs",
+    config: {
+      primaryColor: "#9A3412",
+      secondaryColor: "#FDBA74",
+      font: "Lora",
+      layout: "grid",
+      heroStyle: "centered",
+    },
+  },
 ];
 
 const CURRENCIES = [

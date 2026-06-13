@@ -48,13 +48,17 @@ export function ShopPage({ shop, products, categories, links = [] }: ShopPagePro
   const templateGrid = TEMPLATE_GRIDS[shop.template_id ?? ""] ?? DEFAULT_GRID;
   const fontClass =
     FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
-  const isWhatsAppMode = shop.checkout_mode === "whatsapp";
-  const whatsAppUrl = isWhatsAppMode
-    ? buildWhatsAppOrderUrl({
-        whatsappNumber: shop.whatsapp_number,
-        shopName: shop.name,
-      })
-    : null;
+  // WhatsApp mode only applies when the shop actually has a usable number.
+  // Otherwise (e.g. shops migrated to the default mode without ever setting
+  // one) fall back to the cart so buyers are never left with no way to order.
+  const whatsAppUrl =
+    shop.checkout_mode === "whatsapp"
+      ? buildWhatsAppOrderUrl({
+          whatsappNumber: shop.whatsapp_number,
+          shopName: shop.name,
+        })
+      : null;
+  const isWhatsAppMode = whatsAppUrl !== null;
 
   return (
     // Inject all shop theming as CSS custom properties so any descendant
