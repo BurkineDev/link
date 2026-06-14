@@ -43,23 +43,27 @@ export default function TermsPage() {
       </ul>
 
       <h2>4. Plans et facturation</h2>
-      <p>
-        Bio-Lien propose deux plans :
-      </p>
+      <p>Bio-Lien propose trois plans :</p>
       <ul>
         <li>
-          <strong>Plan Gratuit</strong> : limité à 5 produits par boutique. Une commission
-          de 5% est prélevée sur chaque vente pour couvrir les frais de la plateforme.
+          <strong>Découverte (gratuit)</strong> : limité à 5 produits par boutique. Une
+          commission de 5 % est prélevée sur chaque vente pour couvrir les frais de la
+          plateforme.
         </li>
         <li>
-          <strong>Plan Pro (5 000 FCFA / mois)</strong> : produits illimités, 0% de
-          commission, analytics avancés, support prioritaire.
+          <strong>Starter (4,99 $CA / mois ou 49 $CA / an)</strong> : jusqu&apos;à 20
+          produits, commission réduite à 3 %, suppression du badge Bio-Lien, analytics
+          standard, support email.
+        </li>
+        <li>
+          <strong>Pro (9,99 $CA / mois ou 59 $CA / an)</strong> : produits illimités,
+          0 % de commission, analytics avancés, templates premium, support prioritaire.
         </li>
       </ul>
       <p>
-        L&apos;abonnement Pro est facturé mensuellement via Stripe. Le Vendeur peut résilier
-        son abonnement à tout moment depuis son profil. La résiliation prend effet à la
-        fin de la période de facturation en cours.
+        Les abonnements payants sont facturés en dollars canadiens via Stripe. Le
+        Vendeur peut résilier son abonnement à tout moment depuis son profil. La
+        résiliation prend effet à la fin de la période de facturation en cours.
       </p>
 
       <h2>5. Rôle de Bio-Lien</h2>

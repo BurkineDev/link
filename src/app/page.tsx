@@ -323,7 +323,7 @@ function Hero() {
                 className="border-white/30 text-white bg-transparent hover:bg-white/10 hover:text-white font-semibold text-base h-12 px-7"
                 asChild
               >
-                <Link href="/@demo">Voir une démo</Link>
+                <Link href="/explore">Voir les boutiques</Link>
               </Button>
             </motion.div>
 
@@ -824,22 +824,60 @@ function Testimonials() {
 // ---------------------------------------------------------------------------
 
 function Pricing() {
-  const freePlan = [
-    "Jusqu'à 5 produits",
-    "Lien @username unique",
-    "Paiement par carte bancaire (Stripe)",
-    "Templates inclus",
-    "Analytics de base",
-    "Support par email",
-  ];
-
-  const proPlan = [
-    "Produits illimités",
-    "0% de commission sur tes ventes",
-    "Analytics avancés (top produits, AOV)",
-    "Suppression du badge Bio-Lien",
-    "Templates premium",
-    "Support prioritaire",
+  const tiers = [
+    {
+      id: "free",
+      name: "Découverte",
+      price: "0",
+      currency: "$CA",
+      tagline: "Pour démarrer et tester ta boutique",
+      bullets: [
+        "Jusqu'à 5 produits",
+        "Lien @username unique",
+        "Paiement carte + Mobile Money",
+        "Mode WhatsApp inclus",
+        "Templates inclus",
+      ],
+      cta: "Commencer gratuitement",
+      ctaHref: "/register",
+      footnote: "5 % de commission sur chaque vente.",
+      highlight: false,
+    },
+    {
+      id: "starter",
+      name: "Starter",
+      price: "4,99",
+      currency: "$CA",
+      tagline: "Pour les vendeurs qui dépassent 5 produits",
+      bullets: [
+        "Jusqu'à 20 produits",
+        "Commission réduite à 3 %",
+        "Suppression du badge Bio-Lien",
+        "Analytics standard",
+      ],
+      cta: "Voir les détails",
+      ctaHref: "/pricing",
+      footnote: "Sans engagement.",
+      highlight: false,
+    },
+    {
+      id: "pro",
+      name: "Pro",
+      price: "9,99",
+      currency: "$CA",
+      tagline: "Pour les créateurs sérieux qui veulent grandir",
+      bullets: [
+        "Produits illimités",
+        "0 % de commission sur tes ventes",
+        "Analytics avancés",
+        "Templates premium",
+        "Support prioritaire",
+      ],
+      cta: "Passer en Pro",
+      ctaHref: "/pricing",
+      footnote: "Sans engagement. Annule à tout moment.",
+      highlight: true,
+    },
   ];
 
   return (
@@ -850,112 +888,107 @@ function Pricing() {
             Tarifs
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Commence{" "}
-            <span className="text-primary">gratuitement</span>
+            Commence <span className="text-primary">gratuitement</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Pas de frais cachés. Passe en Pro le jour où ta boutique décolle.
+            Pas de frais cachés. Monte d&apos;un palier le jour où ta boutique
+            décolle.
           </p>
         </FadeIn>
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {/* Free */}
-          <FadeIn delay={0.05}>
-            <Card className="h-full border-2 border-border/60 relative overflow-hidden">
-              <CardContent className="p-6">
-                <div className="mb-6">
-                  <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                    Gratuit
+        <div className="grid gap-5 md:grid-cols-3 max-w-5xl mx-auto">
+          {tiers.map((tier, i) => (
+            <FadeIn key={tier.id} delay={0.05 + i * 0.05}>
+              <Card
+                className={cn(
+                  "h-full relative overflow-hidden",
+                  tier.highlight
+                    ? "border-2 border-primary shadow-lg shadow-primary/10"
+                    : "border-2 border-border/60",
+                )}
+              >
+                {tier.highlight && (
+                  <div className="absolute top-4 right-4">
+                    <Badge className="bg-primary text-primary-foreground">
+                      Recommandé
+                    </Badge>
+                  </div>
+                )}
+                <CardContent className="p-6">
+                  <div className="mb-6">
+                    <p
+                      className={cn(
+                        "text-sm font-semibold uppercase tracking-widest mb-2",
+                        tier.highlight ? "text-primary" : "text-muted-foreground",
+                      )}
+                    >
+                      {tier.name}
+                    </p>
+                    <p className="text-4xl font-black">
+                      {tier.price} {tier.currency}
+                      <span className="text-base font-normal text-muted-foreground ml-1">
+                        / mois
+                      </span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {tier.tagline}
+                    </p>
+                  </div>
+
+                  <Button
+                    className={cn(
+                      "w-full mb-6 h-11 font-semibold",
+                      tier.highlight
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                        : "bg-foreground text-background hover:bg-foreground/90 border-0",
+                    )}
+                    asChild
+                  >
+                    <Link href={tier.ctaHref}>{tier.cta}</Link>
+                  </Button>
+
+                  <ul className="space-y-3">
+                    {tier.bullets.map((item) => (
+                      <li
+                        key={item}
+                        className="flex items-center gap-3 text-sm"
+                      >
+                        <div
+                          className={cn(
+                            "size-5 rounded-full flex items-center justify-center flex-shrink-0",
+                            tier.highlight ? "bg-primary" : "bg-primary/10",
+                          )}
+                        >
+                          <Check
+                            className={cn(
+                              "size-3",
+                              tier.highlight
+                                ? "text-primary-foreground"
+                                : "text-primary",
+                            )}
+                          />
+                        </div>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
+                    {tier.footnote}
                   </p>
-                  <p className="text-4xl font-black">
-                    0 FCFA
-                    <span className="text-base font-normal text-muted-foreground ml-1">
-                      / mois
-                    </span>
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Pour démarrer et tester ta boutique
-                  </p>
-                </div>
-
-                <Button
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0 mb-6 h-11 font-semibold"
-                  asChild
-                >
-                  <Link href="/register">Commencer gratuitement</Link>
-                </Button>
-
-                <ul className="space-y-3">
-                  {freePlan.map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-sm">
-                      <div className="size-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Check className="size-3 text-primary" />
-                      </div>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-
-                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                  Une commission de 5% s&apos;applique sur chaque vente pour couvrir
-                  les frais de la plateforme.
-                </p>
-              </CardContent>
-            </Card>
-          </FadeIn>
-
-          {/* Pro */}
-          <FadeIn delay={0.12}>
-            <Card className="h-full border-2 border-primary relative overflow-hidden shadow-lg shadow-primary/10">
-              <div className="absolute top-4 right-4">
-                <Badge className="bg-primary text-primary-foreground">
-                  Recommandé
-                </Badge>
-              </div>
-              <CardContent className="p-6">
-                <div className="mb-6">
-                  <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-2">
-                    Pro
-                  </p>
-                  <p className="text-4xl font-black">
-                    5 000 FCFA
-                    <span className="text-base font-normal text-muted-foreground ml-1">
-                      / mois
-                    </span>
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Pour les créateurs qui veulent grandir
-                  </p>
-                </div>
-
-                <Button
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0 mb-6 h-11 font-semibold"
-                  asChild
-                >
-                  <Link href="/pricing">Passer en Pro</Link>
-                </Button>
-
-                <ul className="space-y-3">
-                  <li className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                    Tout du plan Gratuit, plus :
-                  </li>
-                  {proPlan.map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-sm">
-                      <div className="size-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <Check className="size-3 text-primary-foreground" />
-                      </div>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-
-                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                  Sans engagement. Annule à tout moment depuis ton profil.
-                </p>
-              </CardContent>
-            </Card>
-          </FadeIn>
+                </CardContent>
+              </Card>
+            </FadeIn>
+          ))}
         </div>
+
+        <p className="text-center text-sm text-muted-foreground mt-8">
+          Facturation en dollars canadiens — ta carte convertit
+          automatiquement.{" "}
+          <Link href="/pricing" className="text-primary font-semibold hover:underline">
+            Voir tous les détails
+          </Link>
+        </p>
       </div>
     </section>
   );
@@ -982,11 +1015,11 @@ function FinalCTA() {
         <FadeIn>
           <div className="text-5xl mb-6">🌍</div>
           <h2 className="text-3xl sm:text-5xl font-black mb-4 leading-tight">
-            Rejoins 10 000+ créateurs africains
+            Lance ta boutique gratuitement
           </h2>
           <p className="text-lg sm:text-xl text-background/80 mb-10 max-w-xl mx-auto">
-            Lance ta boutique gratuitement aujourd&apos;hui. Pas de carte bancaire,
-            pas d&apos;engagement.
+            Trois minutes pour créer ta boutique, ton lien, et le partager dans
+            ta bio. Pas de carte bancaire, pas d&apos;engagement.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
@@ -1011,7 +1044,14 @@ function FinalCTA() {
           </div>
 
           <p className="mt-4 text-sm text-background/60">
-            Plus de 10 000 boutiques créées en Afrique. Rejoins-les maintenant.
+            Tu peux explorer les boutiques déjà publiées sur{" "}
+            <Link
+              href="/explore"
+              className="underline hover:text-background transition-colors"
+            >
+              /explore
+            </Link>
+            .
           </p>
         </FadeIn>
       </div>
@@ -1037,18 +1077,12 @@ function Footer() {
               La plateforme de boutique en ligne pensée pour les créateurs et
               entrepreneurs africains.
             </p>
-            <div className="flex gap-3 mt-5">
-              {["Instagram", "TikTok", "Facebook"].map((label) => (
-                <a
-                  key={label}
-                  href="#"
-                  aria-label={label}
-                  className="size-9 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors text-xs font-bold text-gray-400"
-                >
-                  {label[0]}
-                </a>
-              ))}
-            </div>
+            <a
+              href="mailto:support@bio-lien.com"
+              className="inline-block mt-5 text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              support@bio-lien.com
+            </a>
           </div>
 
           {/* Produit */}
@@ -1059,33 +1093,9 @@ function Footer() {
             <ul className="space-y-2.5 text-sm">
               {[
                 { label: "Fonctionnalités", href: "#features" },
-                { label: "Templates", href: "#templates" },
                 { label: "Tarifs", href: "/pricing" },
-                { label: "Voir une démo", href: "/@demo" },
-              ].map((l) => (
-                <li key={l.href}>
-                  <a
-                    href={l.href}
-                    className="hover:text-white transition-colors"
-                  >
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Ressources */}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-300 mb-4">
-              Ressources
-            </p>
-            <ul className="space-y-2.5 text-sm">
-              {[
-                { label: "Blog", href: "/blog" },
-                { label: "Documentation", href: "/docs" },
-                { label: "Guide du créateur", href: "/guide" },
-                { label: "Support", href: "/support" },
+                { label: "Explorer", href: "/explore" },
+                { label: "Outils gratuits", href: "/outils" },
               ].map((l) => (
                 <li key={l.href}>
                   <a
