@@ -10,12 +10,14 @@ import {
   Package,
   Link2,
   Headphones,
-  Star,
   Check,
   ArrowRight,
   Menu,
   X,
   ChevronRight,
+  Sparkles,
+  Hammer,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -711,46 +713,38 @@ function Templates() {
 }
 
 // ---------------------------------------------------------------------------
-// Testimonials
+// "For whom it's built" — honest, pre-launch replacement for fake testimonials.
+// Three real target personas instead of invented users.
 // ---------------------------------------------------------------------------
 
-function Testimonials() {
-  const testimonials = [
+function ForWhom() {
+  const personas = [
     {
-      name: "Aminata Diallo",
-      handle: "@aminata.fashion",
-      country: "🇸🇳 Sénégal",
-      avatar: "AD",
-      avatarBg: "bg-primary",
-      avatarText: "text-primary-foreground",
-      quote:
-        "En 10 minutes j'avais ma boutique en ligne. Le premier mois j'ai fait 380 000 FCFA de chiffre d'affaires. Bio-Lien a transformé mon business !",
-      stars: 5,
-      product: "Mode & Accessoires",
+      icon: Sparkles,
+      title: "Créateurs de contenu",
+      tagline: "TikTok · Instagram · Snapchat",
+      description:
+        "Tu as une audience qui te demande où acheter tes produits. Bio-Lien te donne un lien propre à mettre dans ta bio.",
+      iconBg: "bg-primary/10",
+      iconText: "text-primary",
     },
     {
-      name: "Kwame Asante",
-      handle: "@kwame.craft",
-      country: "🇬🇭 Ghana",
-      avatar: "KA",
-      avatarBg: "bg-[var(--success)]",
-      avatarText: "text-[var(--success-foreground)]",
-      quote:
-        "The checkout is smooth and the dashboard is clear — I set up my shop in one evening and got my first sale the next day. Sales are up 200% in 3 months.",
-      stars: 5,
-      product: "Artisanat",
+      icon: Hammer,
+      title: "Artisans & makers",
+      tagline: "Mode · Cosmétiques · Décoration",
+      description:
+        "Tu vends ce que tu crées toi-même. Présente ton catalogue proprement, sans avoir à coder une boutique complète.",
+      iconBg: "bg-[var(--success)]/10",
+      iconText: "text-[var(--success)]",
     },
     {
-      name: "Fatou Konaté",
-      handle: "@fatou.beaute",
-      country: "🇨🇮 Côte d'Ivoire",
-      avatar: "FK",
-      avatarBg: "bg-foreground",
-      avatarText: "text-background",
-      quote:
-        "Je poste sur Instagram, mes clientes cliquent sur mon lien Bio-Lien et finalisent leur commande en quelques secondes. C'est trop simple ! Je recommande à toutes les entrepreneures.",
-      stars: 5,
-      product: "Cosmétiques naturels",
+      icon: MessageCircle,
+      title: "Vendeurs WhatsApp",
+      tagline: "Mobile-first · Mode WhatsApp natif",
+      description:
+        "Tes clients commandent déjà en DM. Active le mode WhatsApp et chaque produit ouvre une discussion pré-remplie chez toi.",
+      iconBg: "bg-foreground/10",
+      iconText: "text-foreground",
     },
   ];
 
@@ -759,61 +753,64 @@ function Testimonials() {
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn className="text-center mb-16">
           <Badge variant="outline" className="mb-4 text-primary border-primary/30">
-            Témoignages
+            Pour qui c&apos;est fait
           </Badge>
           <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Ils vendent déjà avec{" "}
-            <span className="text-primary">Bio-Lien</span>
+            Bio-Lien, c&apos;est pour{" "}
+            <span className="text-primary">les vendeurs sociaux</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Des milliers de créateurs africains font confiance à Bio-Lien
-            pour leur boutique en ligne.
+            Si tu vends déjà via tes vidéos, tes stories ou tes statuts WhatsApp,
+            tu es exactement la bonne personne pour démarrer.
           </p>
         </FadeIn>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {testimonials.map((t, i) => (
-            <FadeIn key={t.handle} delay={i * 0.1}>
-              <Card className="h-full border border-black/[0.06] bg-white hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6 flex flex-col h-full">
-                  {/* Stars */}
-                  <div className="flex gap-0.5 mb-4">
-                    {Array.from({ length: t.stars }).map((_, j) => (
-                      <Star key={j} className="size-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-
-                  {/* Quote */}
-                  <p className="text-sm leading-relaxed text-foreground/80 flex-1 mb-6 italic">
-                    &ldquo;{t.quote}&rdquo;
-                  </p>
-
-                  {/* Author */}
-                  <div className="flex items-center gap-3">
+          {personas.map((p, i) => {
+            const Icon = p.icon;
+            return (
+              <FadeIn key={p.title} delay={i * 0.08}>
+                <Card className="h-full border border-black/[0.06] bg-white hover:shadow-lg transition-shadow duration-300">
+                  <CardContent className="p-6 flex flex-col h-full">
                     <div
                       className={cn(
-                        "size-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0",
-                        t.avatarBg,
-                        t.avatarText,
+                        "size-12 rounded-2xl flex items-center justify-center mb-5",
+                        p.iconBg,
                       )}
                     >
-                      {t.avatar}
+                      <Icon className={cn("size-6", p.iconText)} />
                     </div>
-                    <div>
-                      <p className="font-bold text-sm">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {t.handle} · {t.country}
-                      </p>
-                      <Badge variant="secondary" className="mt-1 text-[10px] py-0">
-                        {t.product}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </FadeIn>
-          ))}
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                      {p.tagline}
+                    </p>
+                    <h3 className="text-xl font-black mb-3">{p.title}</h3>
+                    <p className="text-sm leading-relaxed text-foreground/70 flex-1">
+                      {p.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              </FadeIn>
+            );
+          })}
         </div>
+
+        <FadeIn delay={0.3}>
+          <div className="mt-12 max-w-xl mx-auto text-center rounded-2xl border border-primary/20 bg-primary/[0.04] px-6 py-5">
+            <p className="text-sm font-semibold text-foreground">
+              Bio-Lien démarre. Rejoins les premiers vendeurs.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Tu peux explorer les boutiques déjà publiées sur{" "}
+              <Link
+                href="/explore"
+                className="text-primary font-semibold hover:underline"
+              >
+                /explore
+              </Link>
+              .
+            </p>
+          </div>
+        </FadeIn>
       </div>
     </section>
   );
@@ -1162,7 +1159,7 @@ export default function LandingPage() {
         <HowItWorks />
         <Features />
         <Templates />
-        <Testimonials />
+        <ForWhom />
         <Pricing />
         <FinalCTA />
       </main>
