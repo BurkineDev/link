@@ -28,7 +28,9 @@ const mockCreateClient = jest.fn().mockImplementation(async () => ({
     if (table === "products") {
       return {
         select: () => ({
-          in: () => Promise.resolve({ data: _products, error: null }),
+          in: () => ({
+            eq: () => Promise.resolve({ data: _products, error: null }),
+          }),
         }),
       };
     }
@@ -235,26 +237,45 @@ describe("POST /api/checkout", () => {
     expect(res.status).toBe(404);
   });
 
-  // TC-05 — produit inconnu en DB
-  test("TC-05: unknown product_id returns 400", async () => {
+  // TC-05 — produit inconnu en DB → 409 ITEMS_UNAVAILABLE (cart self-heal)
+  test("TC-05: unknown product_id returns 409 with ITEMS_UNAVAILABLE", async () => {
     setup({ products: [] });
 
     const res = await POST(makeRequest(validPayload()));
     const json = await res.json();
 
-    expect(res.status).toBe(400);
-    expect(json.error).toMatch(/introuvable/i);
+    expect(res.status).toBe(409);
+    expect(json.code).toBe("ITEMS_UNAVAILABLE");
+    expect(json.unavailableProductIds).toContain(PRODUCT_ID);
   });
 
-  // TC-06 — produit non publié
-  test("TC-06: unpublished product returns 400", async () => {
+  // TC-06 — produit non publié → 409 ITEMS_UNAVAILABLE
+  test("TC-06: unpublished product returns 409 with ITEMS_UNAVAILABLE", async () => {
     setup({ products: [{ ...BASE_PRODUCT, is_published: false }] });
 
     const res = await POST(makeRequest(validPayload()));
     const json = await res.json();
 
+    expect(res.status).toBe(409);
+    expect(json.code).toBe("ITEMS_UNAVAILABLE");
+    expect(json.unavailableProductIds).toContain(PRODUCT_ID);
+  });
+
+  // TC-06b — total de 0 (article gratuit) → 400 montant invalide
+  test("TC-06b: zero-total order returns 400", async () => {
+    setup({ products: [{ ...BASE_PRODUCT, price: 0 }] });
+
+    const res = await POST(
+      makeRequest(
+        validPayload({
+          items: [{ product_id: PRODUCT_ID, quantity: 1, unit_price: 0 }],
+        }),
+      ),
+    );
+    const json = await res.json();
+
     expect(res.status).toBe(400);
-    expect(json.error).toMatch(/indisponible/i);
+    expect(json.error).toMatch(/montant/i);
   });
 
   // TC-07 — shopId non UUID

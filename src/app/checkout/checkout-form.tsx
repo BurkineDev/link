@@ -108,7 +108,7 @@ interface CheckoutFormProps {
 
 export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFormProps) {
   const router = useRouter();
-  const { items, getTotal, clearCart, shopId } = useCart();
+  const { items, getTotal, clearCart, removeItem, shopId } = useCart();
 
   const hasPhysical = items.length > 0;
   const currency: Currency = (items[0]?.currency as Currency) ?? "XOF";
@@ -242,6 +242,24 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
       const data = await res.json();
 
       if (!res.ok) {
+        // Self-heal a stale cart: drop items the server says no longer exist
+        // (deleted / unpublished / moved shops) and let the buyer retry.
+        if (
+          data?.code === "ITEMS_UNAVAILABLE" &&
+          Array.isArray(data.unavailableProductIds)
+        ) {
+          const ids: string[] = data.unavailableProductIds;
+          const removed = items.filter((i) => ids.includes(i.productId));
+          removed.forEach((i) => removeItem(i.productId, i.variantId));
+          toast.error(
+            removed.length > 0
+              ? `Retiré du panier (plus disponible) : ${removed
+                  .map((i) => i.name)
+                  .join(", ")}. Vérifie ta commande puis réessaie.`
+              : (data.error ?? "Certains articles ne sont plus disponibles."),
+          );
+          return;
+        }
         throw new Error(data.error ?? "Une erreur est survenue. Veuillez réessayer.");
       }
 

@@ -158,7 +158,8 @@ export async function POST(request: NextRequest) {
     const { data: products, error: productsError } = (await supabase
       .from("products")
       .select("id, name, price, currency, images, is_published, is_digital")
-      .in("id", productIds)) as {
+      .in("id", productIds)
+      .eq("shop_id", shopId)) as {
       data:
         | Pick<
             ProductRow,
@@ -177,24 +178,39 @@ export async function POST(request: NextRequest) {
 
     const productMap = new Map(products.map((p) => [p.id, p]));
 
+    // Any cart item whose product was deleted, unpublished, or belongs to a
+    // different shop is "unavailable". Report them all at once with a code the
+    // client can act on (drop them from the cart) — never surface a raw UUID.
+    const unavailableProductIds = [
+      ...new Set(
+        items
+          .filter((item) => {
+            const p = productMap.get(item.product_id);
+            return !p || !p.is_published;
+          })
+          .map((item) => item.product_id),
+      ),
+    ];
+
+    if (unavailableProductIds.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Certains articles ne sont plus disponibles. Ils ont été retirés de ton panier — vérifie ta commande puis réessaie.",
+          code: "ITEMS_UNAVAILABLE",
+          unavailableProductIds,
+        },
+        { status: 409 },
+      );
+    }
+
     // -- Build order items -----------------------------------------------------
     let subtotalAmount = 0;
     const orderItems: OrderItem[] = [];
 
     for (const item of items) {
       const product = productMap.get(item.product_id);
-      if (!product) {
-        return NextResponse.json(
-          { error: `Produit introuvable: ${item.product_id}` },
-          { status: 400 },
-        );
-      }
-      if (!product.is_published) {
-        return NextResponse.json(
-          { error: `Produit indisponible: ${product.name}` },
-          { status: 400 },
-        );
-      }
+      if (!product) continue; // unreachable: validated above; keeps types happy
 
       const unitPrice = product.price;
       const subtotal = unitPrice * item.quantity;
@@ -265,6 +281,19 @@ export async function POST(request: NextRequest) {
     }
 
     const totalAmount = Math.max(0, subtotalAmount - discountAmount);
+
+    // Online payment providers reject a zero charge. This usually means every
+    // item is priced at 0 — surface a clear message instead of a cryptic
+    // provider error further down.
+    if (totalAmount <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Le montant à payer est de 0. Vérifie le prix de tes articles avant de continuer.",
+        },
+        { status: 400 },
+      );
+    }
 
     // -- Atomically reserve stock ---------------------------------------------
     const reservePayload = items.map((it) => ({
