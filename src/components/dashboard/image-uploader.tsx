@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,14 +92,40 @@ export function ImageUploader({
       const remaining = maxImages - current;
       const toProcess = files.slice(0, remaining);
 
-      if (toProcess.length === 0) return;
+      if (toProcess.length === 0) {
+        toast.error(`Limite de ${maxImages} images atteinte.`);
+        return;
+      }
+
+      if (files.length > remaining) {
+        toast.error(
+          `Seules ${remaining} image(s) supplémentaires sont possibles (max ${maxImages}).`,
+        );
+      }
 
       const accepted: File[] = [];
+      const rejected: string[] = [];
       for (const file of toProcess) {
-        if (!file.type.startsWith("image/")) continue;
-        if (file.size > maxSizeMB * 1024 * 1024) continue;
+        if (!file.type.startsWith("image/")) {
+          rejected.push(`${file.name} : format non supporté`);
+          continue;
+        }
+        if (file.size > maxSizeMB * 1024 * 1024) {
+          rejected.push(`${file.name} : dépasse ${maxSizeMB} Mo`);
+          continue;
+        }
         accepted.push(file);
       }
+
+      if (rejected.length > 0) {
+        toast.error(
+          rejected.length === 1
+            ? rejected[0]
+            : `${rejected.length} fichier(s) ignoré(s) (format ou taille).`,
+        );
+      }
+
+      if (accepted.length === 0) return;
 
       const newSlots: ImageSlot[] = accepted.map((_, i) => ({
         id: `uploading-${Date.now()}-${i}`,
@@ -121,6 +148,16 @@ export function ImageUploader({
       const results = await Promise.all(
         compressed.map((file) => uploadFile(file))
       );
+
+      const failures = results.filter((r) => !r.url);
+      if (failures.length > 0) {
+        const detail = failures.find((r) => r.error)?.error;
+        toast.error(
+          failures.length === 1
+            ? `Échec de l'upload de l'image${detail ? ` : ${detail}` : "."}`
+            : `Échec de l'upload de ${failures.length} images${detail ? ` : ${detail}` : "."}`,
+        );
+      }
 
       setSlots((prev) => {
         const next = [...prev];
