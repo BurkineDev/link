@@ -368,6 +368,58 @@ export function resolveBioTheme(shop: BioThemeSource): BioPalette {
 }
 
 /**
+ * Fill colour for a primary action sitting **on a surface card** (add to cart,
+ * buy now) rather than on the page background.
+ *
+ * The theme's accent is picked for contrast against the page background, so it
+ * can vanish on the card — pale pink on white, for instance. This walks the
+ * candidates in order of brand fidelity and falls back to plain ink, which
+ * always reads.
+ */
+export function primaryActionColor(palette: BioPalette): string {
+  for (const candidate of [palette.backgroundSolid, palette.accent]) {
+    if (hexToRgb(candidate) && contrastRatio(candidate, palette.surface) >= 3) {
+      return withReadableLabel(candidate);
+    }
+  }
+  return readableTextOn(palette.surface);
+}
+
+/** AA threshold for the 16px semibold label sitting on a button. */
+const MIN_LABEL_CONTRAST = 4.5;
+
+/**
+ * Nudges a fill darker or lighter until its best ink clears AA.
+ *
+ * Mid-tone brand colours land just under the threshold — indigo #6366F1
+ * carries white at 4.47:1 — and the seller's hue is worth keeping, so shift
+ * the fill a few percent rather than discarding it for plain ink.
+ */
+function withReadableLabel(color: string): string {
+  let current = color;
+
+  for (let step = 0; step < 12; step += 1) {
+    const ink = readableTextOn(current);
+    if (contrastRatio(current, ink) >= MIN_LABEL_CONTRAST) return current;
+    // Move away from the ink that is currently winning.
+    current = shift(current, ink === LIGHT_INK ? 0 : 255, 0.08);
+  }
+
+  return readableTextOn(color) === LIGHT_INK ? DARK_INK : LIGHT_INK;
+}
+
+/** Moves every channel `ratio` of the way towards `target` (0 or 255). */
+function shift(hex: string, target: number, ratio: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const channel = (v: number) =>
+    Math.round(v + (target - v) * ratio)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`.toUpperCase();
+}
+
+/**
  * CSS custom properties consumed by every bio-page component. Set once on the
  * page root so children stay plain Tailwind + `var(--bio-*)`.
  */

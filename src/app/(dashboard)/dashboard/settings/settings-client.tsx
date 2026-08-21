@@ -8,21 +8,16 @@ import type { ShopRow, ShopLinkRow } from "@/lib/types/database";
 import type {
   ShopFontFamily,
   ShopBorderRadius,
-  ShopCardStyle,
   ShopCtaShape,
-  ShopCtaStyle,
   ShopCheckoutMode,
 } from "@/lib/types/database";
 import {
   CURRENCIES,
   CURRENCY_META,
-  TEMPLATES,
   SHOP_THEME_COLORS,
   SHOP_FONTS,
   SHOP_BORDER_RADIUS,
-  SHOP_CARD_STYLES,
   SHOP_CTA_SHAPES,
-  SHOP_CTA_STYLES,
   FONT_FAMILY_CLASS,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -68,7 +63,6 @@ import {
   Sparkles,
   Type,
   Square,
-  Layers,
   MousePointerClick,
   Palette,
   RotateCcw,
@@ -310,23 +304,6 @@ function OptionGrid<T extends string>({
   );
 }
 
-// ---------------------------------------------------------------------------
-// TemplateThumb — color-reactive mini storefront mockup (no static images)
-// ---------------------------------------------------------------------------
-
-type TemplateLayout = "minimal" | "boutique" | "market" | "artisan";
-
-function MockTile({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "rounded-[3px] bg-white shadow-sm ring-1 ring-black/[0.04]",
-        className,
-      )}
-    />
-  );
-}
-
 /**
  * Miniature of a bio-page theme: background, avatar, two buttons. Uses the
  * live palette resolver so the 'Mes couleurs' card previews the seller's own
@@ -375,91 +352,6 @@ function BioThemeSwatch({
   );
 }
 
-function TemplateThumb({
-  layout,
-  primary,
-  accent,
-}: {
-  layout: TemplateLayout;
-  primary: string;
-  accent: string;
-}) {
-  const Bar = (
-    <div
-      className="flex items-center gap-1 px-2 py-1.5"
-      style={{ backgroundColor: primary }}
-    >
-      <span className="size-1.5 rounded-full bg-white/90" />
-      <span className="h-1 w-7 rounded-full bg-white/60" />
-      <span
-        className="ml-auto h-2 w-4 rounded-full"
-        style={{ backgroundColor: accent }}
-      />
-    </div>
-  );
-
-  return (
-    <div className="flex h-full w-full flex-col bg-[#f4f4f5]">
-      {layout === "boutique" || layout === "artisan" ? (
-        <div
-          className="flex h-1/3 flex-col items-center justify-center gap-1"
-          style={{ backgroundColor: primary }}
-        >
-          {layout === "artisan" && (
-            <span className="size-3 rounded-full bg-white/90" />
-          )}
-          <span className="h-1.5 w-12 rounded-full bg-white/70" />
-          <span
-            className="h-2 w-8 rounded-full"
-            style={{ backgroundColor: accent }}
-          />
-        </div>
-      ) : (
-        Bar
-      )}
-
-      <div className="flex-1 p-2">
-        {layout === "market" ? (
-          <div className="flex flex-col gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <MockTile className="size-5 shrink-0" />
-                <div className="flex-1 space-y-1">
-                  <span className="block h-1 w-3/4 rounded-full bg-black/15" />
-                  <span
-                    className="block h-1 w-1/3 rounded-full"
-                    style={{ backgroundColor: accent }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : layout === "boutique" ? (
-          <div className="grid grid-cols-2 gap-1.5">
-            <MockTile className="h-10" />
-            <MockTile className="h-7" />
-            <MockTile className="h-7" />
-            <MockTile className="h-10" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            {[0, 1, 2, 3].map((i) => (
-              <MockTile key={i} className="h-8" />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="px-2 pb-2">
-        <div
-          className="h-2.5 w-full rounded-full"
-          style={{ backgroundColor: accent }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main SettingsClient
 // ---------------------------------------------------------------------------
@@ -477,16 +369,13 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   const [bannerUrl, setBannerUrl] = useState(shop.banner_url);
 
   // ---- Appearance ----
-  const [templateId, setTemplateId] = useState(shop.template_id ?? "minimal");
   const [themeColor, setThemeColor] = useState(shop.theme_color);
   const [accentColor, setAccentColor] = useState(shop.accent_color);
   const [fontFamily, setFontFamily] = useState<ShopFontFamily>(shop.font_family);
   const [borderRadius, setBorderRadius] = useState<ShopBorderRadius>(
     shop.border_radius,
   );
-  const [cardStyle, setCardStyle] = useState<ShopCardStyle>(shop.card_style);
   const [ctaShape, setCtaShape] = useState<ShopCtaShape>(shop.cta_shape);
-  const [ctaStyle, setCtaStyle] = useState<ShopCtaStyle>(shop.cta_style);
   const [bioTheme, setBioTheme] = useState<BioThemeId>(shop.bio_theme);
 
   // ---- Contact ----
@@ -550,14 +439,11 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
     const { error } = await supabase
       .from("shops")
       .update({
-        template_id: templateId,
         theme_color: themeColor,
         accent_color: accentColor,
         font_family: fontFamily,
         border_radius: borderRadius,
-        card_style: cardStyle,
         cta_shape: ctaShape,
-        cta_style: ctaStyle,
         bio_theme: bioTheme,
         updated_at: new Date().toISOString(),
       })
@@ -573,14 +459,11 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   };
 
   const resetAppearance = () => {
-    setTemplateId(shop.template_id ?? "minimal");
     setThemeColor(shop.theme_color);
     setAccentColor(shop.accent_color);
     setFontFamily(shop.font_family);
     setBorderRadius(shop.border_radius);
-    setCardStyle(shop.card_style);
     setCtaShape(shop.cta_shape);
-    setCtaStyle(shop.cta_style);
     setBioTheme(shop.bio_theme);
   };
 
@@ -675,14 +558,11 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   // Detect unsaved appearance changes
   const appearanceDirty =
-    templateId !== (shop.template_id ?? "minimal") ||
     themeColor !== shop.theme_color ||
     accentColor !== shop.accent_color ||
     fontFamily !== shop.font_family ||
     borderRadius !== shop.border_radius ||
-    cardStyle !== shop.card_style ||
     ctaShape !== shop.cta_shape ||
-    ctaStyle !== shop.cta_style ||
     bioTheme !== shop.bio_theme;
 
   const contactDirty =
@@ -914,55 +794,6 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </div>
               </section>
 
-              <Separator />
-
-              {/* Template */}
-              <section className="space-y-3">
-                <header className="flex items-center gap-2">
-                  <Layers className="size-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold tracking-tight">
-                    Template
-                  </h3>
-                </header>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {TEMPLATES.map((tpl) => {
-                    const selected = templateId === tpl.id;
-                    return (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        onClick={() => setTemplateId(tpl.id)}
-                        aria-pressed={selected}
-                        className={cn(
-                          "group cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-200",
-                          selected
-                            ? "border-foreground ring-2 ring-foreground"
-                            : "border-border hover:border-foreground/40 hover:shadow-sm",
-                        )}
-                      >
-                        <div className="relative aspect-[4/3] overflow-hidden">
-                          <TemplateThumb
-                            layout={tpl.id as TemplateLayout}
-                            primary={themeColor}
-                            accent={accentColor}
-                          />
-                          {selected && (
-                            <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
-                              <Check className="size-3" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-2.5">
-                          <p className="text-xs font-semibold">{tpl.name}</p>
-                          <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                            {tpl.description}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
 
               <Separator />
 
@@ -1073,47 +904,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
               <Separator />
 
-              {/* Style des cartes */}
-              <section className="space-y-3">
-                <header className="flex items-center gap-2">
-                  <Layers className="size-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold tracking-tight">
-                    Style des cartes produits
-                  </h3>
-                </header>
-                <OptionGrid
-                  value={cardStyle}
-                  onChange={setCardStyle}
-                  cols={4}
-                  options={SHOP_CARD_STYLES.map((s) => ({
-                    value: s.value,
-                    label: s.label,
-                    description: s.description,
-                  }))}
-                  renderPreview={(value) => (
-                    <div
-                      className={cn(
-                        "size-10 rounded-md bg-background",
-                        value === "flat" && "",
-                        value === "bordered" &&
-                          "border border-border/60 shadow-sm",
-                        value === "elevated" && "shadow-md",
-                        value === "glass" &&
-                          "border border-white/30 bg-white/40 backdrop-blur",
-                      )}
-                    />
-                  )}
-                />
-              </section>
-
-              <Separator />
-
-              {/* Boutons CTA */}
+              {/* Boutons de liens */}
               <section className="space-y-4">
                 <header className="flex items-center gap-2">
                   <MousePointerClick className="size-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold tracking-tight">
-                    Boutons CTA
+                    Boutons de liens
                   </h3>
                 </header>
                 <div className="space-y-3">
@@ -1137,43 +933,6 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                         )}
                       />
                     )}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <Label className="text-xs">Style</Label>
-                  <OptionGrid
-                    value={ctaStyle}
-                    onChange={setCtaStyle}
-                    cols={3}
-                    options={SHOP_CTA_STYLES.map((s) => ({
-                      value: s.value,
-                      label: s.label,
-                      description: s.description,
-                    }))}
-                    renderPreview={(value) => {
-                      const baseStyle: React.CSSProperties = {
-                        backgroundColor:
-                          value === "filled"
-                            ? themeColor
-                            : value === "soft"
-                              ? `${themeColor}25`
-                              : "transparent",
-                        color:
-                          value === "filled" ? accentColor : themeColor,
-                        border:
-                          value === "outline"
-                            ? `2px solid ${themeColor}`
-                            : "none",
-                      };
-                      return (
-                        <div
-                          className="flex h-7 w-16 items-center justify-center rounded-xl text-[10px] font-bold"
-                          style={baseStyle}
-                        >
-                          CTA
-                        </div>
-                      );
-                    }}
                   />
                 </div>
               </section>

@@ -2,6 +2,12 @@
 
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
+import {
+  primaryActionColor,
+  readableTextOn,
+  withAlpha,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import type { ProductVariantRow } from "@/lib/types/database";
 import type { Currency } from "@/lib/types/database";
 
@@ -11,6 +17,8 @@ interface VariantSelectorProps {
   onSelect: (variant: ProductVariantRow) => void;
   basePrice: number;
   currency: Currency;
+  /** Palette of the surface this selector sits on — it is never on app chrome. */
+  palette: BioPalette;
   className?: string;
 }
 
@@ -24,9 +32,14 @@ export function VariantSelector({
   onSelect,
   basePrice,
   currency,
+  palette,
   className,
 }: VariantSelectorProps) {
   if (!variants.length) return null;
+
+  const selectedFill = primaryActionColor(palette);
+  const selectedInk = readableTextOn(selectedFill);
+  const idleBorder = withAlpha(palette.surfaceText, 0.25);
 
   // Detect if variants share a common option axis (e.g. all have a "Taille" option)
   // We group by distinct option.name values across all variants.
@@ -55,10 +68,10 @@ export function VariantSelector({
     <div className={cn("space-y-4", className)}>
       {groups.map((group) => (
         <div key={group.name}>
-          <p className="mb-2 text-sm font-medium text-foreground">
+          <p className="mb-2 text-sm font-medium">
             {group.name}
             {selectedVariantId && (
-              <span className="ml-2 font-normal text-muted-foreground">
+              <span className="ml-2 font-normal opacity-70">
                 {
                   group.variants
                     .find((v) => v.id === selectedVariantId)
@@ -91,17 +104,17 @@ export function VariantSelector({
                   className={cn(
                     // Base: 44px min height for touch friendliness
                     "relative min-h-11 min-w-11 rounded-lg border px-3 py-2 text-sm font-medium",
-                    "transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    isSelected
-                      ? "border-transparent text-white shadow-sm"
-                      : "border-border bg-background text-foreground hover:border-foreground/40 hover:bg-muted",
-                    isOos &&
-                      "cursor-not-allowed opacity-40 line-through decoration-muted-foreground"
+                    "transition-all duration-150 focus-visible:outline-none focus-visible:ring-2",
+                    isSelected ? "shadow-sm" : "hover:opacity-80",
+                    isOos && "cursor-not-allowed opacity-40 line-through"
                   )}
                   style={
-                    isSelected
-                      ? { backgroundColor: "var(--shop-primary, #6366f1)" }
-                      : undefined
+                    {
+                      backgroundColor: isSelected ? selectedFill : "transparent",
+                      color: isSelected ? selectedInk : palette.surfaceText,
+                      borderColor: isSelected ? selectedFill : idleBorder,
+                      "--tw-ring-color": selectedFill,
+                    } as React.CSSProperties
                   }
                 >
                   {label}
@@ -136,9 +149,9 @@ export function VariantSelector({
 
       {/* Show updated price if the selected variant overrides it */}
       {priceChanged && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm opacity-70">
           Prix pour cette variante :{" "}
-          <span className="font-semibold text-foreground">
+          <span className="font-semibold">
             {formatPrice(selectedPrice, currency)}
           </span>
         </p>

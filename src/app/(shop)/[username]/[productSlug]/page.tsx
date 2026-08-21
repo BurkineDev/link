@@ -5,9 +5,10 @@
  * then delegates rendering to <ProductPage> (client component).
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveBioTheme } from "@/lib/bio-themes";
 import { ProductPage } from "./product-page";
 
 interface Props {
@@ -69,6 +70,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Same browser-chrome tint as the bio page, so tapping a product doesn't
+ * flash a different colour at the top of the screen.
+ */
+export async function generateViewport({ params }: Props): Promise<Viewport> {
+  const { username } = await params;
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("shops")
+    .select("bio_theme, theme_color, accent_color")
+    .eq("slug", username)
+    .eq("is_published", true)
+    .single();
+
+  if (!data) return {};
+  return { themeColor: resolveBioTheme(data).backgroundSolid };
+}
+
 export default async function Page({ params }: Props) {
   const { username, productSlug } = await params;
   const supabase = await createClient();
@@ -112,12 +132,17 @@ export default async function Page({ params }: Props) {
     .limit(4)
     .order("created_at", { ascending: false });
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const shopUrl = `${appUrl}/${shop.slug}`;
+
   return (
     <ProductPage
       shop={shop}
       product={product}
       variants={variants ?? []}
       related={related ?? []}
+      pageUrl={`${shopUrl}/${product.slug}`}
+      shopUrl={shopUrl}
     />
   );
 }

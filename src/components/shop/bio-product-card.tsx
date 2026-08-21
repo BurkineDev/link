@@ -9,7 +9,11 @@ import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
-import { readableTextOn, type BioPalette } from "@/lib/bio-themes";
+import {
+  primaryActionColor,
+  readableTextOn,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import type { Currency, ProductRow } from "@/lib/types/database";
 
 interface BioProductCardProps {
@@ -37,6 +41,10 @@ export function BioProductCard({
   pageUrl,
 }: BioProductCardProps) {
   const addItem = useCart((s) => s.addItem);
+
+  // The theme accent is tuned against the page background; on the card it can
+  // wash out, so the add button uses the surface-aware action colour.
+  const actionFill = primaryActionColor(palette);
 
   const primaryImage = product.images?.[0];
   const effectiveCurrency = product.currency ?? currency;
@@ -173,8 +181,8 @@ export function BioProductCard({
               aria-label={`Ajouter ${product.name} au panier`}
               className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform active:scale-95"
               style={{
-                backgroundColor: palette.accent,
-                color: readableTextOn(palette.accent),
+                backgroundColor: actionFill,
+                color: readableTextOn(actionFill),
               }}
             >
               <Plus className="size-5" strokeWidth={2.5} />

@@ -25,73 +25,17 @@ import {
   Loader2,
   Palette,
 } from "lucide-react";
+import {
+  BIO_THEME_LIST,
+  DEFAULT_BIO_THEME,
+  resolveBioTheme,
+  type BioThemeId,
+} from "@/lib/bio-themes";
+import { DEFAULT_THEME_COLOR, DEFAULT_ACCENT_COLOR } from "@/lib/constants";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────
-type Template = {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    primaryColor: string;
-    secondaryColor: string;
-    font: string;
-    layout: string;
-    heroStyle: string;
-  };
-};
-
-const TEMPLATES: Template[] = [
-  {
-    id: "boutique",
-    name: "Vibrant",
-    description: "Coloré et énergique, parfait pour la mode",
-    config: {
-      primaryColor: "#FF6B35",
-      secondaryColor: "#FFD700",
-      font: "Inter",
-      layout: "grid",
-      heroStyle: "fullscreen",
-    },
-  },
-  {
-    id: "minimal",
-    name: "Minimaliste",
-    description: "Épuré et élégant pour un look premium",
-    config: {
-      primaryColor: "#1A1A2E",
-      secondaryColor: "#E94560",
-      font: "Playfair Display",
-      layout: "masonry",
-      heroStyle: "split",
-    },
-  },
-  {
-    id: "market",
-    name: "Market",
-    description: "Style marché africain, chaleureux et accessible",
-    config: {
-      primaryColor: "#2D6A4F",
-      secondaryColor: "#74C69D",
-      font: "Nunito",
-      layout: "list",
-      heroStyle: "banner",
-    },
-  },
-  {
-    id: "artisan",
-    name: "Artisan",
-    description: "Aspect fait-main et chaleureux pour les créateurs",
-    config: {
-      primaryColor: "#9A3412",
-      secondaryColor: "#FDBA74",
-      font: "Lora",
-      layout: "grid",
-      heroStyle: "centered",
-    },
-  },
-];
 
 const CURRENCIES = [
   { value: "XOF", label: "FCFA (Afrique de l'Ouest)" },
@@ -154,7 +98,7 @@ export default function OnboardingPage() {
   const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template>(TEMPLATES[0]);
+  const [bioTheme, setBioTheme] = useState<BioThemeId>(DEFAULT_BIO_THEME);
 
   // Step 1 data
   const [step1Data, setStep1Data] = useState<Step1Values | null>(null);
@@ -249,13 +193,6 @@ export default function OnboardingPage() {
 
       if (profileError) throw profileError;
 
-      // Look up matching template
-      const { data: templateRecord } = await supabase
-        .from("templates")
-        .select("id")
-        .eq("id", selectedTemplate.id)
-        .maybeSingle();
-
       const { error: shopError } = await supabase
         .from("shops")
         .insert({
@@ -264,8 +201,10 @@ export default function OnboardingPage() {
           slug: step2Data.shopSlug,
           description: step2Data.description ?? null,
           currency: step2Data.currency as "XOF" | "XAF" | "GHS" | "NGN" | "KES" | "MAD" | "USD",
-          template_id: templateRecord?.id ?? null,
-          theme_color: selectedTemplate.config.primaryColor,
+          template_id: null,
+          bio_theme: bioTheme,
+          theme_color: DEFAULT_THEME_COLOR,
+          accent_color: DEFAULT_ACCENT_COLOR,
           is_published: false,
           logo_url: null,
           banner_url: null,
@@ -599,7 +538,7 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* ─── STEP 3: Template ─── */}
+          {/* ─── STEP 3: Thème de la page bio ─── */}
           {step === 3 && (
             <motion.div
               key="step3"
@@ -615,49 +554,72 @@ export default function OnboardingPage() {
                   </div>
                   <h1 className="text-2xl font-bold">Choisis ton thème</h1>
                   <p className="text-muted-foreground">
-                    Tu pourras le modifier plus tard
+                    C&apos;est ce que verront tes clients depuis ta bio. Tu
+                    pourras le changer quand tu veux.
                   </p>
                 </div>
 
-                <div className="grid gap-4">
-                  {TEMPLATES.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => setSelectedTemplate(template)}
-                      className={cn(
-                        "relative rounded-xl border-2 p-4 text-left transition-all",
-                        selectedTemplate.id === template.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      )}
-                    >
-                      {/* Color preview */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1">
-                          <div
-                            className="h-8 w-8 rounded-full"
-                            style={{ backgroundColor: template.config.primaryColor }}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {BIO_THEME_LIST.filter((t) => t.id !== "brand").map((theme) => {
+                    const palette = resolveBioTheme({
+                      bio_theme: theme.id,
+                      theme_color: DEFAULT_THEME_COLOR,
+                      accent_color: DEFAULT_ACCENT_COLOR,
+                    });
+                    const selected = bioTheme === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setBioTheme(theme.id)}
+                        aria-pressed={selected}
+                        title={theme.description}
+                        className={cn(
+                          "relative overflow-hidden rounded-xl border-2 text-left transition-all",
+                          selected
+                            ? "border-primary ring-2 ring-primary/30"
+                            : "border-border hover:border-primary/50",
+                        )}
+                      >
+                        {/* Miniature of the page the buyer will land on */}
+                        <div
+                          className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 p-3"
+                          style={{ background: palette.background }}
+                        >
+                          <span
+                            className="size-5 rounded-full"
+                            style={{ backgroundColor: palette.surface }}
                           />
-                          <div
-                            className="h-8 w-8 rounded-full"
-                            style={{ backgroundColor: template.config.secondaryColor }}
+                          <span
+                            className="h-1 w-8 rounded-full"
+                            style={{ backgroundColor: palette.accent }}
+                          />
+                          <span
+                            className="h-3 w-full rounded-full"
+                            style={{
+                              backgroundColor: palette.surface,
+                              border: `1px solid ${palette.border}`,
+                            }}
+                          />
+                          <span
+                            className="h-3 w-full rounded-full"
+                            style={{
+                              backgroundColor: palette.surface,
+                              border: `1px solid ${palette.border}`,
+                            }}
                           />
                         </div>
-                        <div>
-                          <p className="font-semibold">{template.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {template.description}
-                          </p>
-                        </div>
-                        {selectedTemplate.id === template.id && (
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-primary">
-                            <Check className="h-4 w-4 text-primary-foreground" />
+                        <p className="px-2.5 py-2 text-xs font-semibold">
+                          {theme.label}
+                        </p>
+                        {selected && (
+                          <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary">
+                            <Check className="size-3 text-primary-foreground" />
                           </div>
                         )}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-3 pt-2">
