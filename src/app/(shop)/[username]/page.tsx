@@ -5,10 +5,11 @@
  * sets metadata, then delegates rendering to <ShopPage> (client component).
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
+import { resolveBioTheme } from "@/lib/bio-themes";
 import { ShopPage } from "./shop-page";
 
 interface Props {
@@ -63,6 +64,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 // ---------------------------------------------------------------------------
+// Viewport
+// ---------------------------------------------------------------------------
+
+/**
+ * Paints the mobile browser chrome in the seller's own theme, so opening the
+ * page from a TikTok bio feels like entering their space, not a tab.
+ */
+export async function generateViewport({ params }: Props): Promise<Viewport> {
+  const { username } = await params;
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("shops")
+    .select("bio_theme, theme_color, accent_color")
+    .eq("slug", username)
+    .eq("is_published", true)
+    .single();
+
+  const shop = data as Pick<
+    ShopRow,
+    "bio_theme" | "theme_color" | "accent_color"
+  > | null;
+
+  if (!shop) return {};
+  return { themeColor: resolveBioTheme(shop).backgroundSolid };
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -96,7 +125,7 @@ export default async function Page({ params }: Props) {
       .order("position", { ascending: true }),
     supabase
       .from("shop_links")
-      .select("id, label, url, icon, position")
+      .select("id, label, url, icon, thumbnail_url, position")
       .eq("shop_id", shop.id)
       .eq("is_active", true)
       .order("position", { ascending: true }),
@@ -109,8 +138,11 @@ export default async function Page({ params }: Props) {
     label: string;
     url: string;
     icon: string;
+    thumbnail_url: string | null;
     position: number;
   }>;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   return (
     <ShopPage
@@ -118,6 +150,7 @@ export default async function Page({ params }: Props) {
       products={products}
       categories={categories}
       links={links}
+      pageUrl={`${appUrl}/${shop.slug}`}
     />
   );
 }

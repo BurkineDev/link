@@ -6,6 +6,15 @@ const updateSchema = z.object({
   label: z.string().trim().min(1).max(60).optional(),
   url: z.string().trim().min(1).max(500).optional(),
   icon: z.string().trim().min(1).max(30).optional(),
+  thumbnail_url: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === "" || v.startsWith("https://"), "L'image doit être en https://")
+    .transform((v) => (v === "" ? null : v))
+    .nullable()
+    .optional(),
+
   position: z.number().int().min(0).max(100).optional(),
   is_active: z.boolean().optional(),
 });
