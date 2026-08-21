@@ -17,7 +17,9 @@ import {
   Plus,
   Trash2,
   Loader2,
-  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  MousePointerClick,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ImageUploader } from "@/components/dashboard/image-uploader";
 import type { ShopLinkRow } from "@/lib/types/database";
 
 // Map each link kind to a Lucide SVG icon (no emojis — keeps the UI premium).
@@ -82,6 +85,7 @@ export function LinksSection({
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [icon, setIcon] = useState("custom");
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -99,6 +103,7 @@ export function LinksSection({
         label: label.trim(),
         url: url.trim(),
         icon,
+        thumbnail_url: thumbnail,
         position: links.length,
       }),
     });
@@ -112,6 +117,7 @@ export function LinksSection({
     setLabel("");
     setUrl("");
     setIcon("custom");
+    setThumbnail(null);
     toast.success("Lien ajouté.");
     onChanged?.();
   };
@@ -146,6 +152,45 @@ export function LinksSection({
     }
   };
 
+  /**
+   * Reorders a link by one slot. Order is what the visitor sees first, so it
+   * has to be editable — and the two swapped rows are persisted together so
+   * the list never ends up with two links claiming the same position.
+   */
+  const move = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= links.length) return;
+
+    const reordered = [...links];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved!);
+
+    const withPositions = reordered.map((l, i) => ({ ...l, position: i }));
+    const previous = links;
+    setLinks(withPositions);
+
+    const changed = withPositions.filter(
+      (l, i) => previous[i]?.id !== l.id || previous[i]?.position !== l.position,
+    );
+
+    const results = await Promise.all(
+      changed.map((l) =>
+        fetch(`/api/shop-links/${l.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position: l.position }),
+        }),
+      ),
+    );
+
+    if (results.some((r) => !r.ok)) {
+      toast.error("Réordonnancement échoué.");
+      setLinks(previous);
+      return;
+    }
+    onChanged?.();
+  };
+
   const activeCount = links.filter((l) => l.is_active).length;
 
   return (
@@ -155,7 +200,7 @@ export function LinksSection({
         <div className="mb-4">
           <h2 className="text-sm font-semibold">Ajouter un lien</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Affichés en haut de ta boutique, façon Linktree.
+            Ce sont les boutons de ta page bio, dans l&apos;onglet « Liens ».
           </p>
         </div>
 
@@ -187,6 +232,19 @@ export function LinksSection({
               maxLength={60}
             />
           </div>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          <Label className="text-xs">Vignette (optionnelle)</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Une image carrée rend le bouton beaucoup plus cliquable.
+          </p>
+          <ImageUploader
+            shopId={shopId}
+            value={thumbnail ? [{ url: thumbnail, position: 0 }] : []}
+            onChange={(images) => setThumbnail(images[0]?.url ?? null)}
+            maxImages={1}
+          />
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -224,21 +282,61 @@ export function LinksSection({
             {links.length} lien{links.length > 1 ? "s" : ""} · {activeCount}{" "}
             actif{activeCount > 1 ? "s" : ""}
           </p>
-          {links.map((link) => (
+          {links.map((link, index) => (
             <div
               key={link.id}
               className={cnRow(link.is_active)}
             >
-              <GripVertical className="size-4 shrink-0 text-muted-foreground/40" />
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <LinkIcon name={link.icon} className="size-4" />
+              <div className="flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  onClick={() => move(index, -1)}
+                  disabled={index === 0}
+                  aria-label={`Monter ${link.label}`}
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(index, 1)}
+                  disabled={index === links.length - 1}
+                  aria-label={`Descendre ${link.label}`}
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
               </div>
+
+              {link.thumbnail_url ? (
+                // Seller-supplied URL — kept as a plain <img>, like every other
+                // remote thumbnail in the dashboard.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={link.thumbnail_url}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="size-9 shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <LinkIcon name={link.icon} className="size-4" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{link.label}</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {link.url}
                 </p>
               </div>
+              <span
+                className="hidden shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex"
+                title="Clics sur ce lien"
+              >
+                <MousePointerClick className="size-3" />
+                {link.click_count}
+              </span>
               <div className="flex shrink-0 items-center gap-1">
                 <Switch
                   checked={link.is_active}

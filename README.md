@@ -31,6 +31,27 @@ If the Upstash variables are absent (e.g. local dev) only the in-memory layer
 applies, so **production must set them** for the distributed limits and budget
 cap to take effect.
 
+## La page bio (`/{slug}`)
+
+The public page a seller pastes in their TikTok / Instagram bio is a centred
+link-in-bio page with a **Liens / Boutique** switch — link buttons on one side,
+the product catalogue on the other. `/{slug}#boutique` deep-links the shop tab.
+
+Its whole look comes from `shops.bio_theme`, one of the presets in
+`src/lib/bio-themes.ts` (`classic`, `noir`, `lagoon`, `sunset`, `sahel`,
+`kente`, `mint`, `lavender`, `midnight`, or `brand` — which derives the palette
+from the shop's own `theme_color` / `accent_color`). Sellers pick it under
+**Réglages → Apparence**, next to a live preview.
+
+Every palette is contrast-checked in `src/__tests__/bio-themes.test.ts`: body
+text clears 3:1 on its background and button text clears 4.5:1 on its surface,
+including the seller-derived `brand` theme.
+
+Link buttons support a square `thumbnail_url` and count taps through the
+public `POST /api/shop-links/{id}/click` endpoint, which is backed by the
+`track_shop_link_click()` SECURITY DEFINER function (migration 018) — visitors
+can increment a counter without any UPDATE policy on `shop_links`.
+
 Stripe Checkout redirects back to `/checkout/success?session_id=...`. Configure
 the Stripe webhook URL as `/api/webhooks/stripe` and subscribe to
 `checkout.session.completed` and `checkout.session.expired`.

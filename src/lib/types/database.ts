@@ -9,6 +9,8 @@
 // JSON / JSONB helpers
 // ---------------------------------------------------------------------------
 
+import type { BioThemeId } from "@/lib/bio-themes";
+
 export type Json =
   | string
   | number
@@ -211,6 +213,7 @@ export type ShopRow = {
   card_style: ShopCardStyle;
   cta_shape: ShopCtaShape;
   cta_style: ShopCtaStyle;
+  bio_theme: BioThemeId;
   currency: Currency;
   contact_email: string | null;
   contact_phone: string | null;
@@ -256,13 +259,21 @@ export type ShopLinkRow = {
   label: string;
   url: string;
   icon: string;
+  thumbnail_url: string | null;
+  click_count: number;
   position: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 };
 
-export type ShopLinkInsert = Omit<ShopLinkRow, "id" | "created_at" | "updated_at">;
+export type ShopLinkInsert = Omit<
+  ShopLinkRow,
+  "id" | "created_at" | "updated_at" | "thumbnail_url" | "click_count"
+> & {
+  thumbnail_url?: string | null;
+  click_count?: number;
+};
 export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
 
 export type PromoCodeRow = {
@@ -406,6 +417,7 @@ export type ShopInsert = Omit<
   | "card_style"
   | "cta_shape"
   | "cta_style"
+  | "bio_theme"
   | "checkout_mode"
   | "featured_until"
 > & {
@@ -418,6 +430,7 @@ export type ShopInsert = Omit<
   card_style?: ShopCardStyle;
   cta_shape?: ShopCtaShape;
   cta_style?: ShopCtaStyle;
+  bio_theme?: BioThemeId;
   checkout_mode?: ShopCheckoutMode;
   featured_until?: string | null;
 };
@@ -532,6 +545,10 @@ export interface Database {
       redeem_promo_code: {
         Args: { p_shop_id: string; p_code: string; p_order_total: number };
         Returns: Json;
+      };
+      track_shop_link_click: {
+        Args: { p_link_id: string };
+        Returns: void;
       };
     };
     Enums: {
