@@ -22,7 +22,7 @@ export default async function ProfilePage() {
 
   const { data: subscription } = await supabase
     .from("creator_subscriptions")
-    .select("plan, status, current_period_end, cancel_at_period_end")
+    .select("plan, status, provider, current_period_end, cancel_at_period_end")
     .eq("user_id", user.id)
     .maybeSingle();
 

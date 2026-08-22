@@ -20,7 +20,7 @@ export default async function PricingPage() {
   if (user) {
     const { data: sub } = await supabase
       .from("creator_subscriptions")
-      .select("plan, status")
+      .select("plan, status, provider, current_period_end")
       .eq("user_id", user.id)
       .maybeSingle();
     currentPlan = getEffectivePlan(sub);

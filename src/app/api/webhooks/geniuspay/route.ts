@@ -62,6 +62,16 @@ export async function POST(request: NextRequest) {
   }
 
   const data = payload.data;
+
+  // ── Abonnement vendeur ────────────────────────────────────────────────
+  // Deux flux arrivent sur cette même URL : les commandes d'acheteurs et les
+  // périodes d'abonnement payées d'avance par les vendeurs. Sans cet
+  // aiguillage, un paiement d'abonnement irait chercher une commande qui
+  // n'existe pas, repartirait en 200, et le vendeur aurait payé pour rien.
+  if (data.metadata?.kind === "subscription") {
+    return handleSubscriptionEvent(data);
+  }
+
   const orderId =
     typeof data.metadata?.orderId === "string"
       ? data.metadata.orderId
@@ -193,5 +203,59 @@ export async function POST(request: NextRequest) {
     })
     .eq("id", order.id);
 
+  return new NextResponse(null, { status: 200 });
+}
+
+// ---------------------------------------------------------------------------
+// Abonnements payés d'avance
+// ---------------------------------------------------------------------------
+
+/**
+ * Crédite (ou non) la période achetée.
+ *
+ * Tout le travail est fait par `apply_subscription_payment`, en base : c'est
+ * la seule façon d'être à la fois atomique et idempotent quand Genius Pay
+ * livre deux fois le même événement, ce qu'un prestataire de paiement fait
+ * régulièrement et légitimement.
+ *
+ * Un échec, une annulation ou une expiration ne fait que marquer la ligne :
+ * il n'y a rien à rendre, puisque rien n'a été crédité tant que le paiement
+ * n'était pas confirmé.
+ */
+async function handleSubscriptionEvent(data: WebhookData) {
+  const reference = data.reference;
+  if (!reference) return new NextResponse(null, { status: 200 });
+
+  const status = mapStatusToPaymentStatus(data.status ?? "pending");
+  const supabase = getAdminClient();
+
+  if (status !== "paid") {
+    if (status === "failed") {
+      const { error } = await supabase
+        .from("subscription_payments")
+        .update({ status })
+        .eq("reference", reference)
+        .eq("status", "pending");
+      if (error) {
+        console.error("[geniuspay-webhook] subscription status update", error);
+        return new NextResponse(null, { status: 500 });
+      }
+    }
+    return new NextResponse(null, { status: 200 });
+  }
+
+  const { data: applied, error } = await supabase.rpc(
+    "apply_subscription_payment",
+    { p_reference: reference },
+  );
+
+  if (error) {
+    // 500 : Genius Pay réessaiera, et l'opération est idempotente — une
+    // nouvelle tentative ne peut pas créditer deux périodes.
+    console.error("[geniuspay-webhook] apply_subscription_payment", error);
+    return new NextResponse(null, { status: 500 });
+  }
+
+  console.info("[geniuspay-webhook] subscription", reference, applied);
   return new NextResponse(null, { status: 200 });
 }

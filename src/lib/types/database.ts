@@ -166,11 +166,15 @@ export type ProfileRow = {
   created_at: string;
 };
 
+/** Qui encaisse l'abonnement — décide de la règle d'expiration. */
+export type SubscriptionProvider = "stripe" | "geniuspay";
+
 export type CreatorSubscriptionRow = {
   id: string;
   user_id: string;
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
+  provider: SubscriptionProvider;
   billing_interval: BillingInterval | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
@@ -182,9 +186,45 @@ export type CreatorSubscriptionRow = {
 
 export type CreatorSubscriptionInsert = Omit<
   CreatorSubscriptionRow,
-  "id" | "created_at" | "updated_at" | "billing_interval"
+  "id" | "created_at" | "updated_at" | "billing_interval" | "provider"
 > & {
   billing_interval?: BillingInterval | null;
+  provider?: SubscriptionProvider;
+};
+
+/** Un encaissement d'abonnement = une période achetée d'avance. */
+export type SubscriptionPaymentRow = {
+  id: string;
+  user_id: string;
+  plan: SubscriptionPlan;
+  months: number;
+  amount: number;
+  currency: string;
+  provider: SubscriptionProvider;
+  reference: string;
+  status: PaymentStatus;
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubscriptionPaymentInsert = Omit<
+  SubscriptionPaymentRow,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "currency"
+  | "provider"
+  | "status"
+  | "period_start"
+  | "period_end"
+> & {
+  currency?: string;
+  provider?: SubscriptionProvider;
+  status?: PaymentStatus;
+  period_start?: string | null;
+  period_end?: string | null;
 };
 
 export type CreatorSubscriptionUpdate = Partial<
@@ -578,6 +618,11 @@ export interface Database {
         Insert: ShopPageViewRow;
         Update: Partial<ShopPageViewRow>;
       } & NoRelationships;
+      subscription_payments: {
+        Row: SubscriptionPaymentRow;
+        Insert: SubscriptionPaymentInsert;
+        Update: Partial<SubscriptionPaymentRow>;
+      } & NoRelationships;
       promo_codes: {
         Row: PromoCodeRow;
         Insert: PromoCodeInsert;
@@ -618,6 +663,10 @@ export interface Database {
       track_page_block_click: {
         Args: { p_block_id: string };
         Returns: void;
+      };
+      apply_subscription_payment: {
+        Args: { p_reference: string };
+        Returns: Json;
       };
     };
     Enums: {
