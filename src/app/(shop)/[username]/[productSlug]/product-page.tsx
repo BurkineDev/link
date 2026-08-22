@@ -256,6 +256,7 @@ export function ProductPage({
                       alt=""
                       fill
                       sizes="64px"
+                      quality={45}
                       className="object-cover"
                     />
                   </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { MessageCircle, Share2, ShoppingBag, Sparkles } from "lucide-react";
@@ -47,6 +47,24 @@ const readHash = () => window.location.hash;
 /** The hash never reaches the server, so SSR always renders the default tab. */
 const noHashOnServer = () => "";
 
+/**
+ * Counts one page view without ever delaying the page: sendBeacon hands the
+ * request to the network stack, keepalive fetch is the fallback. Analytics
+ * failures are swallowed — same contract as the link-click tracking.
+ */
+function trackPageView(shopId: string) {
+  const endpoint = `/api/shop-views/${shopId}`;
+  try {
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon(endpoint);
+      return;
+    }
+    void fetch(endpoint, { method: "POST", keepalive: true }).catch(() => {});
+  } catch {
+    // Never let analytics break the page.
+  }
+}
+
 export function ShopPage({
   shop,
   products,
@@ -64,6 +82,11 @@ export function ShopPage({
   const [cartOpen, setCartOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const itemCount = useCart((s) => s.getItemCount());
+
+  // One view per page load, after mount so it never competes with rendering.
+  useEffect(() => {
+    trackPageView(shop.id);
+  }, [shop.id]);
 
   // The visitor's own choice wins; until they make one, /{slug}#boutique
   // opens straight on the catalogue.

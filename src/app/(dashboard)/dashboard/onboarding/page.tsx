@@ -31,7 +31,15 @@ import {
   resolveBioTheme,
   type BioThemeId,
 } from "@/lib/bio-themes";
-import { DEFAULT_THEME_COLOR, DEFAULT_ACCENT_COLOR } from "@/lib/constants";
+import {
+  DEFAULT_ACCENT_COLOR,
+  DEFAULT_BORDER_RADIUS,
+  DEFAULT_CTA_SHAPE,
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_THEME_COLOR,
+} from "@/lib/constants";
+import { ThemePreview } from "@/components/dashboard/theme-preview";
+import { usernameSchema } from "@/lib/validations/auth";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useEffect } from "react";
 
@@ -58,10 +66,9 @@ const STEPS = [
 // ─── Schemas ─────────────────────────────────────────────────
 const step1Schema = z.object({
   fullName: z.string().min(2, "Minimum 2 caractères"),
-  username: z.string()
-    .min(3, "Minimum 3 caractères")
-    .max(30, "Maximum 30 caractères")
-    .regex(/^[a-z0-9_]+$/, "Lettres minuscules, chiffres et _ uniquement"),
+  // Same rule as the register page and the DB constraint — the seller must
+  // never see their signup username rejected here.
+  username: usernameSchema,
 });
 
 const step2Schema = z
@@ -92,6 +99,46 @@ const step2Schema = z
 type Step1Values = z.infer<typeof step1Schema>;
 type Step2Values = z.infer<typeof step2Schema>;
 
+// ─── Live preview ────────────────────────────────────────────
+// The page the seller is building, rendered while they type. Same resolver
+// and component as the settings preview, so what they see here is what a
+// visitor gets after publishing.
+function OnboardingPreview({
+  shopName,
+  slug,
+  bioTheme,
+}: {
+  shopName: string;
+  slug: string;
+  bioTheme: BioThemeId;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="relative flex size-2">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+        </span>
+        Aperçu en direct
+      </p>
+      <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
+        <div className="h-[420px]">
+          <ThemePreview
+            shopName={shopName || "Ma boutique"}
+            slug={slug}
+            bioTheme={bioTheme}
+            primaryColor={DEFAULT_THEME_COLOR}
+            accentColor={DEFAULT_ACCENT_COLOR}
+            fontFamily={DEFAULT_FONT_FAMILY}
+            borderRadius={DEFAULT_BORDER_RADIUS}
+            ctaShape={DEFAULT_CTA_SHAPE}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────
 export default function OnboardingPage() {
   const router = useRouter();
@@ -109,6 +156,36 @@ export default function OnboardingPage() {
   const [checkingSlug, setCheckingSlug] = useState(false);
 
   const form1 = useForm<Step1Values>({ resolver: zodResolver(step1Schema) });
+
+  // Prefill step 1 from what the seller already typed at signup (stored in
+  // auth user_metadata by the register page). They just confirm and continue.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled || !user) return;
+      const meta = (user.user_metadata ?? {}) as {
+        full_name?: string;
+        username?: string;
+      };
+      if (meta.full_name && !form1.getValues("fullName")) {
+        form1.setValue("fullName", meta.full_name);
+      }
+      if (
+        meta.username &&
+        !form1.getValues("username") &&
+        usernameSchema.safeParse(meta.username).success
+      ) {
+        form1.setValue("username", meta.username);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const form2 = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
     defaultValues: { currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" },
@@ -331,7 +408,7 @@ export default function OnboardingPage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Lettres minuscules, chiffres et _ uniquement
+                      Lettres minuscules, chiffres, tirets et _
                     </p>
                   </div>
 
@@ -534,6 +611,12 @@ export default function OnboardingPage() {
                     </Button>
                   </div>
                 </form>
+
+                <OnboardingPreview
+                  shopName={watchedShopName ?? ""}
+                  slug={watchedSlug ?? ""}
+                  bioTheme={bioTheme}
+                />
               </Card>
             </motion.div>
           )}
@@ -621,6 +704,12 @@ export default function OnboardingPage() {
                     );
                   })}
                 </div>
+
+                <OnboardingPreview
+                  shopName={step2Data?.shopName ?? ""}
+                  slug={step2Data?.shopSlug ?? ""}
+                  bioTheme={bioTheme}
+                />
 
                 <div className="flex gap-3 pt-2">
                   <Button

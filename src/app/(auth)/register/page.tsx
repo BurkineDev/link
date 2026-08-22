@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { usernameSchema } from "@/lib/validations/auth";
 import { toast } from "sonner";
 import {
   Eye,
@@ -33,14 +34,7 @@ const registerFormSchema = z
       .min(2, "Le nom complet doit contenir au moins 2 caractères.")
       .max(100, "Le nom complet ne peut pas dépasser 100 caractères.")
       .trim(),
-    username: z
-      .string()
-      .min(3, "Le nom d'utilisateur doit contenir au moins 3 caractères.")
-      .max(30, "Le nom d'utilisateur ne peut pas dépasser 30 caractères.")
-      .regex(
-        /^[a-z0-9_-]+$/,
-        "Uniquement des lettres minuscules, chiffres, tirets et underscores.",
-      ),
+    username: usernameSchema,
     email: z
       .string()
       .min(1, "L'email est requis.")
