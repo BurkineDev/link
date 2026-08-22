@@ -241,6 +241,23 @@ export function RegisterForm({
     });
 
     if (error) {
+      // Le service d'e-mail intégré de Supabase plafonne à quelques envois par
+      // heure. Sans ce cas nommé, le vendeur lisait « Inscription échouée,
+      // réessayez » suivi d'un message anglais — et réessayer ne fait
+      // qu'aggraver la limite. Son compte n'est pas en cause : on le lui dit.
+      const rateLimited =
+        error.status === 429 ||
+        /rate limit|too many requests/i.test(error.message);
+
+      if (rateLimited) {
+        toast.error("Trop d'inscriptions en même temps.", {
+          description:
+            "Ce n'est pas ton compte : nos envois d'e-mails sont momentanément saturés. Réessaie dans quelques minutes.",
+          duration: 10_000,
+        });
+        return;
+      }
+
       if (error.message.includes("already registered") || error.message.includes("already exists")) {
         toast.error("Un compte existe déjà avec cet email.", {
           description: (
@@ -264,7 +281,9 @@ export function RegisterForm({
       description: "Vérifiez vos emails pour confirmer votre inscription.",
     });
 
-    router.push("/login?registered=true");
+    // L'adresse voyage pour que l'écran suivant puisse proposer un renvoi
+    // sans la redemander.
+    router.push(`/login?registered=true&email=${encodeURIComponent(data.email)}`);
   }
 
   // ── Google OAuth ───────────────────────────────────────────────────────────
