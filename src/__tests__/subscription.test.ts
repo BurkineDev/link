@@ -7,6 +7,7 @@
 
 import {
   BOOSTS,
+  PLAN_CURRENCY,
   PLAN_LIMITS,
   PLAN_PRICES,
   getBoost,
@@ -249,6 +250,27 @@ describe("barème des périodes payées d'avance", () => {
 
   it("facture en FCFA, la devise du Mobile Money", () => {
     expect(PREPAID_CURRENCY).toBe("XOF");
+  });
+});
+
+describe("boosts en FCFA", () => {
+  it("donne un prix FCFA à chaque boost", () => {
+    Object.values(BOOSTS).forEach((boost) => {
+      expect(boost.amountXof).toBeGreaterThan(0);
+    });
+  });
+
+  it("facture le boost disponible en FCFA, pas en dollars", () => {
+    const featured = BOOSTS.featured_24h;
+    expect(featured.available).toBe(true);
+    expect(featured.amountXof).toBe(1_000);
+    // XOF n'a pas de décimale : le montant est le montant, pas des centimes.
+    expect(Number.isInteger(featured.amountXof)).toBe(true);
+  });
+
+  it("garde un prix carte pour ceux qui en ont une", () => {
+    expect(BOOSTS.featured_24h.amount).toBeGreaterThan(0);
+    expect(BOOSTS.featured_24h.currency).toBe(PLAN_CURRENCY);
   });
 });
 
