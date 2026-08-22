@@ -60,6 +60,26 @@ export const PLAN_PRICES = {
 export const PLAN_CURRENCY = "CAD" as const;
 
 /**
+ * Affiche un tarif de plan tel que la page Tarifs l'écrit : « 4,99 $CA ».
+ *
+ * Les montants sont stockés en cents ; les recopier à la main dans chaque
+ * écran, c'est se garantir qu'un jour l'un d'eux annoncera l'ancien prix.
+ */
+export function formatPlanPrice(
+  cents: number,
+  currency: string = PLAN_CURRENCY,
+): string {
+  const amount = cents / 100;
+  // Pas de décimales inutiles : « 49 $CA », pas « 49,00 $CA ».
+  const digits = Number.isInteger(amount) ? 0 : 2;
+  const value = amount.toLocaleString("fr-FR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return `${value} $${currency === "CAD" ? "CA" : currency}`;
+}
+
+/**
  * Resolves the Stripe Price ID for a paid plan + interval.
  * Falls back to null when the env var is not configured (the checkout API
  * then synthesises a Stripe Price inline using `price_data`).

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -50,6 +50,7 @@ import {
   type SocialNetwork,
 } from "@/lib/onboarding/intentions";
 import { usernameSchema } from "@/lib/validations/auth";
+import { safeNextPath } from "@/lib/validations/next-path";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useEffect } from "react";
 
@@ -153,6 +154,12 @@ function OnboardingPreview({
 // ─── Component ───────────────────────────────────────────────
 export default function OnboardingPage() {
   const router = useRouter();
+  // Le visiteur qui avait choisi un plan avant de s'inscrire y retourne une
+  // fois sa boutique créée, plutôt que d'atterrir sur un tableau de bord qui
+  // ne dit rien de ce qu'il était venu faire. Re-validé ici : le paramètre a
+  // transité par une URL, il n'est pas plus fiable qu'à l'arrivée.
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
   const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -356,7 +363,7 @@ export default function OnboardingPage() {
         .eq("id", user.id);
 
       toast.success("Ta boutique est créée ! 🎉");
-      router.push("/dashboard");
+      router.push(nextPath ?? "/dashboard");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {

@@ -404,10 +404,13 @@ export function ShopPage({
           className="mt-8"
         />
 
-        {/* ── Growth loop: every visitor is a potential seller ── */}
+        {/* ── Growth loop: every visitor is a potential seller ──
+             Le slug voyage : la page d'inscription peut alors nommer la
+             boutique que le visiteur vient de voir, et l'inscription reste
+             rattachable à celle qui l'a amenée. */}
         <div className="mt-10 flex justify-center">
           <Link
-            href="/register"
+            href={`/register?de=${encodeURIComponent(shop.slug)}`}
             className={cn(
               "flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold",
               "transition-transform hover:scale-[1.02] active:scale-95",

@@ -441,7 +441,7 @@ export function ProductPage({
           </Link>
 
           <Link
-            href="/register"
+            href={`/register?de=${encodeURIComponent(shop.slug)}`}
             className="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:scale-[1.02] active:scale-95"
             style={{
               backgroundColor: palette.surface,
