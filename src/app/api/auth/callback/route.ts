@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/validations/next-path";
 
 /**
  * Supabase OAuth / magic-link callback handler.
@@ -20,9 +21,12 @@ export async function GET(request: NextRequest) {
   const errorDescription = searchParams.get("error_description");
 
   // The `next` param lets callers specify where to redirect after auth.
-  // Only allow relative paths to prevent open-redirect attacks.
-  const rawNext = searchParams.get("next") ?? "/dashboard";
-  const next = rawNext.startsWith("/") ? rawNext : "/dashboard";
+  // A `startsWith("/")` check is not enough: `//evil.com` passes it, and
+  // `new URL("//evil.com", origin)` resolves to a third-party host — an open
+  // redirect carrying the trust of our own domain, right after a successful
+  // login. `safeNextPath` rejects that form along with backslashes and
+  // control characters.
+  const next = safeNextPath(searchParams.get("next")) ?? "/dashboard";
 
   // ── Handle provider-level errors (e.g. user cancelled Google OAuth) ─────
   if (error) {

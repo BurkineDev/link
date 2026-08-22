@@ -68,7 +68,6 @@ describe("parseBlockConfig", () => {
   it("refuse une URL javascript: (injection via un bloc)", () => {
     expect(
       parseBlockConfig("LINK", {
-        // eslint-disable-next-line no-script-url
         url: "javascript:alert(1)",
         label: "Piège",
       }),

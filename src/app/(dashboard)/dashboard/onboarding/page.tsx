@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Loader2,
   Palette,
+  Target,
 } from "lucide-react";
 import {
   BIO_THEME_LIST,
@@ -39,7 +40,17 @@ import {
   DEFAULT_THEME_COLOR,
 } from "@/lib/constants";
 import { ThemePreview } from "@/components/dashboard/theme-preview";
+import {
+  INTENTION_META,
+  INTENTIONS,
+  SOCIAL_NETWORK_META,
+  SOCIAL_NETWORKS,
+  seedBlocksForIntentions,
+  type Intention,
+  type SocialNetwork,
+} from "@/lib/onboarding/intentions";
 import { usernameSchema } from "@/lib/validations/auth";
+import { safeNextPath } from "@/lib/validations/next-path";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useEffect } from "react";
 
@@ -59,8 +70,9 @@ const CURRENCIES = [
 const STEPS = [
   { id: 1, label: "Profil", icon: "👤" },
   { id: 2, label: "Boutique", icon: "🏪" },
-  { id: 3, label: "Thème", icon: "🎨" },
-  { id: 4, label: "Terminé", icon: "🎉" },
+  { id: 3, label: "Objectifs", icon: "🎯" },
+  { id: 4, label: "Thème", icon: "🎨" },
+  { id: 5, label: "Terminé", icon: "🎉" },
 ];
 
 // ─── Schemas ─────────────────────────────────────────────────
@@ -142,6 +154,12 @@ function OnboardingPreview({
 // ─── Component ───────────────────────────────────────────────
 export default function OnboardingPage() {
   const router = useRouter();
+  // Le visiteur qui avait choisi un plan avant de s'inscrire y retourne une
+  // fois sa boutique créée, plutôt que d'atterrir sur un tableau de bord qui
+  // ne dit rien de ce qu'il était venu faire. Re-validé ici : le paramètre a
+  // transité par une URL, il n'est pas plus fiable qu'à l'arrivée.
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
   const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -150,6 +168,20 @@ export default function OnboardingPage() {
   // Step 1 data
   const [step1Data, setStep1Data] = useState<Step1Values | null>(null);
   const [step2Data, setStep2Data] = useState<Step2Values | null>(null);
+
+  // Step 3 — ce que le vendeur veut faire, et le minimum pour le lui livrer.
+  const [intentions, setIntentions] = useState<Intention[]>([]);
+  const [handles, setHandles] = useState<Partial<Record<SocialNetwork, string>>>(
+    {},
+  );
+  const [announcement, setAnnouncement] = useState("");
+
+  const toggleIntention = (value: Intention) =>
+    setIntentions((current) =>
+      current.includes(value)
+        ? current.filter((i) => i !== value)
+        : [...current, value],
+    );
 
   // Slug availability
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
@@ -270,7 +302,7 @@ export default function OnboardingPage() {
 
       if (profileError) throw profileError;
 
-      const { error: shopError } = await supabase
+      const { data: createdShop, error: shopError } = await supabase
         .from("shops")
         .insert({
           owner_id: user.id,
@@ -293,9 +325,37 @@ export default function OnboardingPage() {
             step2Data.checkoutMode === "whatsapp"
               ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
               : null,
-        });
+          intentions,
+        })
+        .select("id")
+        .single();
 
       if (shopError) throw shopError;
+
+      // La première page est composée à partir des intentions. Si l'insertion
+      // des blocs échoue, la boutique existe quand même : le vendeur arrive
+      // sur un Page Builder vide plutôt que sur une erreur, et rien n'est
+      // perdu — mieux vaut ça que de rejouer tout l'onboarding.
+      const seeds = seedBlocksForIntentions({
+        intentions,
+        whatsappNumber: step2Data.whatsappNumber,
+        handles,
+        announcement,
+        shopName: step2Data.shopName,
+      });
+
+      if (createdShop && seeds.length > 0) {
+        const { error: blocksError } = await supabase.from("page_blocks").insert(
+          seeds.map((seed) => ({
+            shop_id: (createdShop as { id: string }).id,
+            type: seed.type,
+            position: seed.position,
+            title: seed.title,
+            config: seed.config as never,
+          })),
+        );
+        if (blocksError) console.error("[onboarding] page_blocks", blocksError);
+      }
 
       await supabase
         .from("profiles")
@@ -303,7 +363,7 @@ export default function OnboardingPage() {
         .eq("id", user.id);
 
       toast.success("Ta boutique est créée ! 🎉");
-      router.push("/dashboard");
+      router.push(nextPath ?? "/dashboard");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
@@ -621,10 +681,155 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* ─── STEP 3: Thème de la page bio ─── */}
+
+          {/* ─── STEP 3: Intentions ─── */}
           {step === 3 && (
             <motion.div
               key="step3"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="p-6 space-y-6">
+                <div className="text-center space-y-1">
+                  <div className="flex justify-center">
+                    <Target className="h-10 w-10 text-primary" />
+                  </div>
+                  <h1 className="text-2xl font-bold">
+                    Que veux-tu faire avec Bio-Lien&nbsp;?
+                  </h1>
+                  <p className="text-muted-foreground">
+                    Choisis tout ce qui te correspond. On prépare ta page à
+                    partir de ça — tu pourras tout changer ensuite.
+                  </p>
+                </div>
+
+                <div
+                  role="group"
+                  aria-label="Tes objectifs"
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  {INTENTIONS.map((value) => {
+                    const meta = INTENTION_META[value];
+                    const selected = intentions.includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => toggleIntention(value)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "relative rounded-xl border-2 p-4 text-left transition-all",
+                          selected
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                      >
+                        <span className="text-2xl" aria-hidden>
+                          {meta.emoji}
+                        </span>
+                        <p className="mt-2 font-semibold text-sm">{meta.label}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {meta.description}
+                        </p>
+                        {selected && (
+                          <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-primary">
+                            <Check className="size-3 text-primary-foreground" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Le minimum pour que l'intention produise vraiment un bloc :
+                    demandé ici, une fois, plutôt que laissé à découvrir dans
+                    un éditeur vide. */}
+                {intentions.includes("socials") && (
+                  <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-sm font-semibold">
+                      Tes réseaux — on en fait des boutons
+                    </p>
+                    {SOCIAL_NETWORKS.map((network) => (
+                      <div key={network} className="space-y-1.5">
+                        <Label htmlFor={`handle-${network}`} className="text-xs">
+                          {SOCIAL_NETWORK_META[network].label}
+                        </Label>
+                        <Input
+                          id={`handle-${network}`}
+                          value={handles[network] ?? ""}
+                          onChange={(e) =>
+                            setHandles((current) => ({
+                              ...current,
+                              [network]: e.target.value,
+                            }))
+                          }
+                          placeholder={SOCIAL_NETWORK_META[network].placeholder}
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          className="h-11"
+                        />
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground">
+                      Ton pseudo suffit, ou colle l&apos;adresse complète. Laisse
+                      vide ce que tu n&apos;utilises pas.
+                    </p>
+                  </div>
+                )}
+
+                {intentions.includes("promote") && (
+                  <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-4">
+                    <Label htmlFor="announcement" className="text-sm font-semibold">
+                      Ton annonce du moment
+                    </Label>
+                    <Textarea
+                      id="announcement"
+                      value={announcement}
+                      onChange={(e) => setAnnouncement(e.target.value)}
+                      placeholder="Livraison offerte à Ouaga jusqu'à dimanche 🎉"
+                      rows={2}
+                      maxLength={2000}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Elle s&apos;affichera tout en haut de ta page.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 h-12 gap-2"
+                    onClick={() => setStep(2)}
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Retour
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1 h-12 gap-2"
+                    onClick={() => setStep(4)}
+                    disabled={intentions.length === 0}
+                  >
+                    Continuer <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                {intentions.length === 0 && (
+                  <p className="text-center text-xs text-muted-foreground -mt-2">
+                    Choisis au moins un objectif pour continuer.
+                  </p>
+                )}
+              </Card>
+            </motion.div>
+          )}
+
+          {/* ─── STEP 4: Thème de la page bio ─── */}
+          {step === 4 && (
+            <motion.div
+              key="step4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -716,7 +921,7 @@ export default function OnboardingPage() {
                     type="button"
                     variant="outline"
                     className="flex-1 h-12 gap-2"
-                    onClick={() => setStep(2)}
+                    onClick={() => setStep(3)}
                   >
                     <ArrowLeft className="h-4 w-4" /> Retour
                   </Button>

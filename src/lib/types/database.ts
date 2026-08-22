@@ -11,6 +11,7 @@
 
 import type { BioThemeId } from "@/lib/bio-themes";
 import type { BlockType } from "@/lib/blocks/types";
+import type { Intention } from "@/lib/onboarding/intentions";
 
 export type Json =
   | string
@@ -223,6 +224,7 @@ export type ShopRow = {
   meta_pixel_id: string | null;
   whatsapp_number: string | null;
   checkout_mode: ShopCheckoutMode;
+  intentions: Intention[];
   featured_until: string | null;
   created_at: string;
   updated_at: string;
@@ -286,18 +288,27 @@ export type PageBlockRow = {
   config: Json;
   style: Json;
   visible: boolean;
+  click_count: number;
   created_at: string;
   updated_at: string;
 };
 
 export type PageBlockInsert = Omit<
   PageBlockRow,
-  "id" | "created_at" | "updated_at" | "title" | "config" | "style" | "visible"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "title"
+  | "config"
+  | "style"
+  | "visible"
+  | "click_count"
 > & {
   title?: string | null;
   config?: Json;
   style?: Json;
   visible?: boolean;
+  click_count?: number;
 };
 
 export type PageBlockUpdate = Partial<
@@ -453,6 +464,7 @@ export type ShopInsert = Omit<
   | "cta_style"
   | "bio_theme"
   | "checkout_mode"
+  | "intentions"
   | "featured_until"
 > & {
   tiktok_pixel_id?: string | null;
@@ -466,6 +478,7 @@ export type ShopInsert = Omit<
   cta_style?: ShopCtaStyle;
   bio_theme?: BioThemeId;
   checkout_mode?: ShopCheckoutMode;
+  intentions?: Intention[];
   featured_until?: string | null;
 };
 
@@ -600,6 +613,10 @@ export interface Database {
       };
       reorder_page_blocks: {
         Args: { p_shop_id: string; p_block_ids: string[] };
+        Returns: void;
+      };
+      track_page_block_click: {
+        Args: { p_block_id: string };
         Returns: void;
       };
     };

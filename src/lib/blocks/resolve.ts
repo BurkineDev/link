@@ -23,6 +23,9 @@ import {
   type BlockType,
   type ResolvedBlock,
 } from "@/lib/blocks/types";
+import { LEGACY_LINK_PREFIX } from "@/lib/blocks/ids";
+
+export { LEGACY_LINK_PREFIX, blockClickEndpoint } from "@/lib/blocks/ids";
 
 /** Ligne brute de `page_blocks`, telle qu'elle sort de Supabase. */
 export interface RawBlockRow {
@@ -135,7 +138,7 @@ export function synthesizeLegacyBlocks(args: {
       if (config === null) return;
 
       blocks.push({
-        id: `legacy-link:${link.id}`,
+        id: `${LEGACY_LINK_PREFIX}${link.id}`,
         type: "LINK",
         position: index,
         title: null,

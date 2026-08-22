@@ -67,8 +67,7 @@ function isExternal(url: string): boolean {
  * 3G connections most of these pages are opened on. `keepalive` fetch is the
  * fallback for the few browsers without it.
  */
-function trackClick(linkId: string) {
-  const endpoint = `/api/shop-links/${linkId}/click`;
+function trackClick(endpoint: string) {
   try {
     if (typeof navigator !== "undefined" && navigator.sendBeacon) {
       navigator.sendBeacon(endpoint);
@@ -87,6 +86,12 @@ interface BioLinkButtonProps {
   radiusClass: string;
   /** Absolute page URL — used as the base of the share sheet. */
   pageUrl: string;
+  /**
+   * Where to count the tap. A button rendered from a stored block counts on
+   * `page_blocks`, one synthesised from `shop_links` on its original row —
+   * the caller knows which, this component doesn't have to.
+   */
+  clickEndpoint?: string;
 }
 
 export function BioLinkButton({
@@ -94,7 +99,9 @@ export function BioLinkButton({
   palette,
   radiusClass,
   pageUrl,
+  clickEndpoint,
 }: BioLinkButtonProps) {
+  const endpoint = clickEndpoint ?? `/api/shop-links/${link.id}/click`;
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMounted, setShareMounted] = useState(false);
 
@@ -195,7 +202,7 @@ export function BioLinkButton({
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => trackClick(link.id)}
+          onClick={() => trackClick(endpoint)}
           className={sharedClasses}
           style={focusRing}
         >
@@ -204,7 +211,7 @@ export function BioLinkButton({
       ) : (
         <Link
           href={link.url}
-          onClick={() => trackClick(link.id)}
+          onClick={() => trackClick(endpoint)}
           className={sharedClasses}
           style={focusRing}
         >
