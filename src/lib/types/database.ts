@@ -276,6 +276,12 @@ export type ShopLinkInsert = Omit<
 };
 export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
 
+export type ShopPageViewRow = {
+  shop_id: string;
+  day: string;
+  views: number;
+};
+
 export type PromoCodeRow = {
   id: string;
   shop_id: string;
@@ -521,6 +527,11 @@ export interface Database {
         Insert: ShopLinkInsert;
         Update: ShopLinkUpdate;
       } & NoRelationships;
+      shop_page_views: {
+        Row: ShopPageViewRow;
+        Insert: ShopPageViewRow;
+        Update: Partial<ShopPageViewRow>;
+      } & NoRelationships;
       promo_codes: {
         Row: PromoCodeRow;
         Insert: PromoCodeInsert;
@@ -548,6 +559,10 @@ export interface Database {
       };
       track_shop_link_click: {
         Args: { p_link_id: string };
+        Returns: void;
+      };
+      track_shop_page_view: {
+        Args: { p_shop_id: string };
         Returns: void;
       };
     };

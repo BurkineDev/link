@@ -7,7 +7,14 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
-import { BanknoteIcon, ShoppingBagIcon, TrendingUpIcon, ReceiptIcon } from "lucide-react";
+import {
+  BanknoteIcon,
+  EyeIcon,
+  MousePointerClickIcon,
+  ReceiptIcon,
+  ShoppingBagIcon,
+  TrendingUpIcon,
+} from "lucide-react";
 import type { OrderRow, OrderStatus, Currency } from "@/lib/types/database";
 
 // ---- helpers ----
@@ -199,6 +206,66 @@ function DonutChart({ data, total }: DonutChartProps) {
   );
 }
 
+// ---- Count bar chart (views) ----
+
+/** Same visual language as the revenue chart, for plain counts. */
+function CountBarChart({
+  data,
+  unitLabel,
+}: {
+  data: { date: string; count: number }[];
+  unitLabel: string;
+}) {
+  const maxVal = Math.max(...data.map((d) => d.count), 1);
+  const chartHeight = 120;
+  const barWidth = 100 / data.length;
+  const total = data.reduce((s, d) => s + d.count, 0);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-end justify-between">
+        <span className="text-xs text-muted-foreground">30 derniers jours</span>
+        <span className="text-sm font-semibold">
+          {total.toLocaleString("fr-FR")} {unitLabel}
+        </span>
+      </div>
+      <div
+        className="relative w-full overflow-hidden rounded-lg bg-muted/30"
+        style={{ height: chartHeight + 24 }}
+      >
+        <svg
+          viewBox={`0 0 100 ${chartHeight}`}
+          preserveAspectRatio="none"
+          className="w-full"
+          style={{ height: chartHeight }}
+        >
+          {data.map((d, i) => {
+            const barH = maxVal > 0 ? (d.count / maxVal) * (chartHeight - 8) : 0;
+            const x = i * barWidth + barWidth * 0.1;
+            const w = barWidth * 0.8;
+            const y = chartHeight - barH;
+            return (
+              <rect
+                key={d.date}
+                x={x}
+                y={y}
+                width={w}
+                height={barH}
+                rx="0.6"
+                className="fill-primary"
+              />
+            );
+          })}
+        </svg>
+        <div className="flex justify-between px-1 pt-1 text-[10px] text-muted-foreground">
+          <span>{data[0]?.date.slice(5)}</span>
+          <span>{data[data.length - 1]?.date.slice(5)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- Page ----
 
 export default async function AnalyticsPage() {
@@ -219,12 +286,29 @@ export default async function AnalyticsPage() {
 
   const currency: Currency = shop.currency;
 
-  // Fetch all orders for this shop
-  const { data: allOrders } = await supabase
-    .from("orders")
-    .select("id, total_amount, status, items, created_at")
-    .eq("shop_id", shop.id)
-    .order("created_at", { ascending: false });
+  const days30 = getLast30Days();
+  const cutoffDay = dayKey(days30[0]);
+
+  // Orders + bio-page analytics, fetched together
+  const [ordersResult, viewsResult, linksResult] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id, total_amount, status, items, created_at")
+      .eq("shop_id", shop.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("shop_page_views")
+      .select("day, views")
+      .eq("shop_id", shop.id)
+      .gte("day", cutoffDay)
+      .order("day", { ascending: true }),
+    supabase
+      .from("shop_links")
+      .select("label, click_count, is_active")
+      .eq("shop_id", shop.id)
+      .order("click_count", { ascending: false }),
+  ]);
+  const allOrders = ordersResult.data;
 
   const orders = (allOrders ?? []) as Pick<
     OrderRow,
@@ -232,7 +316,6 @@ export default async function AnalyticsPage() {
   >[];
 
   // --- Revenue last 30 days ---
-  const days30 = getLast30Days();
   const revenueByDay: Record<string, number> = {};
   days30.forEach((d) => (revenueByDay[dayKey(d)] = 0));
 
@@ -294,6 +377,30 @@ export default async function AnalyticsPage() {
 
   const maxProductQty = Math.max(...topProducts.map((p) => p.quantity), 1);
 
+  // --- Bio page: views (30 days) + clicks per link ---
+  const viewsByDay: Record<string, number> = {};
+  days30.forEach((d) => (viewsByDay[dayKey(d)] = 0));
+  (viewsResult.data ?? []).forEach((row) => {
+    if (row.day in viewsByDay) viewsByDay[row.day] = row.views;
+  });
+  const viewsChartData = days30.map((d) => ({
+    date: dayKey(d),
+    count: viewsByDay[dayKey(d)],
+  }));
+  const totalViews30 = viewsChartData.reduce((s, d) => s + d.count, 0);
+
+  const links = linksResult.data ?? [];
+  const totalClicks = links.reduce((s, l) => s + l.click_count, 0);
+  const maxLinkClicks = Math.max(...links.map((l) => l.click_count), 1);
+
+  // Paid orders inside the same 30-day window as the views, so the ratio
+  // compares like with like.
+  const paidOrders30 = validOrders.filter(
+    (o) => new Date(o.created_at) >= days30[0],
+  ).length;
+  const conversion30 =
+    totalViews30 > 0 ? (paidOrders30 / totalViews30) * 100 : null;
+
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
       <div>
@@ -304,7 +411,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* KPI stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {[
           {
             label: "Revenu total",
@@ -325,11 +432,17 @@ export default async function AnalyticsPage() {
             color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
           },
           {
-            label: "Conversion",
-            value: "—",
+            label: "Vues de la page (30 j)",
+            value: totalViews30.toLocaleString("fr-FR"),
+            icon: EyeIcon,
+            color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+          },
+          {
+            label: "Conversion (30 j)",
+            value: conversion30 === null ? "—" : `${conversion30.toFixed(1).replace(".", ",")} %`,
             icon: TrendingUpIcon,
             color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-            sub: "Bientôt disponible",
+            sub: conversion30 === null ? "En attente de visites" : "Commandes payées / vues",
           },
         ].map((stat) => (
           <div
@@ -369,6 +482,70 @@ export default async function AnalyticsPage() {
           </CardHeader>
           <CardContent className="pt-4">
             <RevenueBarChart data={revenueChartData} currency={currency} />
+          </CardContent>
+        </Card>
+
+        {/* Bio page: views */}
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>Vues de la page bio</CardTitle>
+            <CardDescription>
+              Visiteurs qui ouvrent bio-lien.com/&#8203;ta-boutique
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {totalViews30 === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Aucune visite enregistrée pour l&apos;instant. Partage ton lien
+                dans ta bio TikTok ou Instagram !
+              </p>
+            ) : (
+              <CountBarChart data={viewsChartData} unitLabel="vues" />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Bio page: clicks per link */}
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>Clics par lien</CardTitle>
+            <CardDescription>
+              {totalClicks.toLocaleString("fr-FR")} clic{totalClicks > 1 ? "s" : ""} au total, depuis la création des liens
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {links.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Ajoute des liens dans Réglages → Liens pour voir leurs clics ici.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {links.map((link, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                        <MousePointerClickIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{link.label}</span>
+                        {!link.is_active && (
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            inactif
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {link.click_count.toLocaleString("fr-FR")}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${(link.click_count / maxLinkClicks) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
