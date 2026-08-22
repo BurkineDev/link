@@ -23,6 +23,35 @@ create extension if not exists "pg_trgm";           -- trigram similarity for se
 create extension if not exists "unaccent";          -- accent-insensitive search
 
 -- ---------------------------------------------------------------------------
+-- immutable_unaccent()
+-- ---------------------------------------------------------------------------
+-- unaccent() is declared STABLE, not IMMUTABLE, because its result depends on
+-- the `unaccent` dictionary — which an administrator could redefine. Postgres
+-- therefore rejects it inside an index expression (42P17), which is what the
+-- products full-text index below needs.
+--
+-- The documented workaround is a wrapper that names the dictionary explicitly
+-- and promises immutability. The promise holds as long as nobody edits that
+-- dictionary; if it is ever edited, products_fts_idx must be reindexed.
+--
+-- search_path is pinned because Supabase installs extensions in `extensions`,
+-- not `public`, so an unqualified call would resolve differently per caller.
+
+create or replace function public.immutable_unaccent(text)
+returns text
+language sql
+immutable
+strict
+parallel safe
+set search_path = public, extensions, pg_temp
+as $immutable_unaccent$
+  select unaccent('unaccent', $1)
+$immutable_unaccent$;
+
+comment on function public.immutable_unaccent(text) is
+  'IMMUTABLE wrapper around unaccent(), so it can be used in index expressions.';
+
+-- ---------------------------------------------------------------------------
 -- Custom enum types
 -- ---------------------------------------------------------------------------
 
@@ -336,7 +365,11 @@ create index if not exists products_slug_idx        on public.products (shop_id,
 -- Full-text search: name + description, unaccented, with trigram fallback
 create index if not exists products_fts_idx on public.products
   using gin (
-    to_tsvector('french', coalesce(unaccent(name), '') || ' ' || coalesce(unaccent(description), ''))
+    to_tsvector(
+      'french',
+      coalesce(public.immutable_unaccent(name), '') || ' ' ||
+      coalesce(public.immutable_unaccent(description), '')
+    )
   );
 
 create index if not exists products_name_trgm_idx on public.products
