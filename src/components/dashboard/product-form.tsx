@@ -86,6 +86,8 @@ type Category = Pick<Row<"categories">, "id" | "name">;
 
 interface ProductFormProps {
   shopId: string;
+  /** Pseudo de la boutique — l'adresse montrée doit être la vraie. */
+  shopSlug: string;
   categories: Category[];
   /** Pre-filled values for edit mode */
   defaultValues?: Partial<CreateProductInput>;
@@ -119,6 +121,40 @@ const FIELD_STEP = Object.entries(STEP_FIELDS).reduce<
 }, {});
 
 const PRODUCT_DRAFT_KEY = "linkboutik:product-draft";
+
+/** Violation de contrainte d'unicité côté Postgres. */
+const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * Lit une erreur Supabase.
+ *
+ * `throw error` propage l'objet renvoyé par le client, qui n'est pas une
+ * instance d'`Error` : le `err instanceof Error` d'origine tombait donc
+ * toujours à côté et le vendeur ne lisait que « Une erreur est survenue ».
+ */
+function readDbError(err: unknown): { code?: string; message?: string } {
+  if (err && typeof err === "object") {
+    const e = err as { code?: unknown; message?: unknown };
+    return {
+      code: typeof e.code === "string" ? e.code : undefined,
+      message: typeof e.message === "string" ? e.message : undefined,
+    };
+  }
+  return {};
+}
+
+/**
+ * Rend une adresse unique dans la boutique.
+ *
+ * Deux produits portant le même nom — « Robe wax » en bleu et en vert — est
+ * le cas le plus banal du commerce, et il se heurtait à la contrainte
+ * d'unicité de l'adresse. Plutôt que de demander au vendeur de résoudre un
+ * problème d'URL dont il n'a jamais entendu parler, on suffixe.
+ */
+function withSuffix(slug: string, n: number): string {
+  const suffix = `-${n}`;
+  return `${slug.slice(0, 120 - suffix.length).replace(/-+$/, "")}${suffix}`;
+}
 
 type ProductDraft = {
   name?: unknown;
@@ -363,6 +399,7 @@ function VariantBuilder({ variants, onChange, error }: VariantBuilderProps) {
 
 export function ProductForm({
   shopId,
+  shopSlug,
   categories,
   defaultValues,
   productId,
@@ -575,28 +612,49 @@ export function ProductForm({
           router.push("/dashboard/products");
           router.refresh();
         } else {
-          const { data: product, error } = await supabase
-            .from("products")
-            .insert({
-              shop_id: shopId,
-              name: data.name,
-              slug: data.slug,
-              description: data.description ?? null,
-              price: data.price,
-              compare_price: data.compare_price ?? null,
-              currency: data.currency,
-              images: data.images,
-              category_id: data.category_id ?? null,
-              is_published: publish,
-              is_digital: data.is_digital,
-              stock_quantity: data.stock_quantity ?? null,
-              has_variants: data.has_variants,
-              metadata: data.metadata ?? null,
-            })
-            .select("id")
-            .single();
+          // L'adresse doit être unique dans la boutique. Si elle est déjà
+          // prise, on suffixe et on réessaie : le vendeur voulait ajouter un
+          // produit, pas arbitrer un conflit d'URL.
+          let slug = data.slug;
+          let product: { id: string } | null = null;
+          let error: unknown = null;
+
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const result = await supabase
+              .from("products")
+              .insert({
+                shop_id: shopId,
+                name: data.name,
+                slug,
+                description: data.description ?? null,
+                price: data.price,
+                compare_price: data.compare_price ?? null,
+                currency: data.currency,
+                images: data.images,
+                category_id: data.category_id ?? null,
+                is_published: publish,
+                is_digital: data.is_digital,
+                stock_quantity: data.stock_quantity ?? null,
+                has_variants: data.has_variants,
+                metadata: data.metadata ?? null,
+              })
+              .select("id")
+              .single();
+
+            product = result.data;
+            error = result.error;
+
+            if (!error && product) break;
+            if (readDbError(error).code !== PG_UNIQUE_VIOLATION) break;
+
+            slug = withSuffix(data.slug, attempt + 2);
+          }
 
           if (error || !product) throw error;
+          if (slug !== data.slug) {
+            setValue("slug", slug);
+            toast.info(`Adresse ajustée en « ${slug} » : l'autre était prise.`);
+          }
 
           // Insert variants
           if (data.has_variants && data.variants?.length) {
@@ -620,14 +678,19 @@ export function ProductForm({
           router.refresh();
         }
       } catch (err) {
+        const { code, message } = readDbError(err);
         const msg =
-          err instanceof Error ? err.message : "Une erreur est survenue";
+          code === PG_UNIQUE_VIOLATION
+            ? "Un produit porte déjà cette adresse. Modifie-la à l'étape 1."
+            : (err instanceof Error ? err.message : message) ??
+              "Une erreur est survenue";
         toast.error(msg);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [shopId, productId, isEdit, router]
+    // setValue sert à refléter l'adresse ajustée quand elle était déjà prise.
+    [shopId, productId, isEdit, router, setValue]
   );
 
   const onDraft = handleSubmit(
@@ -685,7 +748,17 @@ export function ProductForm({
                   {step.number}
                 </span>
               )}
-              <span className="hidden sm:block">{step.label}</span>
+              {/* Sur mobile, la place ne permet pas les trois libellés : on
+                  montre celui de l'étape en cours, sinon le vendeur n'a que
+                  « 1 2 3 » et ne sait pas ce qui l'attend. */}
+              <span
+                className={cn(
+                  "sm:block",
+                  currentStep === step.number ? "block" : "hidden",
+                )}
+              >
+                {step.label}
+              </span>
             </button>
           ))}
         </div>
@@ -725,12 +798,18 @@ export function ProductForm({
 
             {/* Slug */}
             <div className="space-y-1.5">
+              {/* L'adresse est calculée depuis le nom : la marquer « requise »
+                  avec une étoile rouge inquiétait pour rien. Elle reste
+                  modifiable, elle n'est plus présentée comme un devoir. */}
               <Label htmlFor="slug">
-                URL du produit <span className="text-destructive">*</span>
+                Adresse du produit{" "}
+                <span className="font-normal text-muted-foreground">
+                  (modifiable)
+                </span>
               </Label>
               <div className="flex items-center gap-0">
-                <span className="inline-flex h-8 items-center rounded-l-lg border border-r-0 border-border bg-muted px-2.5 text-xs text-muted-foreground">
-                  /boutique/
+                <span className="inline-flex h-8 max-w-[45%] items-center truncate rounded-l-lg border border-r-0 border-border bg-muted px-2.5 text-xs text-muted-foreground">
+                  /{shopSlug}/
                 </span>
                 <Input
                   id="slug"
@@ -779,7 +858,17 @@ export function ProductForm({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Choisir une catégorie" />
+                      {/* Base UI affiche la valeur brute si on ne lui donne
+                          pas de quoi la traduire : sans cette fonction, un
+                          vendeur sans catégorie lisait « none ». */}
+                      <SelectValue placeholder="Choisir une catégorie">
+                        {(value) =>
+                          value && value !== "none"
+                            ? (categories.find((c) => c.id === value)?.name ??
+                              "Sans catégorie")
+                            : "Sans catégorie"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
@@ -907,10 +996,15 @@ export function ProductForm({
                 <Input
                   id="price"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="any"
                   placeholder="0"
                   aria-invalid={Boolean(errors.price)}
+                  // Le champ arrive à 0 (un produit gratuit reste possible).
+                  // Sans cette sélection, taper un prix sur téléphone donne
+                  // « 018500 » : le curseur se pose après le zéro.
+                  onFocus={(e) => e.currentTarget.select()}
                   {...register("price", { valueAsNumber: true })}
                 />
                 {errors.price && (
@@ -933,6 +1027,7 @@ export function ProductForm({
                   min={0}
                   step="any"
                   placeholder="Laisser vide"
+                  onFocus={(e) => e.currentTarget.select()}
                   aria-invalid={Boolean(errors.compare_price)}
                   {...register("compare_price", {
                     setValueAs: (v) => (v === "" || v == null ? null : Number(v)),
@@ -1040,20 +1135,28 @@ export function ProductForm({
         {/* ------------------------------------------------------------------ */}
         {/* Navigation */}
         {/* ------------------------------------------------------------------ */}
-        <div className="flex items-center justify-between pt-2">
+        {/* Actions.
+            Trois boutons sur une seule ligne débordaient de l'écran à 390 px :
+            « Publier le produit » finissait 105 px au-delà du bord droit, et
+            le vendeur n'en voyait que « Pub ». Sur mobile on empile, action
+            principale en premier et pleine largeur ; à partir de sm on
+            retrouve la ligne. Le pb-24 laisse respirer la pile de trois
+            boutons de la dernière étape au-dessus de la barre du bas. */}
+        <div className="flex flex-col-reverse gap-2 pt-2 pb-24 sm:flex-row sm:items-center sm:justify-between sm:pb-2">
           <Button
             type="button"
             variant="outline"
             onClick={goPrev}
             disabled={currentStep === 1}
+            className="sm:w-auto"
           >
             <ChevronLeft className="size-4" />
             Précédent
           </Button>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
             {currentStep < STEPS.length ? (
-              <Button type="button" onClick={goNext}>
+              <Button type="button" onClick={goNext} className="h-11 sm:h-9">
                 Suivant
                 <ChevronRight className="size-4" />
               </Button>
@@ -1064,13 +1167,15 @@ export function ProductForm({
                   variant="outline"
                   onClick={onDraft}
                   disabled={isSubmitting}
+                  className="h-11 sm:h-9"
                 >
-                  {isSubmitting ? "Enregistrement…" : "Enregistrer comme brouillon"}
+                  {isSubmitting ? "Enregistrement…" : "Enregistrer en brouillon"}
                 </Button>
                 <Button
                   type="button"
                   onClick={onPublish}
                   disabled={isSubmitting}
+                  className="h-11 font-semibold sm:h-9"
                 >
                   {isSubmitting ? "Publication…" : "Publier le produit"}
                 </Button>
