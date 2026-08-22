@@ -49,7 +49,7 @@ export default async function NewProductPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Nouveau produit</h1>
         <p className="text-sm text-muted-foreground">
-          Remplissez les informations de votre produit en 3 étapes.
+          Remplis les informations de ton produit en 3 étapes.
         </p>
       </div>
 

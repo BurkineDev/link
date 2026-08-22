@@ -7,23 +7,23 @@ import { CURRENCIES, MAX_PRODUCT_IMAGES, MAX_PRODUCT_VARIANTS } from "@/lib/cons
 
 const slugSchema = z
   .string()
-  .min(2, "Product URL must be at least 2 characters")
-  .max(120, "Product URL must be at most 120 characters")
+  .min(2, "L'adresse doit contenir au moins 2 caractères")
+  .max(120, "L'adresse ne peut pas dépasser 120 caractères")
   .regex(
     /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/,
-    "Product URL can only contain lowercase letters, numbers, and hyphens",
+    "L'adresse n'accepte que des minuscules, des chiffres et des tirets",
   )
   .toLowerCase();
 
 const priceSchema = z
-  .number({ error: "Price must be a number" })
-  .nonnegative("Price cannot be negative")
-  .finite("Price must be a finite number");
+  .number({ error: "Indique un prix" })
+  .nonnegative("Le prix ne peut pas être négatif")
+  .finite("Indique un prix valide");
 
 const positiveIntOrNull = z
-  .number({ error: "Must be a whole number" })
-  .int("Must be a whole number")
-  .nonnegative("Cannot be negative")
+  .number({ error: "Indique un nombre entier" })
+  .int("Indique un nombre entier")
+  .nonnegative("Ne peut pas être négatif")
   .nullable();
 
 // ---------------------------------------------------------------------------
@@ -31,8 +31,8 @@ const positiveIntOrNull = z
 // ---------------------------------------------------------------------------
 
 export const productImageSchema = z.object({
-  url: z.string().url("Image must be a valid URL"),
-  alt: z.string().max(200, "Alt text must be at most 200 characters").optional(),
+  url: z.string().url("Adresse d'image invalide"),
+  alt: z.string().max(200, "La description de l'image ne peut pas dépasser 200 caractères").optional(),
   position: z.number().int().nonnegative(),
 });
 
@@ -45,13 +45,13 @@ export type ProductImageInput = z.infer<typeof productImageSchema>;
 export const variantOptionSchema = z.object({
   name: z
     .string()
-    .min(1, "Option name is required")
-    .max(50, "Option name must be at most 50 characters")
+    .min(1, "Le nom de l'option est requis")
+    .max(50, "Le nom de l'option ne peut pas dépasser 50 caractères")
     .trim(),
   value: z
     .string()
-    .min(1, "Option value is required")
-    .max(100, "Option value must be at most 100 characters")
+    .min(1, "La valeur de l'option est requise")
+    .max(100, "La valeur ne peut pas dépasser 100 caractères")
     .trim(),
 });
 
@@ -65,18 +65,18 @@ export const productVariantSchema = z.object({
   id: z.string().uuid().optional(), // present when updating an existing variant
   name: z
     .string()
-    .min(1, "Variant name is required")
-    .max(200, "Variant name must be at most 200 characters")
+    .min(1, "Le nom de la variante est requis")
+    .max(200, "Le nom de la variante ne peut pas dépasser 200 caractères")
     .trim(),
   options: z
     .array(variantOptionSchema)
-    .min(1, "At least one option is required")
-    .max(5, "A variant can have at most 5 option pairs"),
+    .min(1, "Ajoute au moins une option")
+    .max(5, "Une variante accepte au plus 5 options"),
   price: priceSchema.nullable().default(null),
   stock_quantity: positiveIntOrNull.default(null),
   sku: z
     .string()
-    .max(100, "SKU must be at most 100 characters")
+    .max(100, "La référence ne peut pas dépasser 100 caractères")
     .trim()
     .nullable()
     .optional(),
@@ -90,7 +90,7 @@ export type ProductVariantInput = z.infer<typeof productVariantSchema>;
 
 export const productMetadataSchema = z
   .object({
-    weight_grams: z.number().positive("Weight must be positive").optional(),
+    weight_grams: z.number().positive("Le poids doit être positif").optional(),
     dimensions: z
       .object({
         length_cm: z.number().positive(),
@@ -100,13 +100,13 @@ export const productMetadataSchema = z
       .optional(),
     tags: z
       .array(z.string().min(1).max(50))
-      .max(20, "At most 20 tags are allowed")
+      .max(20, "20 étiquettes au maximum")
       .optional(),
-    download_url: z.string().url("Must be a valid URL").optional(),
+    download_url: z.string().url("Adresse invalide").optional(),
     download_limit: z
       .number()
       .int()
-      .positive("Download limit must be a positive integer")
+      .positive("La limite de téléchargements doit être un entier positif")
       .optional(),
     featured: z.boolean().optional(),
   })
@@ -121,28 +121,28 @@ export type ProductMetadataInput = z.infer<typeof productMetadataSchema>;
 const baseProductSchema = z.object({
   name: z
     .string()
-    .min(2, "Product name must be at least 2 characters")
-    .max(200, "Product name must be at most 200 characters")
+    .min(2, "Le nom doit contenir au moins 2 caractères")
+    .max(200, "Le nom ne peut pas dépasser 200 caractères")
     .trim(),
   slug: slugSchema,
   description: z
     .string()
-    .max(5000, "Description must be at most 5000 characters")
+    .max(5000, "La description ne peut pas dépasser 5000 caractères")
     .trim()
     .optional(),
   price: priceSchema,
   compare_price: priceSchema.nullable().optional(),
   currency: z.enum(CURRENCIES, {
-    error: "Please select a supported currency",
+    error: "Choisis une devise proposée",
   }),
   images: z
     .array(productImageSchema)
     .max(
       MAX_PRODUCT_IMAGES,
-      `You can upload at most ${MAX_PRODUCT_IMAGES} images`,
+      `${MAX_PRODUCT_IMAGES} photos au maximum`,
     )
     .default([]),
-  category_id: z.string().uuid("Invalid category").nullable().optional(),
+  category_id: z.string().uuid("Catégorie invalide").nullable().optional(),
   is_published: z.boolean().default(false),
   is_digital: z.boolean().default(false),
   stock_quantity: positiveIntOrNull.default(null),
@@ -151,7 +151,7 @@ const baseProductSchema = z.object({
     .array(productVariantSchema)
     .max(
       MAX_PRODUCT_VARIANTS,
-      `You can add at most ${MAX_PRODUCT_VARIANTS} variants`,
+      `${MAX_PRODUCT_VARIANTS} variantes au maximum`,
     )
     .optional(),
   metadata: productMetadataSchema,
@@ -161,7 +161,7 @@ export const createProductSchema = baseProductSchema.superRefine((data, ctx) => 
   if (data.has_variants && (!data.variants || data.variants.length === 0)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "At least one variant is required when variants are enabled",
+      message: "Ajoute au moins une variante, ou désactive les variantes",
       path: ["variants"],
     });
   }
@@ -173,7 +173,7 @@ export const createProductSchema = baseProductSchema.superRefine((data, ctx) => 
   ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Compare price must be greater than the selling price",
+      message: "Le prix barré doit être supérieur au prix de vente",
       path: ["compare_price"],
     });
   }
