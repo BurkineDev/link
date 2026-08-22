@@ -44,11 +44,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
 
   if (!shop) {
-    return { title: "Boutique introuvable | Bio-Lien" };
+    return { title: "Boutique introuvable" };
   }
 
   return {
-    title: `${shop.name} | Bio-Lien`,
+    title: `${shop.name}`,
     description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
     openGraph: {
       title: shop.name,

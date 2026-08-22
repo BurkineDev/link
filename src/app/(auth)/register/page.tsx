@@ -5,7 +5,7 @@ import { RegisterForm } from "./register-form";
 import type { RegisterInvite } from "@/components/auth/starter-offer";
 
 export const metadata: Metadata = {
-  title: "Créer ma page — Bio-Lien",
+  title: "Créer ma page",
   description:
     "Crée ta page Bio-Lien gratuitement : ton lien @pseudo, tes produits, et le paiement Mobile Money ou carte bancaire.",
 };

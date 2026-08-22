@@ -15,7 +15,7 @@ import { buildWaMeLink } from "@/lib/whatsapp";
 import { isValidWhatsAppNumber } from "@/lib/utils/whatsapp";
 import type { Currency, OrderRow } from "@/lib/types/database";
 
-export const metadata = { title: "Clients — Bio-Lien" };
+export const metadata = { title: "Clients" };
 
 /**
  * Vue « Clients », première marche du CRM.

@@ -4,7 +4,7 @@ import { PageBuilder } from "./page-builder";
 import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
 import type { PageBlockRow, ShopRow } from "@/lib/types/database";
 
-export const metadata = { title: "Ma page — Bio-Lien" };
+export const metadata = { title: "Ma page" };
 
 /**
  * « Ma page » — le Page Builder, cœur du produit.

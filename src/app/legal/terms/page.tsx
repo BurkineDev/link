@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Conditions Générales d'Utilisation | Bio-Lien",
+  title: "Conditions générales d'utilisation",
   description:
     "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",
 };

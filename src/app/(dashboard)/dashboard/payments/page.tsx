@@ -14,7 +14,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { formatDate } from "@/lib/utils/format";
 import type { Currency, OrderRow } from "@/lib/types/database";
 
-export const metadata = { title: "Paiements — Bio-Lien" };
+export const metadata = { title: "Paiements" };
 
 /**
  * Vue « Paiements » : l'argent, vu depuis les encaissements plutôt que depuis

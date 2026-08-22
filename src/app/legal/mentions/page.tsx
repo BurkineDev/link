@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Mentions légales | Bio-Lien",
+  title: "Mentions légales",
   description: "Informations légales sur l'éditeur du service Bio-Lien.",
 };
 
