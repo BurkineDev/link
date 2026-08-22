@@ -2,7 +2,12 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller, type Resolver } from "react-hook-form";
+import {
+  useForm,
+  Controller,
+  type Resolver,
+  type FieldErrors,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -43,16 +48,34 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Adresse d'un produit à partir de son nom.
+ *
+ * Le schéma exige un slug qui commence et finit par une lettre ou un chiffre.
+ * Trois saisies parfaitement ordinaires y échouaient et bloquaient
+ * l'enregistrement sans un mot d'explication : un nom commençant par un
+ * tiret, un nom sans lettres latines (emoji, arabe, amharique — la moitié de
+ * nos vendeurs potentiels), et un nom si long que la troncature tombait sur
+ * un tiret. On garantit donc ici ce que le schéma exige, plutôt que de
+ * laisser le vendeur découvrir la règle.
+ */
 function toSlug(name: string): string {
-  return name
+  const base = name
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // strip accents
+    .replace(/[̀-ͯ]/g, "") // enlève les accents
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .slice(0, 120);
+    .slice(0, 120)
+    // Après la troncature : un tiret en bord rendrait l'adresse invalide.
+    .replace(/^-+|-+$/g, "");
+
+  // Rien d'exploitable (nom en écriture non latine, ou uniquement des
+  // emojis) : plutôt qu'un blocage muet, une adresse correcte que le vendeur
+  // peut réécrire à la main juste en dessous.
+  return base.length >= 2 ? base : "produit";
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +102,21 @@ const STEPS = [
   { label: "Images & Prix", number: 2 },
   { label: "Variantes & Stock", number: 3 },
 ];
+
+/** Champs à valider avant de quitter chaque étape. */
+const STEP_FIELDS: Record<number, Array<keyof CreateProductInput>> = {
+  1: ["name", "slug", "description", "category_id"],
+  2: ["images", "currency", "price", "compare_price"],
+  3: ["is_digital", "stock_quantity", "has_variants", "variants"],
+};
+
+/** L'étape où se trouve chaque champ — inverse de STEP_FIELDS. */
+const FIELD_STEP = Object.entries(STEP_FIELDS).reduce<
+  Partial<Record<keyof CreateProductInput, number>>
+>((acc, [step, fields]) => {
+  fields.forEach((f) => (acc[f] = Number(step)));
+  return acc;
+}, {});
 
 const PRODUCT_DRAFT_KEY = "linkboutik:product-draft";
 
@@ -362,6 +400,7 @@ export function ProductForm({
     watch,
     setValue,
     control,
+    trigger,
     formState: { errors },
   } = form;
 
@@ -431,8 +470,45 @@ export function ProductForm({
   // Step navigation
   // ---------------------------------------------------------------------------
 
-  const goNext = () => setCurrentStep((s) => Math.min(s + 1, STEPS.length));
+  /**
+   * Quels champs vivent sur quelle étape.
+   *
+   * Sert deux fois : à valider avant d'avancer, et à ramener le vendeur au
+   * bon endroit quand l'enregistrement échoue. Sans cette carte, un champ
+   * invalide sur une étape non affichée bloque le formulaire en silence.
+   */
+  const goNext = async () => {
+    const ok = await trigger(STEP_FIELDS[currentStep] ?? []);
+    if (!ok) {
+      toast.error("Corrige les champs en rouge avant de continuer.");
+      return;
+    }
+    setCurrentStep((s) => Math.min(s + 1, STEPS.length));
+  };
+
   const goPrev = () => setCurrentStep((s) => Math.max(s - 1, 1));
+
+  /**
+   * Échec de validation à l'enregistrement.
+   *
+   * Le seul comportement inacceptable est celui d'avant : le bouton ne fait
+   * rien. On ramène le vendeur sur l'étape fautive et on nomme le problème.
+   */
+  const onInvalid = (formErrors: FieldErrors<CreateProductInput>) => {
+    const faulty = (Object.keys(formErrors) as Array<keyof CreateProductInput>)[0];
+    const step = faulty ? FIELD_STEP[faulty] : undefined;
+    if (step && step !== currentStep) setCurrentStep(step);
+
+    const message =
+      (faulty && (formErrors[faulty]?.message as string | undefined)) ||
+      "Certains champs sont incomplets.";
+    toast.error(message, {
+      description:
+        step && step !== currentStep
+          ? `Voir l'étape ${step} : ${STEPS[step - 1]?.label}.`
+          : undefined,
+    });
+  };
 
   // ---------------------------------------------------------------------------
   // Save helpers
@@ -554,8 +630,14 @@ export function ProductForm({
     [shopId, productId, isEdit, router]
   );
 
-  const onDraft = handleSubmit((data: CreateProductInput) => save(data, false));
-  const onPublish = handleSubmit((data: CreateProductInput) => save(data, true));
+  const onDraft = handleSubmit(
+    (data: CreateProductInput) => save(data, false),
+    onInvalid,
+  );
+  const onPublish = handleSubmit(
+    (data: CreateProductInput) => save(data, true),
+    onInvalid,
+  );
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -619,7 +701,7 @@ export function ProductForm({
             <div>
               <h2 className="text-lg font-semibold">Informations de base</h2>
               <p className="text-sm text-muted-foreground">
-                Renseignez les informations principales de votre produit.
+                Renseigne les informations principales de ton produit.
               </p>
             </div>
 
@@ -672,7 +754,7 @@ export function ProductForm({
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Décrivez votre produit : matière, dimensions, utilisation…"
+                placeholder="Décris ton produit : matière, dimensions, utilisation…"
                 rows={5}
                 {...register("description")}
               />
@@ -762,7 +844,7 @@ export function ProductForm({
             <div>
               <h2 className="text-lg font-semibold">Images & Prix</h2>
               <p className="text-sm text-muted-foreground">
-                Ajoutez des photos et définissez le prix de vente.
+                Ajoute des photos et fixe le prix de vente.
               </p>
             </div>
 
@@ -874,7 +956,7 @@ export function ProductForm({
             <div>
               <h2 className="text-lg font-semibold">Variantes & Stock</h2>
               <p className="text-sm text-muted-foreground">
-                Gérez les variantes et le stock de votre produit.
+                Gère les variantes et le stock de ton produit.
               </p>
             </div>
 

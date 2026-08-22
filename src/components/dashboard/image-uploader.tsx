@@ -230,9 +230,9 @@ export function ImageUploader({
           <UploadCloud className="size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground text-center">
             <span className="font-medium text-foreground">
-              Cliquez pour choisir
+              Touche pour choisir
             </span>{" "}
-            ou glissez vos images ici
+            ou glisse tes images ici
           </p>
           <p className="text-xs text-muted-foreground">
             PNG, JPG, WebP · Max {maxSizeMB} Mo par image ·{" "}

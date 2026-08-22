@@ -101,19 +101,19 @@ function EmptyState({ filter }: { filter: FilterTab }) {
   const messages: Record<FilterTab, { title: string; desc: string }> = {
     all: {
       title: "Aucun produit pour l'instant",
-      desc: "Ajoutez votre premier produit pour commencer à vendre.",
+      desc: "Ajoute ton premier produit pour commencer à vendre.",
     },
     published: {
       title: "Aucun produit publié",
-      desc: "Publiez un brouillon pour qu'il apparaisse dans votre boutique.",
+      desc: "Publie un brouillon pour qu'il apparaisse dans ta boutique.",
     },
     draft: {
       title: "Aucun brouillon",
-      desc: "Tous vos produits sont publiés. Bravo !",
+      desc: "Tous tes produits sont publiés. Bravo !",
     },
     out_of_stock: {
       title: "Aucune rupture de stock",
-      desc: "Tous vos produits ont du stock disponible.",
+      desc: "Tous tes produits ont du stock disponible.",
     },
   };
 
@@ -396,8 +396,8 @@ export function ProductsClient({ products: initialProducts, shopSlug, currency }
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Produits</h1>
           <p className="text-sm text-muted-foreground">
-            {products.length} produit{products.length !== 1 ? "s" : ""} dans
-            votre boutique
+            {products.length} produit{products.length > 1 ? "s" : ""} dans
+            ta boutique
           </p>
         </div>
         <Button asChild>

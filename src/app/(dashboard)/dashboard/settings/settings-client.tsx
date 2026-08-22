@@ -145,7 +145,7 @@ function ImageField({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Upload className="size-6" />
-            <span className="text-xs">Cliquez pour choisir</span>
+            <span className="text-xs">Touche pour choisir</span>
           </div>
         )}
 
@@ -610,7 +610,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground">
-          Gérez votre boutique, son apparence et vos paiements.
+          Gère ta boutique, son apparence et tes paiements.
         </p>
       </div>
 
@@ -684,7 +684,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </p>
               ) : slugChanged ? (
                 <p className="text-xs text-amber-600">
-                  ⚠️ Changer l&apos;URL rendra vos anciens liens et QR codes
+                  ⚠️ Changer l&apos;URL rendra tes anciens liens et QR codes
                   invalides.
                 </p>
               ) : null}
@@ -695,7 +695,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
               <Textarea
                 id="shop-desc"
                 rows={4}
-                placeholder="Décrivez votre boutique…"
+                placeholder="Décris ta boutique…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -1251,7 +1251,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Toutes vos commandes et vos prix seront affichés dans cette
+                Toutes tes commandes et tous tes prix seront affichés dans cette
                 devise.
               </p>
             </div>
@@ -1262,11 +1262,11 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
                   <p className="text-sm font-semibold">Méthodes de paiement</p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Vos clients peuvent payer par carte bancaire (Visa,
+                    Tes clients peuvent payer par carte bancaire (Visa,
                     Mastercard) et Mobile Money (Wave, Orange, MTN, Moov). La
                     configuration des moyens de paiement est gérée par
-                    l&apos;équipe Bio-Lien — vous n&apos;avez rien à installer.
-                    Les fonds sont reversés sur le compte que vous fournirez à
+                    l&apos;équipe Bio-Lien — tu n&apos;as rien à installer.
+                    Les fonds sont reversés sur le compte que tu fourniras à
                     l&apos;équipe.
                   </p>
                 </div>
@@ -1319,7 +1319,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     Dépublier la boutique
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Votre boutique ne sera plus visible par vos clients. Vous
+                    Ta boutique ne sera plus visible par tes clients. Tu
                     pourrez la republier à tout moment.
                   </p>
                 </div>
@@ -1345,8 +1345,8 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     </AlertDialogMedia>
                     <AlertDialogTitle>Dépublier la boutique ?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Votre boutique <strong>{shop.name}</strong> ne sera plus
-                      accessible au public. Vous pourrez la republier depuis
+                      Ta boutique <strong>{shop.name}</strong> ne sera plus
+                      accessible au public. Tu pourras la republier depuis
                       les paramètres.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -1370,7 +1370,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     Supprimer la boutique
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Cette action est irréversible. Tous vos produits,
+                    Cette action est irréversible. Tous tes produits,
                     commandes et données seront définitivement supprimés.
                   </p>
                 </div>
@@ -1394,7 +1394,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     <AlertDialogDescription>
                       Toutes les données liées à{" "}
                       <strong>{shop.name}</strong> seront supprimées. Pour
-                      confirmer, tapez le nom de votre boutique ci-dessous.
+                      confirmer, tape le nom de ta boutique ci-dessous.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
 
