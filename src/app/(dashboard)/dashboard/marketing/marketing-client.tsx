@@ -39,6 +39,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  downloadGeneratedImage,
+  shareGeneratedImage,
+} from "@/lib/utils/share-image";
 import { QrCode } from "@/components/shared/qr-code";
 import { LinksSection } from "@/components/dashboard/links-section";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
@@ -451,25 +455,12 @@ function ShareSection({ url, slug }: { url: string; slug: string }) {
   const [sharing, setSharing] = useState(false);
 
   const storyPath = `/api/story/${slug}`;
-
-  /** Fetches the generated story PNG once, as a File ready to share or save. */
-  const fetchStoryFile = async (): Promise<File> => {
-    const res = await fetch(storyPath);
-    if (!res.ok) throw new Error(`story ${res.status}`);
-    const blob = await res.blob();
-    return new File([blob], `bio-lien-story-${slug}.png`, { type: "image/png" });
-  };
+  const storyFile = `bio-lien-story-${slug}.png`;
 
   const downloadStory = async () => {
     setSharing(true);
     try {
-      const file = await fetchStoryFile();
-      const href = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = file.name;
-      a.click();
-      URL.revokeObjectURL(href);
+      await downloadGeneratedImage(storyPath, storyFile);
     } catch {
       toast.error("Impossible de générer l'image. Réessaie dans un instant.");
     } finally {
@@ -480,20 +471,7 @@ function ShareSection({ url, slug }: { url: string; slug: string }) {
   const shareStory = async () => {
     setSharing(true);
     try {
-      const file = await fetchStoryFile();
-      // Native share puts Instagram/TikTok/WhatsApp one tap away on mobile.
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file] }).catch(() => {});
-        return;
-      }
-      // Desktop: no file-share target, fall back to downloading.
-      const href = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = file.name;
-      a.click();
-      URL.revokeObjectURL(href);
-      toast.info("Image téléchargée — poste-la depuis ton téléphone.");
+      await shareGeneratedImage(storyPath, storyFile);
     } catch {
       toast.error("Impossible de générer l'image. Réessaie dans un instant.");
     } finally {

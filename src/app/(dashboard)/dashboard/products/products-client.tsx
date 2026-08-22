@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Row } from "@/lib/types/database";
 import { CURRENCY_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { shareGeneratedImage } from "@/lib/utils/share-image";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ import {
   Plus,
   Search,
   MoreVertical,
+  Share2,
   Pencil,
   Trash2,
   Package,
@@ -57,6 +59,7 @@ type FilterTab = "all" | "published" | "draft" | "out_of_stock";
 interface ProductsClientProps {
   products: Product[];
   shopId: string;
+  shopSlug: string;
   currency: string;
 }
 
@@ -143,6 +146,7 @@ function EmptyState({ filter }: { filter: FilterTab }) {
 
 interface ProductCardProps {
   product: Product;
+  shopSlug: string;
   currency: string;
   onDelete: (id: string) => void;
   onTogglePublish: (id: string, published: boolean) => void;
@@ -150,11 +154,24 @@ interface ProductCardProps {
 
 function ProductCard({
   product,
+  shopSlug,
   currency,
   onDelete,
   onTogglePublish,
 }: ProductCardProps) {
   const firstImage = product.images?.[0];
+
+  const shareStory = async () => {
+    // Only published products render a story — the route 404s on drafts.
+    try {
+      await shareGeneratedImage(
+        `/api/story/${shopSlug}/${product.slug}`,
+        `bio-lien-story-${product.slug}.png`,
+      );
+    } catch {
+      toast.error("Impossible de générer l'image. Le produit est-il publié ?");
+    }
+  };
 
   return (
     <Card className="group/card overflow-hidden">
@@ -218,6 +235,12 @@ function ProductCard({
                     </>
                   )}
                 </DropdownMenuItem>
+                {product.is_published && (
+                  <DropdownMenuItem onSelect={shareStory}>
+                    <Share2 className="size-4" />
+                    Partager en story
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <AlertDialogTrigger
                   render={
@@ -289,10 +312,7 @@ function ProductCard({
 // Main client component
 // ---------------------------------------------------------------------------
 
-export function ProductsClient({
-  products: initialProducts,
-  currency,
-}: ProductsClientProps) {
+export function ProductsClient({ products: initialProducts, shopSlug, currency }: ProductsClientProps) {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [filter, setFilter] = useState<FilterTab>("all");
@@ -439,6 +459,7 @@ export function ProductsClient({
             <ProductCard
               key={product.id}
               product={product}
+              shopSlug={shopSlug}
               currency={currency}
               onDelete={handleDelete}
               onTogglePublish={handleTogglePublish}

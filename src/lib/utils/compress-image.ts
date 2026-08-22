@@ -3,14 +3,19 @@
  *
  * Targets African mobile networks (3G/4G) by shrinking product photos
  * before they hit the network. No external dependency — uses only the
- * Canvas 2D API and the browser's WebP encoder.
+ * Canvas 2D API and the browser's JPEG encoder.
+ *
+ * Why JPEG and not WebP: delivery cost is identical either way — next/image
+ * re-encodes to AVIF/WebP per browser whatever the stored format — but the
+ * stored file is also consumed by tools that cannot decode WebP, first among
+ * them satori (next/og), which renders the story images. A WebP at rest
+ * showed up as a blank square in every story.
  *
  * Behaviour:
  *   • Bypasses files smaller than `bypassUnderKb` (default 200KB) — already small enough.
  *   • Bypasses GIF and SVG (animations / vector content shouldn't be rasterised).
  *   • Scales the longest edge down to `maxEdge` (default 1600px).
- *   • Re-encodes as WebP at quality `quality` (default 0.82). Falls back to JPEG
- *     if WebP isn't supported.
+ *   • Re-encodes as JPEG at quality `quality` (default 0.82).
  *   • Returns the original file if compression would make it bigger.
  */
 
@@ -62,15 +67,15 @@ export async function compressImage(
   bitmap.close?.();
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), "image/webp", quality);
+    canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
   });
 
   if (!blob) return file;
   if (blob.size >= file.size) return file;
 
-  const newName = file.name.replace(/\.[^.]+$/, "") + ".webp";
+  const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
   return new File([blob], newName, {
-    type: "image/webp",
+    type: "image/jpeg",
     lastModified: Date.now(),
   });
 }
