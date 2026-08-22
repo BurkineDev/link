@@ -11,12 +11,15 @@ import {
   ArrowLeft,
   RefreshCw,
   Mail,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { CURRENCY_META, type Currency } from "@/lib/constants";
+import { buildWaMeLink } from "@/lib/whatsapp";
+import { isValidWhatsAppNumber } from "@/lib/utils/whatsapp";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +41,7 @@ interface OrderDetails {
   }>;
   shop_name?: string;
   shop_slug?: string;
+  shop_whatsapp?: string | null;
 }
 
 type VerifyState =
@@ -149,6 +153,21 @@ function SuccessContent() {
   const { order } = state;
   const currencyMeta = CURRENCY_META[order.currency];
 
+  const sellerWaLink =
+    order.shop_whatsapp && isValidWhatsAppNumber(order.shop_whatsapp)
+      ? buildWaMeLink(
+          order.shop_whatsapp,
+          [
+            `Bonjour ${order.shop_name ?? ""} 👋`.replace(/\s+/g, " ").trim(),
+            `Je viens de passer commande sur votre boutique Bio-Lien.`,
+            "",
+            `Référence : #${order.id.slice(0, 8).toUpperCase()}`,
+            `Total : ${formatPrice(order.total_amount)}`,
+            `Nom : ${order.buyer_name}`,
+          ].join("\n"),
+        )
+      : null;
+
   function formatPrice(amount: number) {
     const fmt =
       currencyMeta.decimals === 0
@@ -257,6 +276,38 @@ function SuccessContent() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ── Buyer relay: confirm the order in the seller's WhatsApp ── */}
+      {/* Works with zero API setup, matches how buyers already talk to     */}
+      {/* sellers here — and it opens the 24h service window that lets the  */}
+      {/* Cloud API deliver free-text alerts afterwards.                    */}
+      {sellerWaLink && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-6"
+        >
+          <a
+            href={sellerWaLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "flex h-12 w-full items-center justify-center gap-2 rounded-xl",
+              "text-base font-semibold text-white shadow-sm",
+              "transition-transform active:scale-[0.99]",
+            )}
+            style={{ backgroundColor: "#25D366" }}
+          >
+            <MessageCircle className="size-5" />
+            Prévenir le vendeur sur WhatsApp
+          </a>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Envoie ta confirmation à {order.shop_name ?? "la boutique"}
+            {" — le message est déjà écrit, tu n'as qu'à appuyer sur envoyer."}
+          </p>
+        </motion.div>
+      )}
 
       {/* CTA */}
       <motion.div

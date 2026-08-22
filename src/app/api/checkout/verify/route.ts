@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import {
   fetchPayment as fetchGeniusPayment,
@@ -16,6 +16,13 @@ import {
 // webhook is the source of truth — this endpoint is a fallback / UX helper
 // so the success page can show the correct state without waiting on the
 // webhook to fire.
+//
+// Uses the ADMIN client on purpose: the buyer is anonymous and the orders
+// RLS policies only grant reads to the shop owner, so the anon client sees
+// no row and every buyer landed on "commande introuvable" after paying.
+// The high-entropy payment_ref (Stripe cs_…, GeniusPay MTX-…) acts as the
+// bearer capability, and the status updates only run after the provider
+// itself confirmed the payment.
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
@@ -35,7 +42,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = getAdminClient();
     const lookupRef = (isGenius ? reference : sessionId) as string;
 
     const { data: order, error: orderError } = await supabase
@@ -56,10 +63,17 @@ export async function GET(request: NextRequest) {
     const withShop = async (orderObj: typeof order) => {
       const { data: shop } = await supabase
         .from("shops")
-        .select("name, slug")
+        .select("name, slug, whatsapp_number")
         .eq("id", orderObj.shop_id)
         .single();
-      return { ...orderObj, shop_name: shop?.name, shop_slug: shop?.slug };
+      // whatsapp_number is already public (it powers the wa.me CTAs on the
+      // shop page); exposing it here lets the buyer relay their confirmation.
+      return {
+        ...orderObj,
+        shop_name: shop?.name,
+        shop_slug: shop?.slug,
+        shop_whatsapp: shop?.whatsapp_number ?? null,
+      };
     };
 
     // Already settled — idempotent return.

@@ -31,6 +31,45 @@ If the Upstash variables are absent (e.g. local dev) only the in-memory layer
 applies, so **production must set them** for the distributed limits and budget
 cap to take effect.
 
+## Notifications WhatsApp du vendeur
+
+Quand une commande passe en « payé » (webhooks Stripe et GeniusPay), le
+vendeur est prévenu sur WhatsApp par deux canaux complémentaires :
+
+**1. Relais acheteur — actif sans aucune configuration.** La page de succès
+du paiement propose à l'acheteur « Prévenir le vendeur sur WhatsApp » : un
+wa.me pré-rempli (référence, total, nom) vers le numéro du vendeur. C'est la
+norme du commerce visé — et ce message ouvre la fenêtre de service de 24 h
+côté Meta, qui rend le canal 2 livrable en texte libre.
+
+**2. API Cloud WhatsApp — quand `WHATSAPP_ACCESS_TOKEN` et
+`WHATSAPP_PHONE_NUMBER_ID` sont configurés.** `notifySellerOfPaidOrder()`
+tente d'abord le **template** approuvé (`WHATSAPP_ORDER_TEMPLATE`, défaut
+`nouvelle_commande`, langue `WHATSAPP_TEMPLATE_LANG`, défaut `fr`) — les
+messages initiés par l'entreprise hors fenêtre de 24 h ne sont livrables que
+par template (erreur Meta 131047). Si le template échoue, repli en texte
+libre (livré si une fenêtre est ouverte), puis journalisation d'un lien
+wa.me.
+
+Pour activer le canal 2 : créer une app Meta Business → produit WhatsApp →
+récupérer le *Phone Number ID* et un jeton permanent, puis créer et faire
+approuver un template `nouvelle_commande` (catégorie Utility, langue fr)
+avec ce corps :
+
+```
+🛍️ Nouvelle commande !
+
+Client : {{1}}
+Articles : {{2}}
+Total : {{3}}
+Référence : {{4}}
+
+Détails : bio-lien.com/dashboard/orders
+```
+
+Les paramètres de template Meta ne peuvent contenir ni URL ni retour à la
+ligne — le lien du dashboard doit rester dans le texte statique du template.
+
 ## La page bio (`/{slug}`)
 
 The public page a seller pastes in their TikTok / Instagram bio is a centred

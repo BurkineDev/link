@@ -25,7 +25,8 @@ function BASE_ORDER_DEFAULT() {
   };
 }
 
-const mockCreateClient = jest.fn().mockImplementation(async () => ({
+// getAdminClient is synchronous, unlike the old cookie-bound createClient.
+const mockCreateClient = jest.fn().mockImplementation(() => ({
   from: (table: string) => {
     if (table === "orders") {
       return {
@@ -51,7 +52,9 @@ const mockCreateClient = jest.fn().mockImplementation(async () => ({
   },
 }));
 
-jest.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
+// The route reads/updates on behalf of an anonymous buyer, so it uses the
+// admin client (see route comments) — mock that entry point.
+jest.mock("@/lib/supabase/admin", () => ({ getAdminClient: mockCreateClient }));
 
 const mockRetrieveSession = jest.fn();
 jest.mock("@/lib/stripe", () => ({
