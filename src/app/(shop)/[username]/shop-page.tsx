@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { MessageCircle, Share2, ShoppingBag, Sparkles } from "lucide-react";
@@ -10,8 +11,7 @@ import {
   type PublicShopLink,
 } from "@/components/shop/bio-link-button";
 import { BioProductCard } from "@/components/shop/bio-product-card";
-import { BioShareSheet } from "@/components/shop/bio-share-sheet";
-import { CartDrawer } from "@/components/shop/cart-drawer";
+
 import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,16 @@ import {
 import { bioThemeCssVars, resolveBioTheme } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
+
+// Both are dialogs behind a tap: nobody needs their code (Radix dialog, the
+// QR image, the cart store wiring) to read the page. Loading them on demand
+// keeps the first paint light on the in-app browsers this page lives in.
+const BioShareSheet = dynamic(() =>
+  import("@/components/shop/bio-share-sheet").then((m) => m.BioShareSheet),
+);
+const CartDrawer = dynamic(() =>
+  import("@/components/shop/cart-drawer").then((m) => m.CartDrawer),
+);
 
 interface ShopPageProps {
   shop: ShopRow;
@@ -81,6 +91,19 @@ export function ShopPage({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // Keep the lazy chunks out of the first paint: mount a dialog only after
+  // its first open, then leave it mounted so reopening is instant.
+  const [cartMounted, setCartMounted] = useState(false);
+  const [shareMounted, setShareMounted] = useState(false);
+
+  const openCart = () => {
+    setCartMounted(true);
+    setCartOpen(true);
+  };
+  const openShare = () => {
+    setShareMounted(true);
+    setShareOpen(true);
+  };
   const itemCount = useCart((s) => s.getItemCount());
 
   // One view per page load, after mount so it never competes with rendering.
@@ -182,7 +205,7 @@ export function ShopPage({
 
         <button
           type="button"
-          onClick={() => setShareOpen(true)}
+          onClick={openShare}
           aria-label="Partager cette page"
           className="flex size-11 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95"
           style={{
@@ -400,7 +423,7 @@ export function ShopPage({
         showCartFab && (
           <button
             type="button"
-            onClick={() => setCartOpen(true)}
+            onClick={openCart}
             aria-label={`Panier (${itemCount} article${itemCount !== 1 ? "s" : ""})`}
             className={cn(
               "fixed bottom-5 right-4 z-40 flex size-14 items-center justify-center rounded-full shadow-lg sm:right-6",
@@ -423,7 +446,7 @@ export function ShopPage({
         )
       )}
 
-      {!isWhatsAppMode && (
+      {!isWhatsAppMode && cartMounted && (
         <CartDrawer
           open={cartOpen}
           onOpenChange={setCartOpen}
@@ -432,13 +455,15 @@ export function ShopPage({
         />
       )}
 
-      <BioShareSheet
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        url={pageUrl}
-        title={shop.name}
-        subtitle={`Partager la page de ${shop.name}`}
-      />
+      {shareMounted && (
+        <BioShareSheet
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={pageUrl}
+          title={shop.name}
+          subtitle={`Partager la page de ${shop.name}`}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Globe,
@@ -20,9 +21,14 @@ import {
   XIcon,
   YoutubeIcon,
 } from "@/components/shop/brand-icons";
-import { BioShareSheet } from "@/components/shop/bio-share-sheet";
 import { cn } from "@/lib/utils";
 import type { BioPalette } from "@/lib/bio-themes";
+
+// Per-link sharing is a rare tap on a page that must paint fast — load the
+// dialog only when someone actually reaches for it.
+const BioShareSheet = dynamic(() =>
+  import("@/components/shop/bio-share-sheet").then((m) => m.BioShareSheet),
+);
 
 export type PublicShopLink = {
   id: string;
@@ -90,6 +96,7 @@ export function BioLinkButton({
   pageUrl,
 }: BioLinkButtonProps) {
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareMounted, setShareMounted] = useState(false);
 
   const Icon = ICONS[link.icon] ?? ICONS.custom;
   const external = isExternal(link.url);
@@ -208,7 +215,10 @@ export function BioLinkButton({
       {/* Per-link share — a visitor can forward one button, not just the page. */}
       <button
         type="button"
-        onClick={() => setShareOpen(true)}
+        onClick={() => {
+          setShareMounted(true);
+          setShareOpen(true);
+        }}
         aria-label={`Partager le lien ${link.label}`}
         className={cn(
           "absolute right-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full",
@@ -226,13 +236,15 @@ export function BioLinkButton({
         <MoreVertical className="size-5" />
       </button>
 
-      <BioShareSheet
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        url={external ? link.url : `${pageUrl}${link.url}`}
-        title={link.label}
-        subtitle={`Partager « ${link.label} »`}
-      />
+      {shareMounted && (
+        <BioShareSheet
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={external ? link.url : `${pageUrl}${link.url}`}
+          title={link.label}
+          subtitle={`Partager « ${link.label} »`}
+        />
+      )}
     </li>
   );
 }

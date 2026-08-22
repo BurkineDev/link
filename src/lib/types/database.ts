@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { BioThemeId } from "@/lib/bio-themes";
+import type { BlockType } from "@/lib/blocks/types";
 
 export type Json =
   | string
@@ -276,6 +277,33 @@ export type ShopLinkInsert = Omit<
 };
 export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
 
+export type PageBlockRow = {
+  id: string;
+  shop_id: string;
+  type: BlockType;
+  position: number;
+  title: string | null;
+  config: Json;
+  style: Json;
+  visible: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PageBlockInsert = Omit<
+  PageBlockRow,
+  "id" | "created_at" | "updated_at" | "title" | "config" | "style" | "visible"
+> & {
+  title?: string | null;
+  config?: Json;
+  style?: Json;
+  visible?: boolean;
+};
+
+export type PageBlockUpdate = Partial<
+  Omit<PageBlockRow, "id" | "shop_id" | "created_at">
+>;
+
 export type ShopPageViewRow = {
   shop_id: string;
   day: string;
@@ -527,6 +555,11 @@ export interface Database {
         Insert: ShopLinkInsert;
         Update: ShopLinkUpdate;
       } & NoRelationships;
+      page_blocks: {
+        Row: PageBlockRow;
+        Insert: PageBlockInsert;
+        Update: PageBlockUpdate;
+      } & NoRelationships;
       shop_page_views: {
         Row: ShopPageViewRow;
         Insert: ShopPageViewRow;
@@ -563,6 +596,10 @@ export interface Database {
       };
       track_shop_page_view: {
         Args: { p_shop_id: string };
+        Returns: void;
+      };
+      reorder_page_blocks: {
+        Args: { p_shop_id: string; p_block_ids: string[] };
         Returns: void;
       };
     };

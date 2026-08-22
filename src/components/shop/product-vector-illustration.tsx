@@ -28,7 +28,6 @@ import {
   Flower2,
   Leaf,
 } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface ProductVectorIllustrationProps {
   name: string;
@@ -299,17 +298,8 @@ export function ProductVectorIllustration({
         }}
       />
 
-      {/* 🚀 Main Card Container with Floating Animation */}
-      <motion.div
-        initial={{ y: 0 }}
-        animate={{ y: [-4, 4, -4] }}
-        transition={{
-          duration: 6,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="relative z-10 flex flex-col items-center justify-center"
-      >
+      {/* 🚀 Main Card Container with Floating Animation (CSS, see globals.css) */}
+      <div className="animate-bio-float relative z-10 flex flex-col items-center justify-center">
         {/* Animated flat glassmorphic plate for the vector icon */}
         <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-md transition-all duration-300 group-hover:border-white/30 group-hover:bg-white/15">
           {/* Subtle icon background shape */}
@@ -330,7 +320,7 @@ export function ProductVectorIllustration({
         <span className="mt-4 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-bold tracking-wider uppercase text-white/90 backdrop-blur-sm transition-colors group-hover:bg-black/30">
           {universe.label}
         </span>
-      </motion.div>
+      </div>
     </div>
   );
 }
