@@ -19,11 +19,11 @@ export default async function NewProductPage() {
 
   const { data: shopRaw } = await supabase
     .from("shops")
-    .select("id, currency")
+    .select("id, slug, currency")
     .eq("owner_id", user.id)
     .single();
 
-  const shop = shopRaw as Pick<Row<"shops">, "id" | "currency"> | null;
+  const shop = shopRaw as Pick<Row<"shops">, "id" | "slug" | "currency"> | null;
   if (!shop) redirect("/dashboard");
 
   const { data: categoriesRaw } = await supabase
@@ -55,6 +55,7 @@ export default async function NewProductPage() {
 
       <ProductForm
         shopId={shop.id}
+        shopSlug={shop.slug}
         categories={categories}
         defaultValues={{ currency: shop.currency }}
       />
