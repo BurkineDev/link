@@ -51,7 +51,13 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Bio-Lien | Crée ta boutique en ligne",
+  // Un seul endroit décide de la forme d'un titre d'onglet. Les pages
+  // fournissent leur nom, le gabarit ajoute la marque — sinon chacune recolle
+  // le suffixe à sa façon et l'onglet mélange « | » et « — ».
+  title: {
+    default: "Bio-Lien | Crée ta boutique en ligne",
+    template: "%s | Bio-Lien",
+  },
   description:
     "Bio-Lien te permet de créer ta boutique en ligne en 5 minutes. Partage ton lien sur TikTok et Instagram, accepte les paiements Mobile Money (Orange, MTN, Wave) et vends partout en Afrique.",
   keywords: [
@@ -87,6 +93,16 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  // Les fichiers icon.svg / apple-icon.png / favicon.ico de src/app sont
+  // détectés automatiquement ; seul le manifeste demande à être déclaré.
+  manifest: "/manifest.webmanifest",
+  // Nom affiché sous l'icône quand un vendeur ajoute Bio-Lien à son écran
+  // d'accueil sur iOS, où le manifeste n'est pas lu.
+  appleWebApp: {
+    capable: true,
+    title: "Bio-Lien",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -96,7 +112,7 @@ export const viewport: Viewport = {
   userScalable: true,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
 };
 

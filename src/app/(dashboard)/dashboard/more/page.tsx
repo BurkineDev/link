@@ -13,7 +13,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
-export const metadata = { title: "Plus — Bio-Lien" };
+export const metadata = { title: "Plus" };
 
 /**
  * Hub « Plus » du mobile.

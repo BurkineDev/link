@@ -5,7 +5,7 @@ import type { SubscriptionPlan } from "@/lib/types/database";
 import { PricingClient } from "./pricing-client";
 
 export const metadata: Metadata = {
-  title: "Tarifs — Bio-Lien",
+  title: "Tarifs",
   description:
     "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
 };

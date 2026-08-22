@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Politique de confidentialité | Bio-Lien",
+  title: "Politique de confidentialité",
   description:
     "Comment Bio-Lien collecte, utilise et protège vos données personnelles.",
 };
