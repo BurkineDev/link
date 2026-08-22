@@ -12,6 +12,7 @@ import {
   contrastRatio,
   hexToRgb,
   isBioThemeId,
+  primaryActionColor,
   readableTextOn,
   relativeLuminance,
   resolveBioTheme,
@@ -191,6 +192,56 @@ describe("resolveBioTheme", () => {
         ).toBeGreaterThan(4.5);
       }
     }
+  });
+});
+
+describe("primaryActionColor", () => {
+  it("stands out from the card surface in every preset", () => {
+    for (const id of BIO_THEME_IDS) {
+      const palette = resolveBioTheme({
+        bio_theme: id,
+        theme_color: "#6366F1",
+        accent_color: "#0F172A",
+      });
+      const action = primaryActionColor(palette);
+
+      if (hexToRgb(palette.surface)) {
+        expect(contrastRatio(action, palette.surface)).toBeGreaterThanOrEqual(3);
+      }
+      expect(contrastRatio(action, readableTextOn(action))).toBeGreaterThan(4.5);
+    }
+  });
+
+  it("falls back to ink when neither brand colour reads on the surface", () => {
+    // Classic paints a white card on a white page: no brand colour qualifies.
+    const classic = resolveBioTheme({
+      bio_theme: "classic",
+      theme_color: "#FFFFFF",
+      accent_color: "#FFFFFF",
+    });
+    expect(primaryActionColor(classic)).toBe("#0F172A");
+  });
+
+  it("nudges a borderline brand colour until its label clears AA", () => {
+    // Indigo #6366F1 carries white at 4.47:1 — just under the threshold.
+    const palette = resolveBioTheme({
+      bio_theme: "brand",
+      theme_color: "#6366F1",
+      accent_color: "#0F172A",
+    });
+    const action = primaryActionColor(palette);
+
+    expect(action).not.toBe("#6366F1");
+    expect(contrastRatio(action, readableTextOn(action))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("prefers the page colour when it reads on the card", () => {
+    const lagoon = resolveBioTheme({
+      bio_theme: "lagoon",
+      theme_color: "#6366F1",
+      accent_color: "#0F172A",
+    });
+    expect(primaryActionColor(lagoon)).toBe("#2E7D7B");
   });
 });
 

@@ -47,6 +47,13 @@ Every palette is contrast-checked in `src/__tests__/bio-themes.test.ts`: body
 text clears 3:1 on its background and button text clears 4.5:1 on its surface,
 including the seller-derived `brand` theme.
 
+The product page `/{slug}/{product}` is painted in the same palette: content
+sits on a surface card (which is what keeps text readable under every theme),
+with a back-to-shop chip, a per-product share sheet and themed related
+products. `primaryActionColor()` picks the button fill that reads on that card
+— the theme accent is chosen against the page background and can wash out on
+the surface.
+
 Link buttons support a square `thumbnail_url` and count taps through the
 public `POST /api/shop-links/{id}/click` endpoint, which is backed by the
 `track_shop_link_click()` SECURITY DEFINER function (migration 018) — visitors
