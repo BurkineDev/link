@@ -198,7 +198,7 @@ export default async function DashboardLayout({
 
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <BottomNav shopSlug={shop?.slug} />
+        <BottomNav />
       </div>
     </div>
   );

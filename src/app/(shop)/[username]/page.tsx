@@ -10,6 +10,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 import { resolveBioTheme } from "@/lib/bio-themes";
+import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
+import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
 
 interface Props {
@@ -111,36 +113,54 @@ export default async function Page({ params }: Props) {
     notFound();
   }
 
-  const [productsResult, categoriesResult, linksResult] = await Promise.all([
-    supabase
-      .from("products")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .eq("is_published", true)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("categories")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .order("position", { ascending: true }),
-    supabase
-      .from("shop_links")
-      .select("id, label, url, icon, thumbnail_url, position")
-      .eq("shop_id", shop.id)
-      .eq("is_active", true)
-      .order("position", { ascending: true }),
-  ]);
+  const [productsResult, categoriesResult, linksResult, blocksResult] =
+    await Promise.all([
+      supabase
+        .from("products")
+        .select("*")
+        .eq("shop_id", shop.id)
+        .eq("is_published", true)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("categories")
+        .select("*")
+        .eq("shop_id", shop.id)
+        .order("position", { ascending: true }),
+      supabase
+        .from("shop_links")
+        .select("id, label, url, icon, thumbnail_url, position")
+        .eq("shop_id", shop.id)
+        .eq("is_active", true)
+        .order("position", { ascending: true }),
+      supabase
+        .from("page_blocks")
+        .select("id, type, position, title, config, style, visible")
+        .eq("shop_id", shop.id)
+        .order("position", { ascending: true }),
+    ]);
 
   const products = (productsResult.data ?? []) as ProductRow[];
   const categories = (categoriesResult.data ?? []) as CategoryRow[];
-  const links = (linksResult.data ?? []) as Array<{
-    id: string;
-    label: string;
-    url: string;
-    icon: string;
-    thumbnail_url: string | null;
-    position: number;
-  }>;
+  const links = (linksResult.data ?? []) as LegacyLink[];
+  const rows = (blocksResult.data ?? []) as PageBlockRow[];
+
+  // La composition est résolue ici, côté serveur : la page publique ne connaît
+  // que des blocs. Une boutique qui n'en a pas encore en reçoit une synthèse
+  // fidèle de ses liens et de sa grille produits — rien ne change pour elle
+  // tant qu'elle n'a pas ouvert le Page Builder.
+  const { blocks } = resolveBioPageBlocks({
+    rows: rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      position: row.position,
+      title: row.title,
+      config: row.config,
+      style: row.style,
+      visible: row.visible,
+    })),
+    links,
+    hasProducts: products.length > 0,
+  });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -149,7 +169,7 @@ export default async function Page({ params }: Props) {
       shop={shop}
       products={products}
       categories={categories}
-      links={links}
+      blocks={blocks}
       pageUrl={`${appUrl}/${shop.slug}`}
     />
   );

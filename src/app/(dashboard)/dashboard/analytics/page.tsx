@@ -15,6 +15,7 @@ import {
   ShoppingBagIcon,
   TrendingUpIcon,
 } from "lucide-react";
+import { BLOCK_TYPE_META, isBlockType } from "@/lib/blocks/types";
 import type { OrderRow, OrderStatus, Currency } from "@/lib/types/database";
 
 // ---- helpers ----
@@ -266,6 +267,41 @@ function CountBarChart({
   );
 }
 
+
+// ---- Clics par bloc ----
+
+/** Ligne de `page_blocks` réduite à ce que ce tableau de bord affiche. */
+type ClickableBlockRow = {
+  type: string;
+  title: string | null;
+  config: unknown;
+  visible: boolean;
+  click_count: number;
+};
+
+type ClickableRow = { label: string; click_count: number; is_active: boolean };
+
+/**
+ * Seuls les blocs sur lesquels on peut taper méritent une ligne ici : un bloc
+ * de texte à 0 clic n'est pas une contre-performance, c'est un bloc qui ne se
+ * clique pas. L'afficher noierait les vrais chiffres.
+ */
+const CLICKABLE_BLOCK_TYPES = new Set(["LINK", "WHATSAPP", "IMAGE", "BOOKING"]);
+
+function toClickableRow(row: ClickableBlockRow): ClickableRow[] {
+  if (!CLICKABLE_BLOCK_TYPES.has(row.type)) return [];
+  const config = (row.config ?? {}) as { label?: string; alt?: string };
+  const label =
+    row.title?.trim() ||
+    config.label?.trim() ||
+    config.alt?.trim() ||
+    (isBlockType(row.type) ? BLOCK_TYPE_META[row.type].label : row.type);
+
+  return [
+    { label, click_count: row.click_count, is_active: row.visible },
+  ];
+}
+
 // ---- Page ----
 
 export default async function AnalyticsPage() {
@@ -290,24 +326,30 @@ export default async function AnalyticsPage() {
   const cutoffDay = dayKey(days30[0]);
 
   // Orders + bio-page analytics, fetched together
-  const [ordersResult, viewsResult, linksResult] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("id, total_amount, status, items, created_at")
-      .eq("shop_id", shop.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("shop_page_views")
-      .select("day, views")
-      .eq("shop_id", shop.id)
-      .gte("day", cutoffDay)
-      .order("day", { ascending: true }),
-    supabase
-      .from("shop_links")
-      .select("label, click_count, is_active")
-      .eq("shop_id", shop.id)
-      .order("click_count", { ascending: false }),
-  ]);
+  const [ordersResult, viewsResult, linksResult, blocksResult] =
+    await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, total_amount, status, items, created_at")
+        .eq("shop_id", shop.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("shop_page_views")
+        .select("day, views")
+        .eq("shop_id", shop.id)
+        .gte("day", cutoffDay)
+        .order("day", { ascending: true }),
+      supabase
+        .from("shop_links")
+        .select("label, click_count, is_active")
+        .eq("shop_id", shop.id)
+        .order("click_count", { ascending: false }),
+      supabase
+        .from("page_blocks")
+        .select("type, title, config, visible, click_count")
+        .eq("shop_id", shop.id)
+        .order("click_count", { ascending: false }),
+    ]);
   const allOrders = ordersResult.data;
 
   const orders = (allOrders ?? []) as Pick<
@@ -389,7 +431,20 @@ export default async function AnalyticsPage() {
   }));
   const totalViews30 = viewsChartData.reduce((s, d) => s + d.count, 0);
 
-  const links = linksResult.data ?? [];
+  // Une page composée en blocs compte ses clics sur ses blocs ; une page qui
+  // n'est pas encore passée au Page Builder les compte toujours sur ses liens.
+  // Lire la bonne source évite d'annoncer 0 clic à un vendeur qui vient
+  // d'adopter sa composition.
+  const blockRows = (blocksResult.data ?? []) as ClickableBlockRow[];
+  const links: ClickableRow[] =
+    blockRows.length > 0
+      ? blockRows.flatMap(toClickableRow)
+      : (linksResult.data ?? []).map((l) => ({
+          label: l.label,
+          click_count: l.click_count,
+          is_active: l.is_active,
+        }));
+
   const totalClicks = links.reduce((s, l) => s + l.click_count, 0);
   const maxLinkClicks = Math.max(...links.map((l) => l.click_count), 1);
 
@@ -516,7 +571,7 @@ export default async function AnalyticsPage() {
           <CardContent className="pt-4">
             {links.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Ajoute des liens dans Réglages → Liens pour voir leurs clics ici.
+                Ajoute des blocs à ta page pour voir leurs clics ici.
               </p>
             ) : (
               <div className="flex flex-col gap-3">

@@ -6,10 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MessageCircle, Share2, ShoppingBag, Sparkles } from "lucide-react";
 import { BioProfile, BioSocials } from "@/components/shop/bio-profile";
-import {
-  BioLinkButton,
-  type PublicShopLink,
-} from "@/components/shop/bio-link-button";
+import { BioBlock } from "@/components/shop/bio-block";
 import { BioProductCard } from "@/components/shop/bio-product-card";
 
 import { TrackingPixels } from "@/components/shop/tracking-pixels";
@@ -22,6 +19,8 @@ import {
 } from "@/lib/constants";
 import { bioThemeCssVars, resolveBioTheme } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
+import { isProductBlock, selectProductsForBlocks } from "@/lib/blocks/public";
+import type { ResolvedBlock } from "@/lib/blocks/types";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 
 // Both are dialogs behind a tap: nobody needs their code (Radix dialog, the
@@ -38,7 +37,12 @@ interface ShopPageProps {
   shop: ShopRow;
   products: ProductRow[];
   categories: CategoryRow[];
-  links?: PublicShopLink[];
+  /**
+   * The page's composition, already resolved server-side — stored blocks when
+   * the seller has composed their page, a faithful synthesis of their links
+   * and products otherwise. This component renders it; it never decides it.
+   */
+  blocks: ResolvedBlock[];
   /** Absolute URL of this page — used by the share sheet and the QR code. */
   pageUrl: string;
 }
@@ -79,13 +83,32 @@ export function ShopPage({
   shop,
   products,
   categories,
-  links = [],
+  blocks,
   pageUrl,
 }: ShopPageProps) {
   const palette = resolveBioTheme(shop);
 
-  const hasLinks = links.length > 0;
-  const hasProducts = products.length > 0;
+  // Les blocs produits alimentent l'onglet Boutique, tout le reste l'onglet
+  // Liens — la lecture de la page ne change pas, seule sa composition est
+  // désormais entre les mains du vendeur.
+  const contentBlocks = useMemo(
+    () => blocks.filter((block) => !isProductBlock(block)),
+    [blocks],
+  );
+  const shopProducts = useMemo(
+    () => selectProductsForBlocks(blocks.filter(isProductBlock), products),
+    [blocks, products],
+  );
+
+  const hasLinks = contentBlocks.length > 0;
+  const hasProducts = shopProducts.length > 0;
+
+  // Le vendeur a placé son propre bouton WhatsApp dans la page : le CTA
+  // flottant ferait doublon à l'écran, et il n'est pas placé par lui. Le bloc
+  // gagne — c'est une décision de composition, pas un défaut de configuration.
+  const hasWhatsAppBlock = contentBlocks.some(
+    (block) => block.type === "WHATSAPP",
+  );
 
   const [tabOverride, setTabOverride] = useState<BioTab | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -128,9 +151,9 @@ export function ShopPage({
   };
 
   const filteredProducts = useMemo(() => {
-    if (!activeCategory) return products;
-    return products.filter((p) => p.category_id === activeCategory);
-  }, [products, activeCategory]);
+    if (!activeCategory) return shopProducts;
+    return shopProducts.filter((p) => p.category_id === activeCategory);
+  }, [shopProducts, activeCategory]);
 
   const fontClass = FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
   const buttonRadius = CTA_SHAPE_CLASS[shop.cta_shape] ?? CTA_SHAPE_CLASS.rounded;
@@ -268,19 +291,22 @@ export function ShopPage({
           </div>
         )}
 
-        {/* ── Links tab ── */}
+        {/* ── Links tab: the page's blocks, in the seller's order ── */}
         {tab === "links" && (
-          <ul className="mt-6 flex flex-col gap-3">
-            {links.map((link) => (
-              <BioLinkButton
-                key={link.id}
-                link={link}
+          <div className="mt-6 flex flex-col gap-3">
+            {contentBlocks.map((block) => (
+              <BioBlock
+                key={block.id}
+                block={block}
                 palette={palette}
                 radiusClass={buttonRadius}
                 pageUrl={pageUrl}
+                shopName={shop.name}
+                shopWhatsappNumber={shop.whatsapp_number}
+                shopSocialLinks={shop.social_links}
               />
             ))}
-          </ul>
+          </div>
         )}
 
         {/* ── Shop tab ── */}
@@ -404,6 +430,7 @@ export function ShopPage({
 
       {/* ── Floating order CTA ── */}
       {isWhatsAppMode ? (
+        !hasWhatsAppBlock && (
         <a
           href={whatsappUrl}
           target="_blank"
@@ -419,6 +446,7 @@ export function ShopPage({
           <MessageCircle className="size-5 text-white" />
           <span className="text-sm font-semibold text-white">Commander</span>
         </a>
+        )
       ) : (
         showCartFab && (
           <button
