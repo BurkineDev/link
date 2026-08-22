@@ -278,6 +278,9 @@ export type BoostPurchaseRow = {
   amount: number;
   currency: string;
   status: BoostStatus;
+  provider: SubscriptionProvider;
+  /** Référence Genius Pay — absente sur les achats par carte. */
+  reference: string | null;
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;
   activated_at: string | null;
@@ -289,8 +292,11 @@ export type BoostPurchaseRow = {
 
 export type BoostPurchaseInsert = Omit<
   BoostPurchaseRow,
-  "id" | "created_at" | "updated_at"
->;
+  "id" | "created_at" | "updated_at" | "provider" | "reference"
+> & {
+  provider?: SubscriptionProvider;
+  reference?: string | null;
+};
 
 export type BoostPurchaseUpdate = Partial<
   Omit<BoostPurchaseRow, "id" | "shop_id" | "user_id" | "created_at">
@@ -665,6 +671,10 @@ export interface Database {
         Returns: void;
       };
       apply_subscription_payment: {
+        Args: { p_reference: string };
+        Returns: Json;
+      };
+      apply_boost_payment: {
         Args: { p_reference: string };
         Returns: Json;
       };

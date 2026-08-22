@@ -64,12 +64,16 @@ export async function POST(request: NextRequest) {
   const data = payload.data;
 
   // ── Abonnement vendeur ────────────────────────────────────────────────
-  // Deux flux arrivent sur cette même URL : les commandes d'acheteurs et les
-  // périodes d'abonnement payées d'avance par les vendeurs. Sans cet
-  // aiguillage, un paiement d'abonnement irait chercher une commande qui
-  // n'existe pas, repartirait en 200, et le vendeur aurait payé pour rien.
+  // Trois flux arrivent sur cette même URL : les commandes d'acheteurs, les
+  // périodes d'abonnement et les boosts ponctuels. Sans cet aiguillage, un
+  // paiement d'abonnement irait chercher une commande qui n'existe pas,
+  // repartirait en 200, et le vendeur aurait payé pour rien.
   if (data.metadata?.kind === "subscription") {
     return handleSubscriptionEvent(data);
+  }
+
+  if (data.metadata?.kind === "boost") {
+    return handleBoostEvent(data);
   }
 
   const orderId =
@@ -257,5 +261,48 @@ async function handleSubscriptionEvent(data: WebhookData) {
   }
 
   console.info("[geniuspay-webhook] subscription", reference, applied);
+  return new NextResponse(null, { status: 200 });
+}
+
+/**
+ * Active (ou non) le boost acheté.
+ *
+ * Même contrat que les abonnements : c'est `apply_boost_payment` qui décide,
+ * en base et en une transaction, parce que Genius Pay peut livrer deux fois
+ * le même événement. La fonction prolonge un boost encore en cours plutôt que
+ * de l'écraser — les heures restantes ont été payées.
+ */
+async function handleBoostEvent(data: WebhookData) {
+  const reference = data.reference;
+  if (!reference) return new NextResponse(null, { status: 200 });
+
+  const status = mapStatusToPaymentStatus(data.status ?? "pending");
+  const supabase = getAdminClient();
+
+  if (status !== "paid") {
+    if (status === "failed") {
+      const { error } = await supabase
+        .from("boost_purchases")
+        .update({ status: "failed" })
+        .eq("reference", reference)
+        .eq("status", "pending");
+      if (error) {
+        console.error("[geniuspay-webhook] boost status update", error);
+        return new NextResponse(null, { status: 500 });
+      }
+    }
+    return new NextResponse(null, { status: 200 });
+  }
+
+  const { data: applied, error } = await supabase.rpc("apply_boost_payment", {
+    p_reference: reference,
+  });
+
+  if (error) {
+    console.error("[geniuspay-webhook] apply_boost_payment", error);
+    return new NextResponse(null, { status: 500 });
+  }
+
+  console.info("[geniuspay-webhook] boost", reference, applied);
   return new NextResponse(null, { status: 200 });
 }

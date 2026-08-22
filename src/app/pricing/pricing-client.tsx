@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
 import {
+  BOOSTS,
   PREPAID_MONTHS,
   getPrepaidPrice,
   prepaidSavingsPercent,
@@ -452,7 +453,9 @@ export function PricingClient({
                 Ta boutique en haut de l&apos;explore pendant 24 heures.
               </p>
             </div>
-            <p className="font-bold whitespace-nowrap">1,99 $CA</p>
+            <p className="font-bold whitespace-nowrap">
+              {formatPrice(BOOSTS.featured_24h.amountXof, "XOF")}
+            </p>
           </div>
         </div>
 

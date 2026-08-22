@@ -233,9 +233,14 @@ export interface BoostDefinition {
   type: BoostType;
   label: string;
   description: string;
-  /** Price in the smallest unit of CAD (cents). 199 = 1,99 CAD. */
+  /** Prix en centimes de CAD, pour le paiement par carte. 199 = 1,99 CAD. */
   amount: number;
   currency: typeof PLAN_CURRENCY;
+  /**
+   * Prix en FCFA — la voie principale, en Mobile Money. XOF n'a pas de
+   * décimale : le montant est le montant, pas des centimes.
+   */
+  amountXof: number;
   /** Duration the boost stays active. Null = permanent unlock. */
   durationHours: number | null;
   /** Hide from the dashboard UI when the feature isn't shipped yet. */
@@ -249,6 +254,7 @@ export const BOOSTS = {
     description: "Ta boutique apparaît en tête de l'explore pendant 24 heures.",
     amount: 199,
     currency: PLAN_CURRENCY,
+    amountXof: 1_000,
     durationHours: 24,
     available: true,
   },
@@ -258,6 +264,7 @@ export const BOOSTS = {
     description: "Connecte ton propre domaine (ex. maboutique.ci).",
     amount: 299,
     currency: PLAN_CURRENCY,
+    amountXof: 5_000,
     durationHours: null,
     available: false,
   },
@@ -267,6 +274,7 @@ export const BOOSTS = {
     description: "Débloque 5 templates exclusifs pour ta boutique.",
     amount: 2_499,
     currency: PLAN_CURRENCY,
+    amountXof: 10_000,
     durationHours: null,
     available: false,
   },
