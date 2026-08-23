@@ -2,933 +2,922 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  BarChart3,
-  Package,
-  Link2,
-  Headphones,
-  Check,
-  Camera,
-  ChevronRight,
-  Globe2,
-  Link2,
-  Menu,
-  MessageCircle,
-  MoreHorizontal,
-  Music2,
-  Palette,
-  Play,
-  ShoppingBag,
-  Sparkles,
-  X,
-  ChevronRight,
-  Sparkles,
-  Hammer,
-  MessageCircle,
-} from "lucide-react";
-import { Logo } from "@/components/shared/logo";
+import { useRouter } from "next/navigation";
 import {
   JsonLd,
   organizationJsonLd,
   websiteJsonLd,
 } from "@/lib/seo/json-ld";
-import { cn } from "@/lib/utils";
 
-const benefits = [
-  { icon: Link2, title: "Tous tes liens. Enfin réunis.", text: "Réseaux, boutique, WhatsApp et contenus : une seule adresse simple à partager." },
-  { icon: Sparkles, title: "Une page qui te ressemble", text: "Couleurs, typographies, blocs et bio assistée par IA. Aucun code à écrire." },
-  { icon: BarChart3, title: "Comprends ton audience", text: "Découvre ce qui attire les clics et améliore ta page avec des données claires." },
+// ---------------------------------------------------------------------------
+// Page d'accueil — système de design de la marque
+// ---------------------------------------------------------------------------
+//
+// Les couleurs, ombres et rayons viennent des jetons `--brand-*` de
+// globals.css. Rien n'est écrit en dur ici : changer une valeur là-bas
+// change la page entière.
+//
+// Le design fourni est dessiné pour un écran large (min-width: 1100px). Nos
+// visiteurs arrivent d'une bio TikTok, donc du téléphone. Chaque section a
+// donc reçu son comportement mobile — c'est la seule chose que j'ai ajoutée
+// au design, parce qu'une page illisible à 390 px ne sert à rien.
+//
+// La signature du système tient en trois choses : des ombres dures sans flou,
+// des bordures de 1,5 px, et des pilules.
+
+const SITE_URL = "https://www.bio-lien.com";
+
+const NAV = [
+  { label: "Explorer", href: "/explore" },
+  { label: "Outils gratuits", href: "/outils" },
+  { label: "Fonctionnalités", href: "#why" },
+  { label: "Tarifs", href: "/pricing" },
 ];
 
-const templates = [
-  { name: "Soraya", role: "Mode & lifestyle", bg: "#f5d6c6", accent: "#ff5d35", avatar: "S", links: ["Ma nouvelle collection", "Shopper mes looks"] },
-  { name: "Kader Beats", role: "Artiste · Producteur", bg: "#d8f83d", accent: "#111111", avatar: "K", links: ["Écouter le nouvel EP", "YouTube"] },
-  { name: "Studio Noma", role: "Design & création", bg: "#c8b9ff", accent: "#5b36e8", avatar: "N", links: ["Voir nos projets", "Nous contacter"] },
-];
+// ---------------------------------------------------------------------------
+// En-tête
+// ---------------------------------------------------------------------------
 
-function CreatorPhone({ compact = false }: { compact?: boolean }) {
+function Wordmark({ dark = false }: { dark?: boolean }) {
   return (
-    <div className={`relative mx-auto ${compact ? "w-[220px]" : "w-[286px] sm:w-[310px]"}`}>
-      <div className="absolute -inset-10 rounded-full bg-[#ffda46]/25 blur-3xl" />
-      <motion.div
-        initial={{ y: 18, opacity: 0, rotate: 2 }}
-        animate={{ y: 0, opacity: 1, rotate: -2 }}
-        transition={{ duration: .7, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-[2.8rem] border-[7px] border-[#171717] bg-[#f8efd7] p-3 shadow-[0_32px_80px_rgba(24,20,12,.22)]"
-      >
-        <div className="mx-auto mb-3 h-5 w-24 rounded-full bg-[#171717]" />
-        <div className="rounded-[2rem] bg-[#fffaf0] px-4 pb-5 pt-3 text-center">
-          <div className="mb-3 flex justify-between text-[#1f1c16]"><Globe2 className="size-4" /><MoreHorizontal className="size-4" /></div>
-          <div className="relative mx-auto mb-3 grid size-20 place-items-center overflow-hidden rounded-full bg-[#153c32] text-3xl font-black text-[#ffda46] ring-4 ring-white shadow-md">
-            AS
-            <span className="absolute bottom-1 right-1 size-4 rounded-full border-2 border-white bg-[#65c38c]" />
-          </div>
-          <p className="text-lg font-black">Awa Studio</p>
-          <p className="mt-1 text-xs leading-relaxed text-black/55">Créatrice, entrepreneure & amoureuse<br />des belles choses ✨</p>
-          <div className="mt-3 flex justify-center gap-3"><Camera className="size-4" /><Music2 className="size-4" /><Video className="size-4" /></div>
-          <div className="mt-4 space-y-2.5 text-left text-xs font-bold">
-            <div className="flex items-center gap-3 rounded-2xl bg-[#ffda46] p-2.5 pr-3 shadow-[3px_3px_0_#171717]"><span className="grid size-9 place-items-center rounded-xl bg-white"><ShoppingBag className="size-4" /></span><span className="flex-1">Découvre ma boutique</span><ChevronRight className="size-4" /></div>
-            <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2.5 pr-3"><span className="grid size-9 place-items-center rounded-xl bg-[#f0e9ff]"><Play className="size-4" /></span><span className="flex-1">Ma dernière vidéo</span><ChevronRight className="size-4" /></div>
-            <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2.5 pr-3"><span className="grid size-9 place-items-center rounded-xl bg-[#dbf6e7]"><MessageCircle className="size-4" /></span><span className="flex-1">Discutons sur WhatsApp</span><ChevronRight className="size-4" /></div>
-          </div>
-          <p className="mt-5 text-[10px] font-black tracking-tight">Bio<span className="text-[#dc552f]">-Lien</span></p>
-        </div>
-      </motion.div>
-      {!compact && <>
-        <motion.div animate={{ y: [0,-8,0] }} transition={{ duration: 3, repeat: Infinity }} className="absolute -right-8 top-28 rounded-2xl border border-black/5 bg-white px-4 py-3 text-xs font-bold shadow-xl"><span className="mr-2 text-[#5c35e8]">↗</span> +48 clics aujourd’hui</motion.div>
-        <motion.div animate={{ y: [0,7,0] }} transition={{ duration: 3.5, repeat: Infinity }} className="absolute -left-10 bottom-24 rounded-2xl bg-[#153c32] px-4 py-3 text-xs font-bold text-white shadow-xl">● En ligne</motion.div>
-      </>}
-    </div>
+    <span
+      className="font-extrabold tracking-[-0.03em]"
+      style={{ color: dark ? "#fff" : "var(--brand-ink)" }}
+    >
+      Bio
+      <span style={{ color: dark ? "var(--brand-yellow)" : "var(--brand-clay)" }}>
+        -Lien
+      </span>
+    </span>
   );
 }
 
-function Navbar() {
+function Header() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-md border-b border-black/[0.06]">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        {/* Logo */}
-        <Logo size="sm" />
+    <header
+      className="sticky top-0 z-50 backdrop-blur-[10px]"
+      style={{
+        background: "rgba(250,246,236,.92)",
+        borderBottom: "1px solid rgba(0,0,0,.07)",
+      }}
+    >
+      <div className="mx-auto flex h-[68px] max-w-[1200px] items-center justify-between gap-6 px-6">
+        <Link href="/" className="text-[22px]">
+          <Wordmark />
+        </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-8">
-          {[
-            { label: "Explorer", href: "/explore" },
-            { label: "Outils gratuits", href: "/outils" },
-            { label: "Fonctionnalités", href: "#features" },
-            { label: "Tarifs", href: "/pricing" },
-          ].map((item) => (
+        <nav className="hidden items-center gap-8 text-sm font-semibold md:flex">
+          {NAV.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="transition-colors hover:text-[var(--brand-clay)]"
+              style={{ color: "rgba(23,23,23,.65)" }}
             >
               {item.label}
             </a>
           ))}
         </nav>
 
-        {/* Desktop CTA */}
-        <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/login">Connexion</Link>
-          </Button>
-          <Button
-            size="sm"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-            asChild
+        <div className="hidden items-center gap-3 md:flex">
+          <Link href="/login" className="px-4 py-2.5 text-sm font-bold">
+            Connexion
+          </Link>
+          <Link
+            href="/register"
+            className="rounded-full px-5 py-[11px] text-sm font-extrabold transition-colors"
+            style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
           >
-            <Link href="/register">
-              Créer ma page
-              <ChevronRight className="ml-1 size-3.5" />
-            </Link>
-          </Button>
+            Créer ma page →
+          </Link>
         </div>
 
-        {/* Mobile hamburger */}
         <button
-          className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors touch-target"
+          type="button"
           onClick={() => setOpen((v) => !v)}
           aria-label="Menu"
+          aria-expanded={open}
+          className="rounded-lg p-2 md:hidden"
         >
-          {open ? <X className="size-5" /> : <Menu className="size-5" />}
+          <span className="block h-0.5 w-5 bg-[var(--brand-ink)]" />
+          <span className="mt-1 block h-0.5 w-5 bg-[var(--brand-ink)]" />
+          <span className="mt-1 block h-0.5 w-5 bg-[var(--brand-ink)]" />
         </button>
       </div>
 
-      {/* Mobile menu */}
       {open && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="md:hidden border-t border-black/[0.06] bg-white"
+        <div
+          className="md:hidden"
+          style={{
+            borderTop: "1px solid rgba(0,0,0,.07)",
+            background: "var(--brand-cream)",
+          }}
         >
-          <nav className="flex flex-col px-4 py-4 gap-1">
-            {[
-              { label: "Explorer", href: "/explore" },
-              { label: "Outils gratuits", href: "/outils" },
-              { label: "Fonctionnalités", href: "#features" },
-              { label: "Tarifs", href: "/pricing" },
-            ].map((item) => (
+          <nav className="flex flex-col gap-1 px-6 py-4">
+            {NAV.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors border-b border-muted last:border-0"
+                className="py-2.5 text-sm font-bold"
               >
                 {item.label}
               </a>
             ))}
-            <div className="pt-3 flex flex-col gap-2">
-              <Button variant="outline" className="w-full" asChild>
-                <Link href="/login">Connexion</Link>
-              </Button>
-              <Button
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                asChild
-              >
-                <Link href="/register">Créer ma page gratuitement</Link>
-              </Button>
-            </div>
+            <Link href="/login" className="py-2.5 text-sm font-bold">
+              Connexion
+            </Link>
+            <Link
+              href="/register"
+              className="mt-2 rounded-full py-3 text-center text-sm font-extrabold"
+              style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+            >
+              Créer ma page →
+            </Link>
           </nav>
-        </motion.div>
+        </div>
       )}
     </header>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Hero
+// Visuel du héros
 // ---------------------------------------------------------------------------
+//
+// Le design fourni plaçait ici l'illustration marketing de Linktree — leur
+// photographie, et leur logo astérisque en bas à gauche. Impossible de la
+// publier : c'est la marque d'un concurrent sur notre propre accueil.
+//
+// La composition est reconstruite en CSS, avec notre adresse dessus. Aucun
+// fichier à charger, et ça s'adapte à la largeur.
 
-function Hero() {
+const SOCIAL_CARDS = [
+  { bg: "#e1306c", glyph: "◎", label: "Instagram", offset: 0 },
+  { bg: "#1877f2", glyph: "f", label: "Facebook", offset: 1 },
+  { bg: "#ff0000", glyph: "▶", label: "YouTube", offset: 2 },
+  { bg: "#6b7280", glyph: "▤", label: "QR", offset: 3 },
+  { bg: "#171717", glyph: "♪", label: "TikTok", offset: 4 },
+];
+
+function HeroVisual() {
   return (
-    <section className="relative pt-28 pb-20 sm:pt-36 sm:pb-28 overflow-hidden bg-foreground">
-      {/* Subtle dot pattern overlay */}
+    <div className="relative mx-auto w-full max-w-[480px]">
+      {/* Halo jaune, comme dans le design. */}
       <div
-        className="absolute inset-0 -z-10 opacity-[0.06]"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-          backgroundSize: "32px 32px",
-        }}
+        aria-hidden
+        className="pointer-events-none absolute -inset-8 rounded-full blur-[70px]"
+        style={{ background: "rgba(255,218,70,.35)" }}
       />
 
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left: Copy */}
-          <div className="text-white">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
+      <div className="relative aspect-square">
+        {SOCIAL_CARDS.map((card) => {
+          const i = card.offset;
+          return (
+            <div
+              key={card.label}
+              className="absolute rounded-[8%]"
+              style={{
+                background: card.bg,
+                // La carte de devant (offset 0) occupe le bas-gauche ; les
+                // suivantes s'échelonnent vers le haut-droit, comme dans le
+                // design.
+                inset: `${(4 - i) * 9}% ${(4 - i) * 9}% ${i * 9}% ${i * 9}%`,
+                zIndex: 10 - i,
+                boxShadow: "0 12px 30px rgba(0,0,0,.12)",
+              }}
             >
-              {/* « Plateforme #1 » a été retiré : invérifiable, et surtout
-                  contre-productif. L'obstacle du visiteur n'est pas de savoir
-                  si on est les meilleurs — c'est de croire que c'est
-                  technique. Autant répondre à ça tout de suite. */}
-              <Badge className="mb-6 bg-primary text-primary-foreground border-0 hover:bg-primary/90 text-sm px-3 py-1 font-semibold">
-                Aucune compétence technique
-              </Badge>
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.08 }}
-              className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.08] tracking-tight mb-6"
-            >
-              Un seul lien dans ta bio.{" "}
-              <span className="bg-primary text-primary-foreground rounded-lg px-2 inline-block">
-                Et tu vends dessus.
-              </span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.16 }}
-              className="text-lg sm:text-xl text-white/85 mb-8 leading-relaxed max-w-lg"
-            >
-              Tes réseaux, tes produits, ton WhatsApp — réunis sur une page à
-              toi, au lieu de liens qui traînent partout. Tu colles ton lien,
-              on reconnaît TikTok, Instagram ou YouTube tout seuls. Et le jour
-              où tu veux vendre, tu encaisses en Mobile Money ou par carte.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.24 }}
-              className="flex flex-col sm:flex-row gap-3"
-            >
-              <Button
-                size="lg"
-                className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-base h-12 px-7 border-0"
-                asChild
-              >
-                <Link href="/register">
-                  Créer ma page gratuite
-                  <ArrowRight className="ml-2 size-4" />
-                </Link>
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white/30 text-white bg-transparent hover:bg-white/10 hover:text-white font-semibold text-base h-12 px-7"
-                asChild
-              >
-                <Link href="/explore">Voir les boutiques</Link>
-              </Button>
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-5 text-sm text-white/60 flex items-center gap-2"
-            >
-              <Check className="size-4 text-white/80" />
-              Gratuit pour commencer · Sans carte bancaire · En ligne en 5 minutes
-            </motion.p>
-          </div>
-
-          {/* Right: Phone mockup */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 24 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="flex justify-center lg:justify-end"
-          >
-            <PhoneMockup />
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stats bar
-// ---------------------------------------------------------------------------
-
-function StatsBar() {
-  const stats = [
-    { value: "5 min", label: "pour être en ligne" },
-    // « Stripe » ne dit rien à quelqu'un qui paie en Mobile Money ; le nom du
-    // prestataire n'est pas un argument, le moyen de paiement en est un.
-    { value: "Mobile Money", label: "ou carte bancaire" },
-    { value: "@toi", label: "ton lien à partager" },
-    { value: "0 FCFA", label: "pour démarrer" },
-  ];
-
-  return (
-    <section className="py-10 border-y border-muted bg-white">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-0 md:divide-x divide-muted">
-          {stats.map((stat, i) => (
-            <FadeIn key={stat.label} delay={i * 0.08} className="text-center px-4">
-              <p className="text-2xl sm:text-3xl font-black text-foreground mb-1">
-                {stat.value}
-              </p>
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// How it works
-// ---------------------------------------------------------------------------
-
-function HowItWorks() {
-  const steps = [
-    {
-      number: "01",
-      title: "Crée ton compte",
-      subtitle: "30 secondes",
-      description:
-        "Inscris-toi gratuitement avec ton email ou ton compte Google. Aucune carte bancaire requise.",
-      emoji: "🚀",
-      bg: "bg-[var(--primary)]/10",
-      border: "border-[var(--primary)]/30",
-    },
-    {
-      number: "02",
-      title: "Colle tes liens",
-      subtitle: "Rien à configurer",
-      description:
-        "Ton TikTok, ton Instagram, ton WhatsApp. Tu colles l'adresse, on reconnaît la plateforme et on remplit le reste. Tes produits viennent après, si tu en vends.",
-      emoji: "🔗",
-      bg: "bg-muted",
-      border: "border-border",
-    },
-    {
-      number: "03",
-      title: "Partage et encaisse",
-      subtitle: "Ton lien bio-lien.com/@toi",
-      description:
-        "Mets-le dans ta bio TikTok, Instagram, WhatsApp. Et le jour où tu vends, tu es payé en Mobile Money ou par carte.",
-      emoji: "💰",
-      bg: "bg-[var(--success)]/10",
-      border: "border-[var(--success)]/30",
-    },
-  ];
-
-  return (
-    <section className="py-20 sm:py-28 bg-white" id="how-it-works">
-      <div className="max-w-6xl mx-auto px-4">
-        <FadeIn className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 text-primary border-primary/30">
-            Comment ça marche
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Simple comme{" "}
-            <span className="text-primary">bonjour</span>
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Trois étapes, et ta page est en ligne. Rien à installer, rien à
-            paramétrer.
-          </p>
-        </FadeIn>
-
-        <div className="grid md:grid-cols-3 gap-6 relative">
-          {/* Connector line */}
-          <div className="hidden md:block absolute top-12 left-[calc(16.66%+1rem)] right-[calc(16.66%+1rem)] h-px bg-border" />
-
-          {steps.map((step, i) => (
-            <FadeIn key={step.number} delay={i * 0.12}>
-              <Card className={cn("relative overflow-hidden border-2 h-full", step.border, step.bg)}>
-                <CardContent className="p-6">
-                  <div className="relative">
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="size-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl flex-shrink-0 border border-border">
-                        {step.emoji}
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                          Étape {step.number}
-                        </span>
-                        <h3 className="text-xl font-black mt-0.5">{step.title}</h3>
-                        <Badge variant="secondary" className="mt-1 text-xs">
-                          {step.subtitle}
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {step.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Features
-// ---------------------------------------------------------------------------
-
-function Features() {
-  const features = [
-    {
-      icon: Smartphone,
-      title: "Paiement sécurisé",
-      description:
-        "Tes clients paient par carte bancaire via Stripe ou par Mobile Money (Wave, Orange, MTN, Moov) via Genius Pay — sécurisé et fiable.",
-      color: "text-foreground",
-      bg: "bg-[var(--primary)]/15",
-    },
-    {
-      icon: Zap,
-      title: "Templates professionnels",
-      description:
-        "Boutique prête en minutes. Choisis parmi des designs pensés pour les créateurs africains.",
-      color: "text-foreground",
-      bg: "bg-[var(--primary)]/15",
-    },
-    {
-      icon: Package,
-      title: "Suivi des stocks",
-      // « Alertes automatiques quand le stock est bas » a été retiré : cette
-      // fonctionnalité n'existe nulle part dans le code. Ce qui suit décrit
-      // ce que `reserve_stock` fait réellement.
-      description:
-        "Le compteur baisse à chaque commande payée, et un article épuisé n'est plus commandable.",
-      color: "text-[var(--success)]",
-      bg: "bg-[var(--success)]/10",
-    },
-    {
-      icon: BarChart3,
-      title: "Analytics en temps réel",
-      description:
-        "Vues, conversions, revenus. Comprends ce qui se vend et optimise ta boutique.",
-      color: "text-[var(--success)]",
-      bg: "bg-[var(--success)]/10",
-    },
-    {
-      icon: Link2,
-      title: "Lien @username unique",
-      description:
-        "bio-lien.com/@ton-nom — facile à partager, à retenir et à promouvoir sur tous tes réseaux.",
-      color: "text-foreground",
-      bg: "bg-muted",
-    },
-    {
-      icon: Headphones,
-      title: "Un vrai humain te répond",
-      // Disait « Support 24/7 — notre équipe basée en Afrique répond en
-      // français, anglais et langues locales ». Rien de tout cela n'est vrai
-      // aujourd'hui : ni l'astreinte permanente, ni l'équipe, ni les langues.
-      // Une promesse de support invérifiable se paie au premier client déçu.
-      description:
-        "Écris à support@bio-lien.com et une personne te répond en français. Pas de robot, pas de formulaire à rallonge.",
-      color: "text-foreground",
-      bg: "bg-muted",
-    },
-  ];
-
-  return (
-    <section className="py-20 sm:py-28 bg-muted/30" id="features">
-      <div className="max-w-6xl mx-auto px-4">
-        <FadeIn className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 text-primary border-primary/30">
-            Fonctionnalités
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Tout ce qu&apos;il te faut pour{" "}
-            <span className="text-primary">vendre en ligne</span>
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Des outils puissants, conçus spécifiquement pour les réalités du
-            marché africain.
-          </p>
-        </FadeIn>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map((feature, i) => (
-            <FadeIn key={feature.title} delay={i * 0.07}>
-              <Card className="h-full border border-black/[0.06] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 bg-white">
-                <CardContent className="p-6">
+              <div className="flex h-full flex-col justify-between p-[7%]">
+                <div className="flex items-start justify-between">
                   <div
-                    className={cn(
-                      "size-12 rounded-2xl flex items-center justify-center mb-4",
-                      feature.bg
-                    )}
-                  >
-                    <feature.icon className={cn("size-6", feature.color)} />
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    {feature.description}
-                  </p>
-                </CardContent>
-              </Card>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Templates showcase
-// ---------------------------------------------------------------------------
-
-function TemplateCard({
-  name,
-  tag,
-  headerBg,
-  headerText,
-  products,
-}: {
-  name: string;
-  tag: string;
-  headerBg: string;
-  headerText: string;
-  products: { emoji: string; name: string; price: string }[];
-}) {
-  return (
-    <div className="rounded-2xl overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow duration-200 bg-card">
-      {/* Header */}
-      <div className={cn("h-24 flex items-center justify-center", headerBg)}>
-        <div className={cn("text-center", headerText)}>
-          <p className="text-xl font-black">{name}</p>
-          <Badge className="mt-1 bg-white/15 border-white/25 text-[11px]" style={{ color: "inherit" }}>
-            {tag}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Product list */}
-      <div className="p-4 space-y-2.5">
-        {products.map((p) => (
-          <div
-            key={p.name}
-            className="flex items-center gap-3 p-2.5 rounded-xl bg-muted"
-          >
-            <span className="text-xl">{p.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate">{p.name}</p>
-              <p className="text-xs text-foreground font-bold">{p.price}</p>
+                    className="aspect-square w-[22%] rounded-full"
+                    style={{ background: "var(--brand-lime)" }}
+                  />
+                  <span className="text-[clamp(14px,3vw,22px)] font-extrabold text-white">
+                    {card.glyph}
+                  </span>
+                </div>
+                <div className="space-y-[4%]">
+                  <div className="h-[7%] min-h-[6px] w-[55%] rounded-full bg-white/35" />
+                  <div className="h-[7%] min-h-[6px] w-[35%] rounded-full bg-white/25" />
+                </div>
+              </div>
             </div>
-            <button className="text-[10px] font-bold bg-primary text-primary-foreground rounded-lg px-2.5 py-1.5 hover:opacity-90 transition-opacity">
-              Acheter
-            </button>
-          </div>
-        ))}
-        <div className="pt-1">
-          <div className="w-full h-8 rounded-xl bg-foreground text-background flex items-center justify-center text-xs font-bold">
-            Voir la boutique
-          </div>
+          );
+        })}
+
+        {/* Notre adresse, à la place de celle du concurrent. */}
+        <div
+          className="absolute -left-2 bottom-[4%] z-20 rounded-full px-4 py-2 text-[clamp(11px,2.2vw,15px)] font-extrabold"
+          style={{
+            background: "#fff",
+            color: "var(--brand-ink)",
+            boxShadow: "var(--brand-shadow-sm)",
+          }}
+        >
+          bio-lien.com/@toi
         </div>
+      </div>
+
+      {/* Pastilles flottantes. */}
+      <div
+        className="absolute -right-2 top-[14%] z-20 rounded-2xl px-4 py-3 text-[12.5px] font-extrabold"
+        style={{
+          background: "#fff",
+          border: "1.5px solid rgba(0,0,0,.06)",
+          boxShadow: "0 18px 40px rgba(0,0,0,.14)",
+        }}
+      >
+        <span style={{ color: "var(--brand-violet)" }} className="mr-1.5">
+          ↗
+        </span>
+        +48 clics aujourd&apos;hui
+      </div>
+      <div
+        className="absolute left-0 top-[52%] z-20 rounded-2xl px-4 py-3 text-[12.5px] font-extrabold text-white"
+        style={{
+          background: "var(--brand-forest)",
+          boxShadow: "0 18px 40px rgba(0,0,0,.2)",
+        }}
+      >
+        ● En ligne
       </div>
     </div>
   );
 }
 
-function Templates() {
-  const templates = [
-    {
-      name: "Vibrant",
-      tag: "Mode & Beauté",
-      headerBg: "bg-primary",
-      headerText: "text-primary-foreground",
-      products: [
-        { emoji: "👗", name: "Robe Wax Ankara", price: "12 500 FCFA" },
-        { emoji: "👒", name: "Chapeau Raphia", price: "4 200 FCFA" },
-        { emoji: "💄", name: "Rouge à lèvres nat.", price: "2 800 FCFA" },
-      ],
-    },
-    {
-      name: "Minimaliste",
-      tag: "Artisanat & Design",
-      headerBg: "bg-foreground",
-      headerText: "text-background",
-      products: [
-        { emoji: "🏺", name: "Vase en Terre cuite", price: "18 000 FCFA" },
-        { emoji: "🖼️", name: "Tableau Batik", price: "35 000 FCFA" },
-        { emoji: "🪑", name: "Tabouret Ashanti", price: "22 000 FCFA" },
-      ],
-    },
-    {
-      name: "Market",
-      tag: "Alimentaire & Bio",
-      headerBg: "bg-[var(--success)]",
-      headerText: "text-[var(--success-foreground)]",
-      products: [
-        { emoji: "🧴", name: "Beurre de Karité pur", price: "5 500 FCFA" },
-        { emoji: "🌿", name: "Tisane Moringa bio", price: "3 200 FCFA" },
-        { emoji: "🍯", name: "Miel d'acacia", price: "7 800 FCFA" },
-      ],
-    },
-  ];
+// ---------------------------------------------------------------------------
+// Héros
+// ---------------------------------------------------------------------------
 
+function Hero() {
   return (
-    <section className="py-20 sm:py-28 bg-white" id="templates">
-      <div className="max-w-6xl mx-auto px-4">
-        <FadeIn className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 text-primary border-primary/30">
-            Templates
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Des boutiques{" "}
-            <span className="text-primary">qui vendent</span>
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            3 templates professionnels, personnalisables à l&apos;infini. Lance ta
-            boutique avec style.
-          </p>
-        </FadeIn>
+    <section className="overflow-hidden px-6 pb-16 pt-12 sm:pb-22 sm:pt-18">
+      <div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-[1.1fr_.9fr]">
+        <div>
+          <div
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-extrabold"
+            style={{
+              background: "#fff",
+              border: "1.5px solid var(--brand-ink)",
+              boxShadow: "var(--brand-shadow-sm)",
+            }}
+          >
+            <span
+              className="inline-block size-2 rounded-full"
+              style={{ background: "var(--brand-clay)" }}
+            />
+            Aucune compétence technique
+          </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templates.map((t, i) => (
-            <FadeIn key={t.name} delay={i * 0.1}>
-              <TemplateCard {...t} />
-            </FadeIn>
+          <h1
+            className="mt-6 text-[clamp(40px,8vw,76px)] font-extrabold leading-[1.02] tracking-[-0.045em]"
+            style={{ textWrap: "balance" }}
+          >
+            Un seul lien dans ta bio.{" "}
+            <span
+              className="inline-block rounded-[14px] px-3"
+              style={{
+                background: "var(--brand-yellow)",
+                boxShadow: "var(--brand-shadow)",
+              }}
+            >
+              Et tu vends dessus.
+            </span>
+          </h1>
+
+          <p
+            className="mt-7 max-w-[480px] text-[17px] leading-[1.6] sm:text-lg"
+            style={{ color: "rgba(23,23,23,.6)", textWrap: "pretty" }}
+          >
+            Tes réseaux, tes produits, ton WhatsApp — réunis sur une page à toi.
+            Tu colles ton lien, on reconnaît TikTok, Instagram ou YouTube tout
+            seuls. Et le jour où tu veux vendre, tu encaisses en Mobile Money ou
+            par carte.
+          </p>
+
+          <div className="mt-9 flex flex-col gap-3.5 sm:flex-row sm:items-center">
+            <Link
+              href="/register"
+              className="rounded-full px-7 py-[17px] text-center text-base font-extrabold text-white transition-colors"
+              style={{
+                background: "var(--brand-clay)",
+                boxShadow: "var(--brand-shadow)",
+              }}
+            >
+              Créer ma page gratuite →
+            </Link>
+            <Link
+              href="/explore"
+              className="rounded-full px-7 py-[17px] text-center text-base font-extrabold"
+              style={{ border: "2px solid var(--brand-ink)", background: "#fff" }}
+            >
+              Voir les boutiques
+            </Link>
+          </div>
+
+          <p
+            className="mt-5.5 text-[13.5px] font-semibold"
+            style={{ color: "rgba(23,23,23,.5)" }}
+          >
+            ✓ Gratuit pour commencer&nbsp;&nbsp;·&nbsp;&nbsp;Sans carte
+            bancaire&nbsp;&nbsp;·&nbsp;&nbsp;En ligne en 5 minutes
+          </p>
+        </div>
+
+        <HeroVisual />
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bandeau de chiffres
+// ---------------------------------------------------------------------------
+
+const STATS = [
+  { value: "5 min", label: "pour être en ligne" },
+  { value: "Mobile Money", label: "ou carte bancaire" },
+  { value: "@toi", label: "ton lien à partager" },
+  { value: "0 FCFA", label: "pour démarrer" },
+];
+
+function StatsBar() {
+  return (
+    <section
+      className="px-6 py-6"
+      style={{ background: "var(--brand-forest)", color: "var(--brand-cream-soft)" }}
+    >
+      <div className="mx-auto grid max-w-[1200px] grid-cols-2 gap-6 text-center lg:grid-cols-4">
+        {STATS.map((stat) => (
+          <div key={stat.label}>
+            <p
+              className="text-[clamp(20px,4vw,28px)] font-extrabold"
+              style={{ color: "var(--brand-yellow)" }}
+            >
+              {stat.value}
+            </p>
+            <p
+              className="mt-0.5 text-[13px]"
+              style={{ color: "rgba(248,239,215,.65)" }}
+            >
+              {stat.label}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plus qu'un arbre de liens
+// ---------------------------------------------------------------------------
+
+const PILLARS = [
+  {
+    emoji: "🔗",
+    title: "Tous tes liens. Enfin réunis.",
+    body: "Réseaux, boutique, WhatsApp et contenus : une seule adresse simple à partager.",
+    bg: "var(--brand-yellow-soft)",
+    border: true,
+    iconBg: "#fff",
+    text: "rgba(0,0,0,.55)",
+  },
+  {
+    emoji: "✦",
+    title: "Une page qui te ressemble",
+    body: "Couleurs, typographies, blocs et bio assistée par IA. Aucun code à écrire.",
+    bg: "var(--brand-forest)",
+    border: false,
+    iconBg: "var(--brand-yellow)",
+    text: "rgba(255,255,255,.65)",
+    dark: true,
+  },
+  {
+    emoji: "📊",
+    title: "Comprends ton audience",
+    body: "Découvre ce qui attire les clics et améliore ta page avec des données claires.",
+    bg: "var(--brand-violet-soft)",
+    border: true,
+    iconBg: "#fff",
+    text: "rgba(0,0,0,.55)",
+  },
+];
+
+function Pillars() {
+  return (
+    <section id="why" className="px-6 py-20 sm:py-28">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="mb-14 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p
+              className="mb-3 text-xs font-extrabold uppercase tracking-[.2em]"
+              style={{ color: "var(--brand-clay)" }}
+            >
+              Plus qu&apos;un arbre de liens
+            </p>
+            <h2 className="text-[clamp(32px,6vw,56px)] font-extrabold leading-[1.05] tracking-[-0.04em]">
+              Ta présence digitale,
+              <br />
+              sans la prise de tête.
+            </h2>
+          </div>
+          <p
+            className="max-w-[340px] text-base leading-[1.6]"
+            style={{ color: "rgba(0,0,0,.55)" }}
+          >
+            Simple à créer. Beau à regarder. Puissant pour grandir.
+          </p>
+        </div>
+
+        <div className="grid gap-[18px] md:grid-cols-3">
+          {PILLARS.map((p) => (
+            <article
+              key={p.title}
+              className="rounded-[var(--brand-radius-card)] p-9 transition-transform duration-200 hover:-translate-y-1.5"
+              style={{
+                background: p.bg,
+                color: p.dark ? "#fff" : undefined,
+                border: p.border ? "1.5px solid rgba(0,0,0,.1)" : undefined,
+              }}
+            >
+              <div
+                className="mb-12 grid size-[50px] place-items-center rounded-2xl text-xl"
+                style={{ background: p.iconBg }}
+              >
+                {p.emoji}
+              </div>
+              <h3 className="text-[25px] font-extrabold tracking-[-0.02em]">
+                {p.title}
+              </h3>
+              <p className="mt-3 leading-[1.6]" style={{ color: p.text }}>
+                {p.body}
+              </p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ton copilote créatif
+// ---------------------------------------------------------------------------
+//
+// Le design plaçait ici le mockup « Studio Clay » de Linktree. Remplacé par
+// une vraie page Bio-Lien : montrer notre produit vaut mieux que montrer
+// celui d'un concurrent, en plus d'être le seul choix honnête.
+
+function BioPageMockup() {
+  return (
+    <div
+      className="relative w-full max-w-[420px] overflow-hidden rounded-[var(--brand-radius-card)]"
+      style={{ background: "#fff", boxShadow: "0 26px 60px rgba(0,0,0,.3)" }}
+    >
+      <div
+        className="px-7 pb-6 pt-9 text-center"
+        style={{ background: "var(--brand-forest)" }}
+      >
+        <div
+          className="mx-auto grid size-[72px] place-items-center rounded-full text-2xl font-extrabold"
+          style={{ background: "var(--brand-yellow)", color: "var(--brand-ink)" }}
+        >
+          A
+        </div>
+        <p className="mt-3.5 text-lg font-extrabold text-white">Atelier Awa</p>
+        <p className="text-xs" style={{ color: "rgba(255,255,255,.6)" }}>
+          Pagnes &amp; prêt-à-porter · Abidjan
+        </p>
+      </div>
+
+      <div className="space-y-2.5 p-5">
+        <div className="flex gap-2">
+          <span
+            className="flex-1 rounded-full py-2 text-center text-xs font-extrabold"
+            style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+          >
+            Liens
+          </span>
+          <span
+            className="flex-1 rounded-full py-2 text-center text-xs font-extrabold"
+            style={{ background: "var(--brand-cream-deep)" }}
+          >
+            Boutique
+          </span>
+        </div>
+        {["Ma nouvelle collection", "Commander sur WhatsApp", "Mon TikTok"].map(
+          (label) => (
+            <div
+              key={label}
+              className="rounded-[13px] px-4 py-3 text-xs font-extrabold"
+              style={{
+                background: "var(--brand-cream)",
+                border: "1.5px solid rgba(0,0,0,.1)",
+              }}
+            >
+              {label}
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+const COPILOT = [
+  { emoji: "✦", label: "Une bio brillante grâce à l'IA" },
+  { emoji: "🎨", label: "Des thèmes vraiment personnalisables" },
+  { emoji: "⚡", label: "Des liens détectés et habillés automatiquement" },
+  { emoji: "📈", label: "Des statistiques lisibles, enfin" },
+];
+
+function Copilot() {
+  return (
+    <section
+      id="product"
+      className="px-6 py-20 sm:py-28"
+      style={{ background: "var(--brand-cream-deep)" }}
+    >
+      <div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        <div
+          className="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-[var(--brand-radius-hero)] p-10 sm:min-h-[560px]"
+          style={{ background: "var(--brand-clay)" }}
+        >
+          <div
+            aria-hidden
+            className="absolute -bottom-24 -left-14 size-80 rounded-full"
+            style={{ background: "var(--brand-yellow)" }}
+          />
+          <div
+            aria-hidden
+            className="absolute -right-16 top-12 size-52 rounded-full"
+            style={{ border: "35px solid var(--brand-lilac)" }}
+          />
+          <BioPageMockup />
+          {/* Sur téléphone la maquette occupe presque tout le panneau : la
+              pastille se replie dans le coin pour ne pas recouvrir un libellé
+              de lien. */}
+          <div
+            className="absolute bottom-3 right-3 rounded-[18px] bg-white px-3.5 py-3 sm:bottom-7 sm:right-7 sm:px-4.5 sm:py-4"
+            style={{ boxShadow: "0 20px 44px rgba(0,0,0,.25)" }}
+          >
+            <p
+              className="mb-1.5 text-sm sm:mb-2 sm:text-base"
+              style={{ color: "var(--brand-violet)" }}
+            >
+              ▮▮▮
+            </p>
+            <p className="text-xl font-extrabold sm:text-2xl">2 849</p>
+            <p className="text-[11.5px]" style={{ color: "rgba(0,0,0,.5)" }}>
+              vues ce mois
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <p
+            className="text-xs font-extrabold uppercase tracking-[.2em]"
+            style={{ color: "var(--brand-clay)" }}
+          >
+            Ton copilote créatif
+          </p>
+          <h2 className="mt-4 text-[clamp(32px,6vw,56px)] font-extrabold leading-[1.05] tracking-[-0.04em]">
+            Tu imagines.
+            <br />
+            Bio-Lien fait le reste.
+          </h2>
+          <div className="mt-10 flex flex-col gap-6.5">
+            {COPILOT.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center gap-4 pb-6"
+                style={{ borderBottom: "1px solid rgba(0,0,0,.1)" }}
+              >
+                <span className="grid size-11 place-items-center rounded-[13px] bg-white text-lg">
+                  {item.emoji}
+                </span>
+                <p className="text-[17px] font-bold">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
+
+const TEMPLATES = [
+  {
+    name: "Soraya",
+    role: "Mode & lifestyle",
+    bg: "var(--brand-peach)",
+    accent: "var(--brand-orange)",
+    avatar: "S",
+    linkText: "#fff",
+    links: ["Ma nouvelle collection", "Shopper mes looks"],
+    rot: -1,
+  },
+  {
+    name: "Kader Beats",
+    role: "Artiste · Producteur",
+    bg: "var(--brand-lime)",
+    accent: "#111111",
+    avatar: "K",
+    linkText: "var(--brand-lime)",
+    links: ["Écouter le nouvel EP", "YouTube"],
+    rot: 1,
+  },
+  {
+    name: "Studio Noma",
+    role: "Design & création",
+    bg: "var(--brand-lilac)",
+    accent: "var(--brand-violet)",
+    avatar: "N",
+    linkText: "#fff",
+    links: ["Voir nos projets", "Nous contacter"],
+    rot: -1,
+  },
+];
+
+function Templates() {
+  return (
+    <section id="templates" className="px-6 py-20 text-center sm:py-28">
+      <div className="mx-auto max-w-[1200px]">
+        <p
+          className="text-xs font-extrabold uppercase tracking-[.2em]"
+          style={{ color: "var(--brand-violet)" }}
+        >
+          Trouve ton style
+        </p>
+        <h2 className="mt-4 text-[clamp(32px,6vw,56px)] font-extrabold tracking-[-0.04em]">
+          Pas un profil comme les autres.
+        </h2>
+        <p
+          className="mx-auto mt-5 max-w-[520px] text-[17px] leading-[1.6]"
+          style={{ color: "rgba(0,0,0,.55)" }}
+        >
+          Pars d&apos;un template et rends-le totalement unique. Change tout,
+          quand tu veux.
+        </p>
+
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
+          {TEMPLATES.map((t) => (
+            <div
+              key={t.name}
+              className="rounded-[35px] p-3 text-left transition-transform duration-200 hover:-translate-y-2 hover:rotate-0"
+              style={{
+                background: t.bg,
+                border: "1.5px solid rgba(0,0,0,.1)",
+                transform: `rotate(${t.rot}deg)`,
+              }}
+            >
+              <div
+                className="rounded-[27px] px-6 py-7 text-center backdrop-blur-[6px]"
+                style={{ background: "rgba(255,255,255,.75)" }}
+              >
+                <div
+                  className="mx-auto grid size-16 place-items-center rounded-full text-2xl font-extrabold text-white"
+                  style={{ background: t.accent }}
+                >
+                  {t.avatar}
+                </div>
+                <h3 className="mt-4 text-[21px] font-extrabold">{t.name}</h3>
+                <p className="mt-1 text-xs" style={{ color: "rgba(0,0,0,.5)" }}>
+                  {t.role}
+                </p>
+                <div className="mt-5.5 flex flex-col gap-2">
+                  {t.links.map((link) => (
+                    <div
+                      key={link}
+                      className="rounded-[13px] px-4 py-3 text-xs font-extrabold"
+                      style={{ background: t.accent, color: t.linkText }}
+                    >
+                      {link}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           ))}
         </div>
 
-        <FadeIn className="text-center mt-10">
-          <Button
-            variant="outline"
-            size="lg"
-            className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground"
-            asChild
-          >
-            <Link href="/register">
-              Voir tous les templates
-              <ArrowRight className="ml-2 size-4" />
-            </Link>
-          </Button>
-        </FadeIn>
+        <Link
+          href="/explore"
+          className="mt-11 inline-flex items-center gap-2 rounded-full px-6.5 py-3.5 text-sm font-extrabold"
+          style={{ border: "2px solid var(--brand-ink)", background: "#fff" }}
+        >
+          Voir tous les templates →
+        </Link>
       </div>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// "For whom it's built" — honest, pre-launch replacement for fake testimonials.
-// Three real target personas instead of invented users.
+// Tarifs
 // ---------------------------------------------------------------------------
 
-function ForWhom() {
-  const personas = [
-    {
-      icon: Sparkles,
-      title: "Créateurs de contenu",
-      tagline: "TikTok · Instagram · Snapchat",
-      description:
-        "Tu as une audience qui te demande où acheter tes produits. Bio-Lien te donne un lien propre à mettre dans ta bio.",
-      iconBg: "bg-primary/10",
-      iconText: "text-primary",
-    },
-    {
-      icon: Hammer,
-      title: "Artisans & makers",
-      tagline: "Mode · Cosmétiques · Décoration",
-      description:
-        "Tu vends ce que tu crées toi-même. Présente ton catalogue proprement, sans avoir à coder une boutique complète.",
-      iconBg: "bg-[var(--success)]/10",
-      iconText: "text-[var(--success)]",
-    },
-    {
-      icon: MessageCircle,
-      title: "Vendeurs WhatsApp",
-      tagline: "Mobile-first · Mode WhatsApp natif",
-      description:
-        "Tes clients commandent déjà en DM. Active le mode WhatsApp et chaque produit ouvre une discussion pré-remplie chez toi.",
-      iconBg: "bg-foreground/10",
-      iconText: "text-foreground",
-    },
-  ];
+const PLANS = [
+  {
+    name: "Découverte",
+    price: "0 $CA",
+    pitch: "Pour démarrer et tester ta boutique",
+    features: [
+      "Jusqu'à 5 produits",
+      "Lien @username unique",
+      "Paiement carte + Mobile Money",
+      "Mode WhatsApp inclus",
+      "Templates inclus",
+    ],
+    cta: "Commencer gratuitement",
+    href: "/register",
+    note: "5 % de commission sur chaque vente.",
+  },
+  {
+    name: "Starter",
+    price: "4,99 $CA",
+    pitch: "Pour les vendeurs qui dépassent 5 produits",
+    features: [
+      "Jusqu'à 20 produits",
+      "Commission réduite à 3 %",
+      "Suppression du badge Bio-Lien",
+      "Analytics standard",
+    ],
+    cta: "Voir les détails",
+    href: "/pricing",
+    note: "Sans engagement.",
+  },
+];
 
-  return (
-    <section className="py-20 sm:py-28 bg-muted/30">
-      <div className="max-w-6xl mx-auto px-4">
-        <FadeIn className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 text-primary border-primary/30">
-            Pour qui c&apos;est fait
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Bio-Lien, c&apos;est pour{" "}
-            <span className="text-primary">les vendeurs sociaux</span>
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            Si tu vends déjà via tes vidéos, tes stories ou tes statuts WhatsApp,
-            tu es exactement la bonne personne pour démarrer.
-          </p>
-        </FadeIn>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          {personas.map((p, i) => {
-            const Icon = p.icon;
-            return (
-              <FadeIn key={p.title} delay={i * 0.08}>
-                <Card className="h-full border border-black/[0.06] bg-white hover:shadow-lg transition-shadow duration-300">
-                  <CardContent className="p-6 flex flex-col h-full">
-                    <div
-                      className={cn(
-                        "size-12 rounded-2xl flex items-center justify-center mb-5",
-                        p.iconBg,
-                      )}
-                    >
-                      <Icon className={cn("size-6", p.iconText)} />
-                    </div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
-                      {p.tagline}
-                    </p>
-                    <h3 className="text-xl font-black mb-3">{p.title}</h3>
-                    <p className="text-sm leading-relaxed text-foreground/70 flex-1">
-                      {p.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              </FadeIn>
-            );
-          })}
-        </div>
-
-        <FadeIn delay={0.3}>
-          <div className="mt-12 max-w-xl mx-auto text-center rounded-2xl border border-primary/20 bg-primary/[0.04] px-6 py-5">
-            <p className="text-sm font-semibold text-foreground">
-              Bio-Lien démarre. Rejoins les premiers vendeurs.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Tu peux explorer les boutiques déjà publiées sur{" "}
-              <Link
-                href="/explore"
-                className="text-primary font-semibold hover:underline"
-              >
-                /explore
-              </Link>
-              .
-            </p>
-          </div>
-        </FadeIn>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Pricing
-// ---------------------------------------------------------------------------
+const PRO = {
+  name: "Pro",
+  price: "9,99 $CA",
+  pitch: "Pour les créateurs sérieux qui veulent grandir",
+  features: [
+    "Produits illimités",
+    "0 % de commission sur tes ventes",
+    "Analytics avancés",
+    "Templates premium",
+    "Support prioritaire",
+  ],
+  cta: "Passer en Pro",
+  href: "/pricing",
+  note: "Sans engagement. Annule à tout moment.",
+};
 
 function Pricing() {
-  const tiers = [
-    {
-      id: "free",
-      name: "Découverte",
-      price: "0",
-      currency: "$CA",
-      tagline: "Pour démarrer et tester ta boutique",
-      bullets: [
-        "Jusqu'à 5 produits",
-        "Lien @username unique",
-        "Paiement carte + Mobile Money",
-        "Mode WhatsApp inclus",
-        "Templates inclus",
-      ],
-      cta: "Commencer gratuitement",
-      ctaHref: "/register",
-      footnote: "5 % de commission sur chaque vente.",
-      highlight: false,
-    },
-    {
-      id: "starter",
-      name: "Starter",
-      price: "4,99",
-      currency: "$CA",
-      tagline: "Pour les vendeurs qui dépassent 5 produits",
-      bullets: [
-        "Jusqu'à 20 produits",
-        "Commission réduite à 3 %",
-        "Suppression du badge Bio-Lien",
-        "Analytics standard",
-      ],
-      cta: "Voir les détails",
-      ctaHref: "/pricing",
-      footnote: "Sans engagement.",
-      highlight: false,
-    },
-    {
-      id: "pro",
-      name: "Pro",
-      price: "9,99",
-      currency: "$CA",
-      tagline: "Pour les créateurs sérieux qui veulent grandir",
-      bullets: [
-        "Produits illimités",
-        "0 % de commission sur tes ventes",
-        "Analytics avancés",
-        "Templates premium",
-        "Support prioritaire",
-      ],
-      cta: "Passer en Pro",
-      ctaHref: "/pricing",
-      footnote: "Sans engagement. Annule à tout moment.",
-      highlight: true,
-    },
-  ];
-
   return (
-    <section className="py-20 sm:py-28 bg-white" id="pricing">
-      <div className="max-w-6xl mx-auto px-4">
-        <FadeIn className="text-center mb-16">
-          <Badge variant="outline" className="mb-4 text-primary border-primary/30">
+    <section
+      id="pricing"
+      className="px-6 py-20 sm:py-28"
+      style={{ background: "var(--brand-cream-deep)" }}
+    >
+      <div className="mx-auto max-w-[1100px]">
+        <div className="mb-14 text-center">
+          <p
+            className="text-xs font-extrabold uppercase tracking-[.2em]"
+            style={{ color: "var(--brand-clay)" }}
+          >
             Tarifs
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black mb-4">
-            Commence <span className="text-primary">gratuitement</span>
+          </p>
+          <h2 className="mt-4 text-[clamp(32px,6vw,56px)] font-extrabold tracking-[-0.04em]">
+            Commence gratuitement.
           </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+          <p
+            className="mx-auto mt-4.5 max-w-[480px] text-[17px]"
+            style={{ color: "rgba(0,0,0,.55)" }}
+          >
             Pas de frais cachés. Monte d&apos;un palier le jour où ta boutique
             décolle.
           </p>
-        </FadeIn>
-
-        <div className="grid gap-5 md:grid-cols-3 max-w-5xl mx-auto">
-          {tiers.map((tier, i) => (
-            <FadeIn key={tier.id} delay={0.05 + i * 0.05}>
-              <Card
-                className={cn(
-                  "h-full relative overflow-hidden",
-                  tier.highlight
-                    ? "border-2 border-primary shadow-lg shadow-primary/10"
-                    : "border-2 border-border/60",
-                )}
-              >
-                {tier.highlight && (
-                  <div className="absolute top-4 right-4">
-                    <Badge className="bg-primary text-primary-foreground">
-                      Recommandé
-                    </Badge>
-                  </div>
-                )}
-                <CardContent className="p-6">
-                  <div className="mb-6">
-                    <p
-                      className={cn(
-                        "text-sm font-semibold uppercase tracking-widest mb-2",
-                        tier.highlight ? "text-primary" : "text-muted-foreground",
-                      )}
-                    >
-                      {tier.name}
-                    </p>
-                    <p className="text-4xl font-black">
-                      {tier.price} {tier.currency}
-                      <span className="text-base font-normal text-muted-foreground ml-1">
-                        / mois
-                      </span>
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {tier.tagline}
-                    </p>
-                  </div>
-
-                  <Button
-                    className={cn(
-                      "w-full mb-6 h-11 font-semibold",
-                      tier.highlight
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-                        : "bg-foreground text-background hover:bg-foreground/90 border-0",
-                    )}
-                    asChild
-                  >
-                    <Link href={tier.ctaHref}>{tier.cta}</Link>
-                  </Button>
-
-                  <ul className="space-y-3">
-                    {tier.bullets.map((item) => (
-                      <li
-                        key={item}
-                        className="flex items-center gap-3 text-sm"
-                      >
-                        <div
-                          className={cn(
-                            "size-5 rounded-full flex items-center justify-center flex-shrink-0",
-                            tier.highlight ? "bg-primary" : "bg-primary/10",
-                          )}
-                        >
-                          <Check
-                            className={cn(
-                              "size-3",
-                              tier.highlight
-                                ? "text-primary-foreground"
-                                : "text-primary",
-                            )}
-                          />
-                        </div>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                    {tier.footnote}
-                  </p>
-                </CardContent>
-              </Card>
-            </FadeIn>
-          ))}
         </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-8">
-          Facturation en dollars canadiens — ta carte convertit
-          automatiquement.{" "}
-          <Link href="/pricing" className="text-primary font-semibold hover:underline">
-            Voir tous les détails
+        <div className="grid items-stretch gap-[18px] md:grid-cols-3">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.name}
+              className="flex flex-col rounded-[var(--brand-radius-card)] bg-white p-8"
+              style={{ border: "1.5px solid rgba(0,0,0,.12)" }}
+            >
+              <p
+                className="text-xs font-extrabold uppercase tracking-[.18em]"
+                style={{ color: "rgba(0,0,0,.45)" }}
+              >
+                {plan.name}
+              </p>
+              <p className="mt-3 text-[44px] font-extrabold leading-none">
+                {plan.price}
+                <span
+                  className="text-[15px] font-semibold"
+                  style={{ color: "rgba(0,0,0,.45)" }}
+                >
+                  {" "}
+                  / mois
+                </span>
+              </p>
+              <p
+                className="mb-5.5 mt-1.5 text-[13.5px]"
+                style={{ color: "rgba(0,0,0,.5)" }}
+              >
+                {plan.pitch}
+              </p>
+              <div className="flex flex-1 flex-col gap-2.5 text-sm font-semibold">
+                {plan.features.map((f) => (
+                  <p key={f}>✓ {f}</p>
+                ))}
+              </div>
+              <Link
+                href={plan.href}
+                className="mt-6.5 block rounded-full py-3.5 text-center text-sm font-extrabold"
+                style={{ border: "2px solid var(--brand-ink)" }}
+              >
+                {plan.cta}
+              </Link>
+              <p
+                className="mt-3.5 text-center text-[11.5px]"
+                style={{ color: "rgba(0,0,0,.45)" }}
+              >
+                {plan.note}
+              </p>
+            </div>
+          ))}
+
+          <div
+            className="relative flex flex-col rounded-[var(--brand-radius-card)] p-8 text-white"
+            style={{
+              background: "var(--brand-forest)",
+              boxShadow: "var(--brand-shadow-accent)",
+            }}
+          >
+            <span
+              className="absolute right-6 top-6 rounded-full px-3 py-1.5 text-[11px] font-extrabold"
+              style={{ background: "var(--brand-yellow)", color: "var(--brand-ink)" }}
+            >
+              Recommandé
+            </span>
+            <p
+              className="text-xs font-extrabold uppercase tracking-[.18em]"
+              style={{ color: "var(--brand-yellow)" }}
+            >
+              {PRO.name}
+            </p>
+            <p className="mt-3 text-[44px] font-extrabold leading-none">
+              {PRO.price}
+              <span
+                className="text-[15px] font-semibold"
+                style={{ color: "rgba(255,255,255,.5)" }}
+              >
+                {" "}
+                / mois
+              </span>
+            </p>
+            <p
+              className="mb-5.5 mt-1.5 text-[13.5px]"
+              style={{ color: "rgba(255,255,255,.55)" }}
+            >
+              {PRO.pitch}
+            </p>
+            <div className="flex flex-1 flex-col gap-2.5 text-sm font-semibold">
+              {PRO.features.map((f) => (
+                <p key={f} style={{ color: "var(--brand-yellow)" }}>
+                  ✓ <span className="text-white">{f}</span>
+                </p>
+              ))}
+            </div>
+            <Link
+              href={PRO.href}
+              className="mt-6.5 block rounded-full py-3.5 text-center text-sm font-extrabold"
+              style={{ background: "var(--brand-yellow)", color: "var(--brand-ink)" }}
+            >
+              {PRO.cta}
+            </Link>
+            <p
+              className="mt-3.5 text-center text-[11.5px]"
+              style={{ color: "rgba(255,255,255,.45)" }}
+            >
+              {PRO.note}
+            </p>
+          </div>
+        </div>
+
+        <p
+          className="mt-8 text-center text-[13px]"
+          style={{ color: "rgba(0,0,0,.5)" }}
+        >
+          Ces prix sont ceux du paiement par carte. En Mobile Money, la même
+          durée s&apos;achète d&apos;avance en FCFA —{" "}
+          <Link href="/pricing" className="underline underline-offset-2">
+            voir les tarifs
           </Link>
+          .
         </p>
       </div>
     </section>
@@ -936,151 +925,213 @@ function Pricing() {
 }
 
 // ---------------------------------------------------------------------------
-// Final CTA
+// Appel final
 // ---------------------------------------------------------------------------
 
-function FinalCTA() {
+function FinalCta() {
   const [email, setEmail] = useState("");
+  const router = useRouter();
+
+  // Le champ n'est pas décoratif : l'e-mail saisi ici voyage jusqu'au
+  // formulaire d'inscription, qui le pré-remplit. Collecter une adresse pour
+  // la jeter serait une petite malhonnêteté de plus qu'un visiteur remarque.
+  const start = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = email.trim();
+    router.push(
+      value.includes("@")
+        ? `/register?email=${encodeURIComponent(value)}`
+        : "/register",
+    );
+  };
 
   return (
-    <section className="py-20 sm:py-28 relative overflow-hidden bg-foreground">
+    <section className="px-6 py-20 sm:py-28">
       <div
-        className="absolute inset-0 -z-10 opacity-[0.06]"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-          backgroundSize: "40px 40px",
-        }}
-      />
+        className="relative mx-auto max-w-[1200px] overflow-hidden rounded-[var(--brand-radius-hero)] px-6 py-16 text-center sm:py-22"
+        style={{ background: "var(--brand-yellow)" }}
+      >
+        <div
+          aria-hidden
+          className="absolute -left-16 -top-16 size-60 rounded-full"
+          style={{ border: "30px solid var(--brand-clay)" }}
+        />
+        <div
+          aria-hidden
+          className="absolute -bottom-20 -right-14 size-64 rounded-full"
+          style={{ background: "var(--brand-forest)" }}
+        />
 
-      <div className="max-w-3xl mx-auto px-4 text-center text-background">
-        <FadeIn>
-          <div className="text-5xl mb-6">🌍</div>
-          <h2 className="text-3xl sm:text-5xl font-black mb-4 leading-tight">
-            Ta page, gratuitement
+        <div className="relative">
+          <h2 className="text-[clamp(32px,7vw,60px)] font-extrabold leading-[1.05] tracking-[-0.04em]">
+            Ta page, gratuitement.
           </h2>
-          {/* Disait « trois minutes » quand l'accroche promet cinq. Une
-              promesse qui varie d'un bout à l'autre de la page ne rassure
-              personne. */}
-          <p className="text-lg sm:text-xl text-background/80 mb-10 max-w-xl mx-auto">
+          <p
+            className="mx-auto mt-5 max-w-[520px] text-[17px] leading-[1.6] sm:text-lg"
+            style={{ color: "rgba(23,23,23,.65)" }}
+          >
             Cinq minutes pour réunir tes liens, avoir ton adresse à toi, et la
             mettre dans ta bio. Pas de carte bancaire, pas d&apos;engagement.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+          <form
+            onSubmit={start}
+            className="mx-auto mt-9 flex max-w-[460px] flex-col gap-2.5 sm:flex-row"
+          >
+            <label htmlFor="cta-email" className="sr-only">
+              Ton adresse e-mail
+            </label>
             <input
+              id="cta-email"
               type="email"
+              inputMode="email"
+              autoComplete="email"
               placeholder="ton@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 h-12 px-4 rounded-xl bg-white/10 border border-white/20 text-background placeholder:text-background/50 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:bg-white/15 transition-colors text-sm"
+              className="h-[54px] flex-1 rounded-full px-5 text-sm font-semibold outline-none"
+              style={{
+                border: "2px solid var(--brand-ink)",
+                background: "var(--brand-paper)",
+              }}
             />
-            <Button
-              className="h-12 px-6 bg-primary text-primary-foreground font-bold hover:bg-primary/90 flex-shrink-0 border-0"
-              asChild
+            <button
+              type="submit"
+              className="inline-flex h-[54px] items-center justify-center rounded-full px-6.5 text-sm font-extrabold"
+              style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
             >
-              <Link
-                href={`/register${email ? `?email=${encodeURIComponent(email)}` : ""}`}
-              >
-                Commencer gratuitement
-                <ArrowRight className="ml-2 size-4" />
-              </Link>
-            </Button>
-          </div>
+              Commencer →
+            </button>
+          </form>
 
-          <p className="mt-4 text-sm text-background/60">
-            Tu peux explorer les boutiques déjà publiées sur{" "}
-            <Link
-              href="/explore"
-              className="underline hover:text-background transition-colors"
-            >
-              /explore
-            </Link>
-            .
+          <p
+            className="mt-4.5 text-[13px] font-semibold"
+            style={{ color: "rgba(23,23,23,.55)" }}
+          >
+            bio-lien.com/<strong>@toi</strong>{" "}
+            — ton adresse t&apos;attend.
           </p>
-        </FadeIn>
+        </div>
       </div>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Footer
+// Pied de page
 // ---------------------------------------------------------------------------
 
-function Footer() {
-  const currentYear = new Date().getFullYear();
+const FOOTER_COLUMNS = [
+  {
+    title: "Produit",
+    links: [
+      { label: "Fonctionnalités", href: "#why" },
+      { label: "Tarifs", href: "/pricing" },
+      { label: "Explorer", href: "/explore" },
+      { label: "Outils gratuits", href: "/outils" },
+    ],
+  },
+  {
+    title: "Ressources",
+    links: [
+      { label: "Aide & support", href: "mailto:support@bio-lien.com" },
+      { label: "Mentions légales", href: "/legal/mentions" },
+    ],
+  },
+  {
+    title: "Légal",
+    links: [
+      { label: "Confidentialité", href: "/legal/privacy" },
+      { label: "Conditions d'utilisation", href: "/legal/terms" },
+    ],
+  },
+];
 
+function Footer() {
   return (
-    <footer className="bg-gray-950 text-gray-400">
-      <div className="max-w-6xl mx-auto px-4 py-14">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
-          {/* Brand */}
-          <div className="lg:col-span-1">
-            <Logo size="sm" href="/" />
-            <p className="mt-4 text-sm leading-relaxed text-gray-500">
+    <footer
+      className="px-6 pb-10 pt-16"
+      style={{ background: "var(--brand-ink)", color: "rgba(255,255,255,.55)" }}
+    >
+      <div className="mx-auto max-w-[1200px]">
+        <div
+          className="grid gap-10 pb-11 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]"
+          style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}
+        >
+          <div>
+            <p className="text-xl">
+              <Wordmark dark />
+            </p>
+            <p className="mt-3.5 max-w-[260px] text-[13.5px] leading-[1.6]">
               La plateforme de boutique en ligne pensée pour les créateurs et
               entrepreneurs africains.
             </p>
             <a
               href="mailto:support@bio-lien.com"
-              className="inline-block mt-5 text-sm text-gray-400 hover:text-white transition-colors"
+              className="mt-4 inline-block text-[13.5px] transition-colors hover:text-white"
             >
               support@bio-lien.com
             </a>
           </div>
 
-          {/* Produit */}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-300 mb-4">
-              Produit
-            </p>
-            <ul className="space-y-2.5 text-sm">
-              {[
-                { label: "Fonctionnalités", href: "#features" },
-                { label: "Tarifs", href: "/pricing" },
-                { label: "Explorer", href: "/explore" },
-                { label: "Outils gratuits", href: "/outils" },
-              ].map((l) => (
-                <li key={l.href}>
+          {FOOTER_COLUMNS.map((col) => (
+            <div key={col.title}>
+              <p
+                className="mb-4 text-[11px] font-extrabold uppercase tracking-[.18em]"
+                style={{ color: "rgba(255,255,255,.8)" }}
+              >
+                {col.title}
+              </p>
+              <div className="flex flex-col gap-2.5 text-[13.5px]">
+                {col.links.map((l) => (
                   <a
+                    key={l.label}
                     href={l.href}
-                    className="hover:text-white transition-colors"
+                    className="transition-colors hover:text-white"
                   >
                     {l.label}
                   </a>
-                </li>
-              ))}
-            </ul>
-          </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
 
-      <section id="why" className="px-5 py-24 sm:py-32"><div className="mx-auto max-w-7xl"><div className="mb-14 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mb-3 text-xs font-black uppercase tracking-[.2em] text-[#dc552f]">Plus qu’un arbre de liens</p><h2 className="max-w-2xl text-4xl font-black leading-tight tracking-[-.04em] sm:text-6xl">Ta présence digitale,<br />sans la prise de tête.</h2></div><p className="max-w-sm text-black/55">Simple à créer. Beau à regarder. Puissant pour grandir.</p></div><div className="grid gap-4 md:grid-cols-3">{benefits.map((item, i) => <motion.article key={item.title} whileHover={{ y: -6 }} className={`rounded-[2rem] border border-black/10 p-7 sm:p-9 ${i===1 ? "bg-[#153c32] text-white" : i===2 ? "bg-[#f3ecff]" : "bg-[#ffed9d]"}`}><div className={`mb-12 grid size-12 place-items-center rounded-2xl ${i===1 ? "bg-[#ffda46] text-black" : "bg-white"}`}><item.icon /></div><h3 className="text-2xl font-black tracking-tight">{item.title}</h3><p className={`mt-3 leading-relaxed ${i===1 ? "text-white/65" : "text-black/55"}`}>{item.text}</p></motion.article>)}</div></div></section>
+        <p className="mt-7 text-[12.5px]" style={{ color: "rgba(255,255,255,.35)" }}>
+          © 2026 Bio-Lien. Fait avec soin pour les vendeurs sociaux.
+        </p>
+      </div>
+    </footer>
+  );
+}
 
-      <section id="product" className="bg-[#f1ede4] px-5 py-24 sm:py-32"><div className="mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-2"><div className="relative min-h-[570px] overflow-hidden rounded-[3rem] bg-[#dc552f] p-10"><div className="absolute -bottom-20 -left-10 size-80 rounded-full bg-[#ffda46]" /><div className="absolute -right-14 top-12 size-52 rounded-full border-[35px] border-[#c8b9ff]" /><CreatorPhone compact /><div className="absolute bottom-7 right-7 rounded-2xl bg-white p-4 shadow-xl"><BarChart3 className="mb-3 text-[#5b36e8]" /><p className="text-2xl font-black">2 849</p><p className="text-xs text-black/50">vues ce mois</p></div></div><div><p className="text-xs font-black uppercase tracking-[.2em] text-[#dc552f]">Ton copilote créatif</p><h2 className="mt-4 text-4xl font-black leading-tight tracking-[-.04em] sm:text-6xl">Tu imagines.<br />Bio-Lien fait le reste.</h2><div className="mt-10 space-y-7">{[{icon:Sparkles,t:"Une bio brillante grâce à l’IA"},{icon:Palette,t:"Des thèmes vraiment personnalisables"},{icon:Zap,t:"Des liens détectés et habillés automatiquement"},{icon:BarChart3,t:"Des statistiques lisibles, enfin"}].map(({icon:Icon,t})=><div key={t} className="flex items-center gap-4 border-b border-black/10 pb-6"><span className="grid size-11 place-items-center rounded-xl bg-white"><Icon className="size-5" /></span><p className="font-bold">{t}</p></div>)}</div></div></div></section>
-
-      <section id="templates" className="px-5 py-24 sm:py-32"><div className="mx-auto max-w-7xl text-center"><p className="text-xs font-black uppercase tracking-[.2em] text-[#5b36e8]">Trouve ton style</p><h2 className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">Pas un profil comme les autres.</h2><p className="mx-auto mt-5 max-w-xl text-black/55">Pars d’un template et rends-le totalement unique. Change tout, quand tu veux.</p><div className="mt-14 grid gap-5 md:grid-cols-3">{templates.map((t, i)=><motion.div key={t.name} whileHover={{ y:-8, rotate: i===1 ? 1 : -1 }} className="rounded-[2.2rem] border border-black/10 p-3 text-left shadow-sm" style={{background:t.bg}}><div className="rounded-[1.7rem] bg-white/75 p-6 text-center backdrop-blur"><div className="mx-auto grid size-16 place-items-center rounded-full text-2xl font-black text-white" style={{background:t.accent}}>{t.avatar}</div><h3 className="mt-4 text-xl font-black">{t.name}</h3><p className="text-xs text-black/50">{t.role}</p><div className="mt-6 space-y-2">{t.links.map(link=><div key={link} className="rounded-xl px-4 py-3 text-xs font-bold text-white" style={{background:t.accent}}>{link}</div>)}</div></div></motion.div>)}</div><Link href="/register" className="mt-10 inline-flex items-center gap-2 rounded-full border-2 border-black px-6 py-3 text-sm font-black">Voir tous les templates <ArrowRight className="size-4" /></Link></div></section>
-
-const SITE_URL = "https://www.bio-lien.com";
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function LandingPage() {
   return (
-    <>
-      {/* Entités du site, déclarées une seule fois et ici : les mettre dans le
-          layout racine les collerait aussi sur chaque boutique de vendeur, où
-          « Bio-Lien » viendrait concurrencer le nom du vendeur. */}
+    <div
+      className="font-[family-name:var(--font-brand)]"
+      style={{ background: "var(--brand-cream)", color: "var(--brand-ink)" }}
+    >
+      {/* Entités du site, déclarées ici et pas dans le layout racine : elles
+          viendraient sinon concurrencer le nom du vendeur sur chaque
+          boutique. */}
       <JsonLd data={organizationJsonLd(SITE_URL)} />
       <JsonLd data={websiteJsonLd(SITE_URL)} />
-      <Navbar />
+
+      <Header />
       <main>
         <Hero />
         <StatsBar />
-        <HowItWorks />
-        <Features />
+        <Pillars />
+        <Copilot />
         <Templates />
-        <ForWhom />
         <Pricing />
-        <FinalCTA />
+        <FinalCta />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

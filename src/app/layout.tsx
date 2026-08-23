@@ -6,6 +6,7 @@ import {
   Playfair_Display,
   JetBrains_Mono,
   DM_Serif_Display,
+  Bricolage_Grotesque,
 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,6 +15,20 @@ import "./globals.css";
 const geistSans = Geist({
   variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
+});
+
+/**
+ * Police de la marque, telle que définie dans le design.
+ *
+ * Chargée ici pour que la variable existe sur tout le document, mais elle
+ * n'est appliquée qu'aux surfaces de marque : le tableau de bord et les
+ * boutiques des vendeurs gardent leurs propres polices.
+ */
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-brand",
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600", "700", "800"],
   display: "swap",
 });
 
@@ -135,7 +150,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
