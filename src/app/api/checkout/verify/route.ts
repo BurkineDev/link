@@ -31,8 +31,17 @@ export async function GET(request: NextRequest) {
     const sessionId = searchParams.get("session_id");
     const provider = searchParams.get("provider");
     const reference = searchParams.get("reference");
+    const orderId = searchParams.get("order");
 
-    const isGenius = provider === "geniuspay" && reference;
+    // Genius Pay ne nous donne la référence qu'*après* avoir créé le paiement,
+    // alors que l'URL de retour, elle, doit être fournie *pendant*. On y met
+    // donc l'identifiant de commande, connu avant l'appel — la référence est
+    // ensuite relue depuis la commande. (L'ancienne URL portait un gabarit
+    // `{REFERENCE}` que Genius Pay ne remplaçait pas et refusait même de
+    // valider : les accolades ne sont pas des caractères d'URL.)
+    const isGeniusByOrder =
+      provider === "geniuspay" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
+    const isGenius = provider === "geniuspay" && (!!reference || isGeniusByOrder);
     const isStripe = !!sessionId;
 
     if (!isGenius && !isStripe) {
@@ -43,15 +52,16 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getAdminClient();
-    const lookupRef = (isGenius ? reference : sessionId) as string;
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select(
-        "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, discount_amount, promo_code",
-      )
-      .eq("payment_ref", lookupRef)
-      .maybeSingle();
+    const selection =
+      "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, payment_ref, discount_amount, promo_code";
+
+    const query = supabase.from("orders").select(selection);
+
+    const { data: order, error: orderError } = await (isGeniusByOrder
+      ? query.eq("id", orderId!)
+      : query.eq("payment_ref", (isGenius ? reference : sessionId) as string)
+    ).maybeSingle();
 
     if (orderError || !order) {
       return NextResponse.json(
@@ -87,7 +97,9 @@ export async function GET(request: NextRequest) {
     if (isGenius) {
       let payment;
       try {
-        payment = await fetchGeniusPayment(reference!);
+        payment = await fetchGeniusPayment(
+          reference ?? (order.payment_ref as string),
+        );
       } catch (err) {
         console.error("[verify] Genius Pay fetch failed:", err);
         return NextResponse.json(

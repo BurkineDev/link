@@ -57,18 +57,31 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Deux fournisseurs arrivent ici : Stripe renvoie `session_id`, Genius Pay
+  // l'identifiant de commande. Sans le second cas, tout acheteur Mobile Money
+  // — la majorité — atterrissait sur « Référence de transaction manquante »
+  // alors que son paiement était bien passé.
   const sessionId = searchParams.get("session_id");
+  const orderId = searchParams.get("order");
+  const provider = searchParams.get("provider");
+  const reference = searchParams.get("reference");
+
+  const hasParams = Boolean(sessionId || orderId || reference);
 
   const [state, setState] = useState<VerifyState>(() =>
-    sessionId
+    hasParams
       ? { status: "loading" }
       : { status: "error", message: "Référence de transaction manquante." },
   );
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!hasParams) return;
 
-    const params = new URLSearchParams({ session_id: sessionId });
+    const params = new URLSearchParams();
+    if (sessionId) params.set("session_id", sessionId);
+    if (provider) params.set("provider", provider);
+    if (orderId) params.set("order", orderId);
+    if (reference) params.set("reference", reference);
 
     fetch(`/api/checkout/verify?${params.toString()}`)
       .then((r) => r.json())
@@ -82,7 +95,7 @@ function SuccessContent() {
           message: err instanceof Error ? err.message : "Vérification échouée.",
         });
       });
-  }, [sessionId]);
+  }, [hasParams, sessionId, provider, orderId, reference]);
 
   // ---- Loading ----
   if (state.status === "loading") {
