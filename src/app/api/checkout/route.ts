@@ -391,7 +391,10 @@ export async function POST(request: NextRequest) {
             country: shippingAddress?.country,
           },
           payment_method: paymentMethod.mobileProvider,
-          success_url: `${appUrl}/checkout/success?provider=geniuspay&reference={REFERENCE}`,
+          // L'identifiant de commande, pas la référence : celle-ci n'existe
+          // qu'après cet appel. Un gabarit `{REFERENCE}` rendait l'URL
+          // invalide et Genius Pay la refusait (validation.url).
+          success_url: `${appUrl}/checkout/success?provider=geniuspay&order=${order.id}`,
           error_url: `${appUrl}/checkout?cancelled=1`,
           metadata: {
             orderId: order.id,
@@ -420,8 +423,6 @@ export async function POST(request: NextRequest) {
           .update({ payment_ref: result.reference })
           .eq("id", order.id);
 
-        // Replace the literal placeholder in success_url so the page can
-        // verify the right transaction (Genius Pay does NOT expand it for us).
         return NextResponse.json({
           paymentLink: paymentLink,
           orderId: order.id,
