@@ -47,6 +47,19 @@
   --brand-shadow: 4px 4px 0 var(--brand-ink);
   --brand-shadow-accent: 6px 6px 0 var(--brand-yellow);
 
+  /* --- Système « lien en bio » : orange sur blanc ---------------------
+     Second système de marque, apporté par le design du héros. Il coexiste
+     avec le système crème/jaune plutôt que de l'écraser : les deux servent
+     des sections différentes de la même page, et fusionner les deux
+     palettes donnerait une troisième chose que personne n'a dessinée. */
+  --hero-orange: #f2621a;
+  --hero-orange-deep: #e2540f;
+  --hero-orange-soft: #fff1e6;
+  --hero-navy: #14181f;
+  --hero-slate: #4a5565;
+  --hero-peach: #fff6ef;
+  --hero-line: #ececec;
+
   /* Rayons */
   --brand-radius-pill: 999px;
   --brand-radius-card: 32px;
@@ -203,6 +216,25 @@
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-bold tracking-tight;
+  }
+}
+
+/* Flottement léger des vignettes du héros. Coupé net quand le visiteur a
+   demandé moins d'animations — un mouvement permanent en arrière-plan est
+   exactement ce que ce réglage existe pour supprimer. */
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(-5px);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="floaty"] {
+    animation: none !important;
   }
 }
 

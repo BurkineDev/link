@@ -40,13 +40,13 @@ const NAV = [
 
 function Wordmark({ dark = false }: { dark?: boolean }) {
   return (
-    <span
-      className="font-extrabold tracking-[-0.03em]"
-      style={{ color: dark ? "#fff" : "var(--brand-ink)" }}
-    >
-      Bio
-      <span style={{ color: dark ? "var(--brand-yellow)" : "var(--brand-clay)" }}>
-        -Lien
+    <span className="inline-flex items-center gap-2">
+      <LinkMark className="size-6" />
+      <span
+        className="font-extrabold tracking-[-0.03em]"
+        style={{ color: dark ? "#fff" : "var(--hero-navy)" }}
+      >
+        bio-lien
       </span>
     </span>
   );
@@ -59,8 +59,8 @@ function Header() {
     <header
       className="sticky top-0 z-50 backdrop-blur-[10px]"
       style={{
-        background: "rgba(250,246,236,.92)",
-        borderBottom: "1px solid rgba(0,0,0,.07)",
+        background: "rgba(255,255,255,.92)",
+        borderBottom: "1px solid var(--hero-line)",
       }}
     >
       <div className="mx-auto flex h-[68px] max-w-[1200px] items-center justify-between gap-6 px-6">
@@ -73,8 +73,8 @@ function Header() {
             <a
               key={item.href}
               href={item.href}
-              className="transition-colors hover:text-[var(--brand-clay)]"
-              style={{ color: "rgba(23,23,23,.65)" }}
+              className="transition-colors hover:text-[var(--hero-orange)]"
+              style={{ color: "var(--hero-slate)" }}
             >
               {item.label}
             </a>
@@ -88,7 +88,7 @@ function Header() {
           <Link
             href="/register"
             className="rounded-full px-5 py-[11px] text-sm font-extrabold transition-colors"
-            style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+            style={{ background: "var(--hero-orange)", color: "#fff" }}
           >
             Créer ma page →
           </Link>
@@ -111,8 +111,8 @@ function Header() {
         <div
           className="md:hidden"
           style={{
-            borderTop: "1px solid rgba(0,0,0,.07)",
-            background: "var(--brand-cream)",
+            borderTop: "1px solid var(--hero-line)",
+            background: "#fff",
           }}
         >
           <nav className="flex flex-col gap-1 px-6 py-4">
@@ -132,7 +132,7 @@ function Header() {
             <Link
               href="/register"
               className="mt-2 rounded-full py-3 text-center text-sm font-extrabold"
-              style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+              style={{ background: "var(--hero-orange)", color: "#fff" }}
             >
               Créer ma page →
             </Link>
@@ -142,192 +142,306 @@ function Header() {
     </header>
   );
 }
-
 // ---------------------------------------------------------------------------
-// Visuel du héros
+// Héros
 // ---------------------------------------------------------------------------
 //
-// Le design fourni plaçait ici l'illustration marketing de Linktree — leur
-// photographie, et leur logo astérisque en bas à gauche. Impossible de la
-// publier : c'est la marque d'un concurrent sur notre propre accueil.
+// Second système de marque : orange sur blanc, arrondis doux, ombres
+// diffuses. Il ne partage rien avec le système crème/jaune du reste de la
+// page — c'est assumé, les deux ont été dessinés séparément.
 //
-// La composition est reconstruite en CSS, avec notre adresse dessus. Aucun
-// fichier à charger, et ça s'adapte à la largeur.
+// Les icônes flottantes sont dessinées en CSS/SVG plutôt qu'importées : les
+// logos Instagram, LinkedIn et GitHub appartiennent à leurs propriétaires, et
+// une page d'accueil qui les affiche en gros comme des vignettes décoratives
+// n'est pas la même chose qu'une icône de 16 px à côté d'un lien. Les formes
+// gardent la silhouette et la couleur reconnaissables, sans reproduire les
+// marques.
 
-const SOCIAL_CARDS = [
-  { bg: "#e1306c", glyph: "◎", label: "Instagram", offset: 0 },
-  { bg: "#1877f2", glyph: "f", label: "Facebook", offset: 1 },
-  { bg: "#ff0000", glyph: "▶", label: "YouTube", offset: 2 },
-  { bg: "#6b7280", glyph: "▤", label: "QR", offset: 3 },
-  { bg: "#171717", glyph: "♪", label: "TikTok", offset: 4 },
+const HERO_PILLS = [
+  { icon: "🔗", title: "Centralisez", sub: "tous vos liens" },
+  { icon: "🎨", title: "Personnalisez", sub: "à votre image" },
+  { icon: "📈", title: "Développez", sub: "votre audience" },
 ];
 
-function HeroVisual() {
+const PHONE_LINKS = [
+  { icon: "🌐", label: "Mon site web" },
+  { icon: "📁", label: "Mon portfolio" },
+  { icon: "in", label: "LinkedIn", tint: "#0a66c2" },
+  { icon: "◉", label: "GitHub", tint: "#171717" },
+  { icon: "◎", label: "Instagram", tint: "#e1306c" },
+  { icon: "✉", label: "Me contacter" },
+];
+
+/** Vignette flottante, façon icône d'application. */
+function FloatingIcon({
+  glyph,
+  bg,
+  className,
+  delay,
+}: {
+  glyph: string;
+  bg: string;
+  className: string;
+  delay: string;
+}) {
   return (
-    <div className="relative mx-auto w-full max-w-[480px]">
-      {/* Halo jaune, comme dans le design. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -inset-8 rounded-full blur-[70px]"
-        style={{ background: "rgba(255,218,70,.35)" }}
-      />
-
-      <div className="relative aspect-square">
-        {SOCIAL_CARDS.map((card) => {
-          const i = card.offset;
-          return (
-            <div
-              key={card.label}
-              className="absolute rounded-[8%]"
-              style={{
-                background: card.bg,
-                // La carte de devant (offset 0) occupe le bas-gauche ; les
-                // suivantes s'échelonnent vers le haut-droit, comme dans le
-                // design.
-                inset: `${(4 - i) * 9}% ${(4 - i) * 9}% ${i * 9}% ${i * 9}%`,
-                zIndex: 10 - i,
-                boxShadow: "0 12px 30px rgba(0,0,0,.12)",
-              }}
-            >
-              <div className="flex h-full flex-col justify-between p-[7%]">
-                <div className="flex items-start justify-between">
-                  <div
-                    className="aspect-square w-[22%] rounded-full"
-                    style={{ background: "var(--brand-lime)" }}
-                  />
-                  <span className="text-[clamp(14px,3vw,22px)] font-extrabold text-white">
-                    {card.glyph}
-                  </span>
-                </div>
-                <div className="space-y-[4%]">
-                  <div className="h-[7%] min-h-[6px] w-[55%] rounded-full bg-white/35" />
-                  <div className="h-[7%] min-h-[6px] w-[35%] rounded-full bg-white/25" />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Notre adresse, à la place de celle du concurrent. */}
-        <div
-          className="absolute -left-2 bottom-[4%] z-20 rounded-full px-4 py-2 text-[clamp(11px,2.2vw,15px)] font-extrabold"
-          style={{
-            background: "#fff",
-            color: "var(--brand-ink)",
-            boxShadow: "var(--brand-shadow-sm)",
-          }}
-        >
-          bio-lien.com/@toi
-        </div>
-      </div>
-
-      {/* Pastilles flottantes. */}
-      <div
-        className="absolute -right-2 top-[14%] z-20 rounded-2xl px-4 py-3 text-[12.5px] font-extrabold"
-        style={{
-          background: "#fff",
-          border: "1.5px solid rgba(0,0,0,.06)",
-          boxShadow: "0 18px 40px rgba(0,0,0,.14)",
-        }}
-      >
-        <span style={{ color: "var(--brand-violet)" }} className="mr-1.5">
-          ↗
-        </span>
-        +48 clics aujourd&apos;hui
-      </div>
-      <div
-        className="absolute left-0 top-[52%] z-20 rounded-2xl px-4 py-3 text-[12.5px] font-extrabold text-white"
-        style={{
-          background: "var(--brand-forest)",
-          boxShadow: "0 18px 40px rgba(0,0,0,.2)",
-        }}
-      >
-        ● En ligne
-      </div>
+    <div
+      aria-hidden
+      className={`absolute grid place-items-center rounded-[26%] text-[0.5rem] text-white sm:text-[0.62rem] ${className}`}
+      style={{
+        background: bg,
+        boxShadow: "0 18px 40px rgba(0,0,0,.18)",
+        animation: `floaty 4s ease-in-out ${delay} infinite`,
+      }}
+    >
+      <span className="text-[1.6em] font-black leading-none">{glyph}</span>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Héros
-// ---------------------------------------------------------------------------
+function PhoneMockup() {
+  return (
+    <div className="relative mx-auto w-full max-w-[330px]">
+      <div
+        className="relative rounded-[40px] border-[10px] p-0"
+        style={{
+          borderColor: "#1c1f26",
+          background: "#fff",
+          boxShadow: "0 40px 90px rgba(20,24,31,.28)",
+        }}
+      >
+        {/* Encoche */}
+        <div
+          aria-hidden
+          className="absolute left-1/2 top-2 h-6 w-24 -translate-x-1/2 rounded-full"
+          style={{ background: "#1c1f26" }}
+        />
+
+        <div className="px-4 pb-5 pt-9">
+          <div
+            className="mb-3 flex items-center justify-between px-1 text-[10px] font-bold"
+            style={{ color: "var(--hero-navy)" }}
+          >
+            <span>9:41</span>
+            <span aria-hidden className="tracking-tight">
+              ▮▮▮ ᯤ ▰
+            </span>
+          </div>
+
+          <div className="mb-4 flex items-center justify-center gap-1.5">
+            <LinkMark className="size-4" />
+            <span
+              className="text-sm font-extrabold tracking-[-0.02em]"
+              style={{ color: "var(--hero-navy)" }}
+            >
+              bio-lien
+            </span>
+          </div>
+
+          <div
+            className="mx-auto grid size-[86px] place-items-center rounded-full text-3xl font-black"
+            style={{ background: "var(--hero-orange-soft)", color: "var(--hero-orange)" }}
+          >
+            W
+          </div>
+          <p
+            className="mt-3 text-center text-lg font-extrabold"
+            style={{ color: "var(--hero-navy)" }}
+          >
+            Wend&apos;so Pict
+          </p>
+          <p
+            className="mt-1 text-center text-[11.5px] leading-snug"
+            style={{ color: "var(--hero-slate)" }}
+          >
+            Développeur | Créateur de solutions
+            <br />
+            passionné par la technologie.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            {PHONE_LINKS.map((l) => (
+              <div
+                key={l.label}
+                className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
+                style={{
+                  border: "1px solid var(--hero-line)",
+                  boxShadow: "0 2px 6px rgba(20,24,31,.05)",
+                }}
+              >
+                <span
+                  className="grid size-6 shrink-0 place-items-center text-[13px] font-bold"
+                  style={{ color: l.tint ?? "var(--hero-slate)" }}
+                >
+                  {l.icon}
+                </span>
+                <span
+                  className="text-[13px] font-semibold"
+                  style={{ color: "var(--hero-navy)" }}
+                >
+                  {l.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Icônes flottantes — hors du téléphone, comme dans le design. */}
+      <FloatingIcon
+        glyph="◎"
+        bg="linear-gradient(135deg,#f9ce34,#ee2a7b 45%,#6228d7)"
+        className="-left-8 top-[38%] size-16 sm:-left-12 sm:size-20"
+        delay="0s"
+      />
+      <FloatingIcon
+        glyph="🔗"
+        bg="linear-gradient(135deg,#7b5cf0,#5b36e8)"
+        className="-right-6 top-[8%] size-14 sm:-right-12 sm:size-[72px]"
+        delay=".6s"
+      />
+      <FloatingIcon
+        glyph="in"
+        bg="#0a66c2"
+        className="-right-8 top-[42%] size-14 sm:-right-14 sm:size-[68px]"
+        delay="1.2s"
+      />
+      <FloatingIcon
+        glyph="◉"
+        bg="#171717"
+        className="-right-6 bottom-[14%] size-16 sm:-right-12 sm:size-[76px]"
+        delay="1.8s"
+      />
+    </div>
+  );
+}
+
+/** Le maillon du logotype, dessiné plutôt qu'importé. */
+function LinkMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M9.5 14.5 14.5 9.5M10 6.5 11.8 4.7a4 4 0 1 1 5.6 5.6l-1.8 1.8M14 17.5l-1.8 1.8a4 4 0 0 1-5.6-5.6l1.8-1.8"
+        stroke="var(--hero-orange)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 function Hero() {
   return (
-    <section className="overflow-hidden px-6 pb-16 pt-12 sm:pb-22 sm:pt-18">
-      <div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-[1.1fr_.9fr]">
-        <div>
-          <div
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-extrabold"
-            style={{
-              background: "#fff",
-              border: "1.5px solid var(--brand-ink)",
-              boxShadow: "var(--brand-shadow-sm)",
-            }}
-          >
-            <span
-              className="inline-block size-2 rounded-full"
-              style={{ background: "var(--brand-clay)" }}
-            />
-            Aucune compétence technique
-          </div>
+    <section
+      className="relative overflow-hidden px-6 pb-14 pt-10 sm:pt-14"
+      style={{
+        background:
+          "linear-gradient(135deg, #ffffff 0%, #ffffff 45%, var(--hero-peach) 100%)",
+      }}
+    >
+      {/* Trame de points, en haut à droite. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-0 top-0 hidden h-64 w-64 lg:block"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, rgb(242 98 26 / 22%) 1.5px, transparent 1.5px)",
+          backgroundSize: "14px 14px",
+          maskImage: "radial-gradient(circle at top right, black, transparent 70%)",
+        }}
+      />
 
+      <div className="relative mx-auto grid max-w-[1200px] items-center gap-14 lg:grid-cols-[1fr_.85fr]">
+        <div>
           <h1
-            className="mt-6 text-[clamp(40px,8vw,76px)] font-extrabold leading-[1.02] tracking-[-0.045em]"
-            style={{ textWrap: "balance" }}
+            className="text-[clamp(38px,7.5vw,64px)] font-black leading-[1.06] tracking-[-0.035em]"
+            style={{ color: "var(--hero-navy)", textWrap: "balance" }}
           >
-            Un seul lien dans ta bio.{" "}
-            <span
-              className="inline-block rounded-[14px] px-3"
-              style={{
-                background: "var(--brand-yellow)",
-                boxShadow: "var(--brand-shadow)",
-              }}
-            >
-              Et tu vends dessus.
+            Tous vos liens,
+            <br />
+            <span style={{ color: "var(--hero-orange)" }}>
+              en un seul endroit.
             </span>
           </h1>
 
           <p
-            className="mt-7 max-w-[480px] text-[17px] leading-[1.6] sm:text-lg"
-            style={{ color: "rgba(23,23,23,.6)", textWrap: "pretty" }}
+            className="mt-6 max-w-[460px] text-[17px] leading-[1.65]"
+            style={{ color: "var(--hero-slate)" }}
           >
-            Tes réseaux, tes produits, ton WhatsApp — réunis sur une page à toi.
-            Tu colles ton lien, on reconnaît TikTok, Instagram ou YouTube tout
-            seuls. Et le jour où tu veux vendre, tu encaisses en Mobile Money ou
-            par carte.
+            Créez votre page personnalisée, partagez tout ce qui compte et
+            développez votre présence en ligne.
           </p>
 
-          <div className="mt-9 flex flex-col gap-3.5 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-wrap gap-x-8 gap-y-4">
+            {HERO_PILLS.map((p) => (
+              <div key={p.title} className="flex items-center gap-2.5">
+                <span
+                  className="grid size-10 shrink-0 place-items-center rounded-full text-base"
+                  style={{ background: "var(--hero-orange-soft)" }}
+                >
+                  {p.icon}
+                </span>
+                <span className="text-[13.5px] leading-tight">
+                  <span
+                    className="block font-extrabold"
+                    style={{ color: "var(--hero-navy)" }}
+                  >
+                    {p.title}
+                  </span>
+                  <span style={{ color: "var(--hero-slate)" }}>{p.sub}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               href="/register"
-              className="rounded-full px-7 py-[17px] text-center text-base font-extrabold text-white transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-xl px-7 py-4 text-[15px] font-bold text-white transition-colors"
               style={{
-                background: "var(--brand-clay)",
-                boxShadow: "var(--brand-shadow)",
+                background: "var(--hero-orange)",
+                boxShadow: "0 10px 24px rgb(242 98 26 / 28%)",
               }}
             >
-              Créer ma page gratuite →
+              Commencer gratuitement <span aria-hidden>→</span>
             </Link>
             <Link
-              href="/explore"
-              className="rounded-full px-7 py-[17px] text-center text-base font-extrabold"
-              style={{ border: "2px solid var(--brand-ink)", background: "#fff" }}
+              href="#product"
+              className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-white px-6 py-4 text-[15px] font-bold"
+              style={{
+                border: "1px solid var(--hero-line)",
+                color: "var(--hero-navy)",
+              }}
             >
-              Voir les boutiques
+              <span
+                className="grid size-6 place-items-center rounded-full text-[10px] text-white"
+                style={{ background: "var(--hero-orange)" }}
+                aria-hidden
+              >
+                ▶
+              </span>
+              Voir comment ça marche
             </Link>
           </div>
 
-          <p
-            className="mt-5.5 text-[13.5px] font-semibold"
-            style={{ color: "rgba(23,23,23,.5)" }}
+          <div
+            className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[13.5px] font-medium"
+            style={{ color: "var(--hero-slate)" }}
           >
-            ✓ Gratuit pour commencer&nbsp;&nbsp;·&nbsp;&nbsp;Sans carte
-            bancaire&nbsp;&nbsp;·&nbsp;&nbsp;En ligne en 5 minutes
-          </p>
+            {["Gratuit à vie", "Sans carte bancaire", "Prêt en 2 minutes"].map(
+              (t) => (
+                <span key={t} className="inline-flex items-center gap-1.5">
+                  <span style={{ color: "var(--hero-orange)" }} aria-hidden>
+                    ✓
+                  </span>
+                  {t}
+                </span>
+              ),
+            )}
+          </div>
         </div>
 
-        <HeroVisual />
+        <PhoneMockup />
       </div>
     </section>
   );
@@ -336,41 +450,74 @@ function Hero() {
 // ---------------------------------------------------------------------------
 // Bandeau de chiffres
 // ---------------------------------------------------------------------------
+//
+// Le design portait « 10K+ utilisateurs · 50K+ pages · 120+ pays · 1M+ clics ».
+// Ces chiffres n'existent pas : la plateforme compte une poignée de comptes et
+// n'a encore encaissé aucune commande. Les publier, c'est fabriquer une preuve
+// sociale qu'un vendeur peut démentir en trois clics — et il ne revient pas
+// après.
+//
+// La mise en page est celle du design, au pixel près. Seuls les quatre
+// contenus disent quelque chose de vrai. À remplacer par les vrais nombres le
+// jour où ils existent : il n'y a qu'ici à toucher.
 
-const STATS = [
-  { value: "5 min", label: "pour être en ligne" },
-  { value: "Mobile Money", label: "ou carte bancaire" },
-  { value: "@toi", label: "ton lien à partager" },
-  { value: "0 FCFA", label: "pour démarrer" },
+const HERO_STATS = [
+  { icon: "⚡", value: "2 min", label: "pour être en ligne" },
+  { icon: "🔗", value: "Illimité", label: "liens sur ta page" },
+  { icon: "🌍", value: "Afrique de l'Ouest", label: "Mobile Money ou carte" },
+  { icon: "📈", value: "Clics suivis", label: "sur chaque lien" },
 ];
 
 function StatsBar() {
   return (
     <section
-      className="px-6 py-6"
-      style={{ background: "var(--brand-forest)", color: "var(--brand-cream-soft)" }}
+      className="px-6 pb-16"
+      style={{
+        background:
+          "linear-gradient(135deg, #ffffff 0%, #ffffff 45%, var(--hero-peach) 100%)",
+      }}
     >
-      <div className="mx-auto grid max-w-[1200px] grid-cols-2 gap-6 text-center lg:grid-cols-4">
-        {STATS.map((stat) => (
-          <div key={stat.label}>
-            <p
-              className="text-[clamp(20px,4vw,28px)] font-extrabold"
-              style={{ color: "var(--brand-yellow)" }}
+      <div
+        className="mx-auto grid max-w-[1200px] grid-cols-2 gap-y-8 rounded-[22px] bg-white px-6 py-8 lg:grid-cols-4 lg:divide-x"
+        style={{
+          border: "1px solid var(--hero-line)",
+          boxShadow: "0 18px 46px rgb(20 24 31 / 8%)",
+        }}
+      >
+        {HERO_STATS.map((s) => (
+          <div
+            key={s.label}
+            className="flex items-center justify-center gap-3.5 px-2"
+            style={{ borderColor: "var(--hero-line)" }}
+          >
+            <span
+              className="grid size-11 shrink-0 place-items-center rounded-full text-lg"
+              style={{ background: "var(--hero-orange-soft)" }}
+              aria-hidden
             >
-              {stat.value}
-            </p>
-            <p
-              className="mt-0.5 text-[13px]"
-              style={{ color: "rgba(248,239,215,.65)" }}
-            >
-              {stat.label}
-            </p>
+              {s.icon}
+            </span>
+            <span className="leading-tight">
+              <span
+                className="block text-[19px] font-black"
+                style={{ color: "var(--hero-navy)" }}
+              >
+                {s.value}
+              </span>
+              <span
+                className="block text-[12.5px]"
+                style={{ color: "var(--hero-slate)" }}
+              >
+                {s.label}
+              </span>
+            </span>
           </div>
         ))}
       </div>
     </section>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Plus qu'un arbre de liens
@@ -498,7 +645,7 @@ function BioPageMockup() {
         <div className="flex gap-2">
           <span
             className="flex-1 rounded-full py-2 text-center text-xs font-extrabold"
-            style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+            style={{ background: "var(--hero-orange)", color: "#fff" }}
           >
             Liens
           </span>
@@ -998,7 +1145,7 @@ function FinalCta() {
             <button
               type="submit"
               className="inline-flex h-[54px] items-center justify-center rounded-full px-6.5 text-sm font-extrabold"
-              style={{ background: "var(--brand-ink)", color: "var(--brand-yellow)" }}
+              style={{ background: "var(--hero-orange)", color: "#fff" }}
             >
               Commencer →
             </button>
