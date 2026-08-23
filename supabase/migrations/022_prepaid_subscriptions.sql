@@ -177,4 +177,10 @@ comment on function public.apply_subscription_payment(text) is
 -- Personne d'autre que le serveur (clé service, qui contourne les grants) n'a
 -- de raison d'appeler ceci : l'exposer à `authenticated` reviendrait à offrir
 -- un abonnement à qui devine une référence.
+-- `revoke ... from public` ne suffit pas : Supabase accorde EXECUTE à
+-- `anon` et `authenticated` par défaut sur le schéma public, et ces
+-- rôles conservent leur droit propre. Sans le revoke explicite ci-dessous,
+-- un vendeur pouvait lancer un paiement, ne pas le régler, puis appeler
+-- cette fonction avec sa propre référence pour se créditer lui-même.
 revoke all on function public.apply_subscription_payment(text) from public;
+revoke execute on function public.apply_subscription_payment(text) from anon, authenticated;
