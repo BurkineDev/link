@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
 import { OrdersClient } from "./orders-client";
 import type { OrderRow } from "@/lib/types/database";
 import type { OrderStatus } from "@/lib/types/database";
@@ -33,6 +34,21 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   if (!shop) {
     redirect("/dashboard");
   }
+
+  // Rattrapage des paiements Mobile Money.
+  //
+  // Le webhook Genius Pay peut ne jamais arriver — c'est arrivé au premier
+  // paiement réel en production. L'ouverture de cette page est le moment
+  // naturel pour retomber sur nos pieds : le vendeur voit l'état réel de ses
+  // commandes plutôt qu'un « en attente » figé, et le stock d'un panier
+  // abandonné repart à la vente.
+  //
+  // Plafonné dans le temps : si Genius Pay est lent, la page s'affiche quand
+  // même avec les données qu'on a.
+  await Promise.race([
+    reconcilePendingGeniusPayOrders({ shopId: shop.id, limit: 5 }),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ]).catch((err) => console.error("[orders] reconcile failed", err));
 
   // Build query
   let query = supabase

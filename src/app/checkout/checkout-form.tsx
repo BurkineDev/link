@@ -108,7 +108,7 @@ interface CheckoutFormProps {
 
 export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFormProps) {
   const router = useRouter();
-  const { items, getTotal, clearCart, shopId } = useCart();
+  const { items, getTotal, shopId } = useCart();
 
   const hasPhysical = items.length > 0;
   const currency: Currency = (items[0]?.currency as Currency) ?? "XOF";
@@ -245,7 +245,11 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
         throw new Error(data.error ?? "Une erreur est survenue. Veuillez réessayer.");
       }
 
-      clearCart();
+      // Le panier n'est PAS vidé ici : tant que l'opérateur n'a pas confirmé,
+      // l'acheteur peut abandonner, échouer ou fermer l'onglet. Le vider avant
+      // la redirection lui faisait tout perdre pour un paiement qui n'avait
+      // même pas commencé. C'est la page de retour qui le vide, à la
+      // confirmation.
       window.location.assign(data.paymentLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Une erreur est survenue.";
