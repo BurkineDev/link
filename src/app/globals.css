@@ -4,6 +4,56 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   Jetons de marque
+   ---------------------------------------------------------------------------
+   Le système de design de la page d'accueil, tel que fourni.
+
+   Volontairement séparés des jetons sémantiques de l'application
+   (`--primary`, `--background`…) : ceux-là habillent aussi le tableau de bord
+   et, surtout, les boutiques publiques, où chaque vendeur superpose son propre
+   thème. Les écraser repeindrait la boutique de tout le monde sans que
+   personne l'ait demandé.
+
+   Ces variables-ci ne s'appliquent qu'aux surfaces de marque.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Fonds */
+  --brand-cream: #faf6ec;
+  --brand-cream-deep: #f1ede4;
+  --brand-cream-soft: #f8efd7;
+  --brand-paper: #fffaf0;
+
+  /* Encre */
+  --brand-ink: #171717;
+
+  /* Accents */
+  --brand-yellow: #ffda46;
+  --brand-yellow-soft: #ffed9d;
+  --brand-clay: #dc552f;
+  --brand-forest: #153c32;
+  --brand-violet: #5b36e8;
+  --brand-violet-soft: #f3ecff;
+
+  /* Teintes des templates */
+  --brand-lilac: #c8b9ff;
+  --brand-lime: #d8f83d;
+  --brand-peach: #f5d6c6;
+  --brand-orange: #ff5d35;
+
+  /* Ombres dures — la signature du système : aucun flou. */
+  --brand-shadow-sm: 3px 3px 0 var(--brand-ink);
+  --brand-shadow: 4px 4px 0 var(--brand-ink);
+  --brand-shadow-accent: 6px 6px 0 var(--brand-yellow);
+
+  /* Rayons */
+  --brand-radius-pill: 999px;
+  --brand-radius-card: 32px;
+  --brand-radius-hero: 48px;
+  --brand-radius-chip: 16px;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

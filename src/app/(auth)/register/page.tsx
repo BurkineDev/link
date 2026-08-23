@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  searchParams: Promise<{ de?: string; next?: string }>;
+  searchParams: Promise<{ de?: string; next?: string; email?: string }>;
 }
 
 /**
@@ -32,7 +32,7 @@ interface Props {
  * sur la page d'inscription normale — jamais d'erreur.
  */
 export default async function RegisterPage({ searchParams }: Props) {
-  const { de, next } = await searchParams;
+  const { de, next, email } = await searchParams;
 
   let invite: RegisterInvite | null = null;
 
@@ -47,5 +47,18 @@ export default async function RegisterPage({ searchParams }: Props) {
     if (data) invite = { name: data.name, slug: data.slug };
   }
 
-  return <RegisterForm invite={invite} next={safeNextPath(next)} />;
+  // L'accueil propose de saisir son e-mail avant de cliquer. Le lui
+  // redemander ici serait le punir de l'avoir fait.
+  const prefilledEmail =
+    typeof email === "string" && email.length <= 254 && email.includes("@")
+      ? email
+      : null;
+
+  return (
+    <RegisterForm
+      invite={invite}
+      next={safeNextPath(next)}
+      prefilledEmail={prefilledEmail}
+    />
+  );
 }

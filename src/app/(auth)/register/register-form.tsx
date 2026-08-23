@@ -139,10 +139,13 @@ function UsernameIndicator({ status }: { status: UsernameStatus }) {
 export function RegisterForm({
   invite,
   next,
+  prefilledEmail = null,
 }: {
   invite: RegisterInvite | null;
   /** Destination interne déjà validée, ou null. */
   next: string | null;
+  /** E-mail déjà saisi sur l'accueil, à ne pas redemander. */
+  prefilledEmail?: string | null;
 }) {
   // Après confirmation de l'e-mail, l'utilisateur passe par l'onboarding — il
   // lui faut une boutique avant de pouvoir s'abonner. `next` est encodé dans
@@ -166,7 +169,10 @@ export function RegisterForm({
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormInput>({
     resolver: zodResolver(registerFormSchema),
-    defaultValues: { agreed_to_terms: false },
+    defaultValues: {
+      agreed_to_terms: false,
+      ...(prefilledEmail ? { email: prefilledEmail } : {}),
+    },
   });
 
   const passwordValue = useWatch({ control, name: "password" });
