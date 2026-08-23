@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ImageUploader } from "@/components/dashboard/image-uploader";
+import { detectLink } from "@/lib/links/detect";
 import type { ShopLinkRow } from "@/lib/types/database";
 
 // Map each link kind to a Lucide SVG icon (no emojis — keeps the UI premium).
@@ -85,9 +86,28 @@ export function LinksSection({
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [icon, setIcon] = useState("custom");
+  // Une saisie manuelle du vendeur n'est jamais écrasée par la détection.
+  const [iconTouched, setIconTouched] = useState(false);
+  const [labelTouched, setLabelTouched] = useState(false);
+  const [detected, setDetected] = useState<string | null>(null);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  /**
+   * Coller une adresse suffit : l'icône et le libellé se remplissent.
+   *
+   * Tout est fait ici plutôt que dans un effet — la valeur dérive de la
+   * frappe, il n'y a rien à resynchroniser après coup.
+   */
+  const onUrlChange = (value: string) => {
+    setUrl(value);
+    const found = detectLink(value);
+    setDetected(found.recognized ? found.label : null);
+    if (!found.recognized) return;
+    if (!iconTouched) setIcon(found.icon);
+    if (!labelTouched) setLabel(found.label);
+  };
 
   const add = async () => {
     if (!label.trim() || !url.trim()) {
@@ -118,6 +138,9 @@ export function LinksSection({
     setUrl("");
     setIcon("custom");
     setThumbnail(null);
+    setIconTouched(false);
+    setLabelTouched(false);
+    setDetected(null);
     toast.success("Lien ajouté.");
     onChanged?.();
   };
@@ -204,10 +227,33 @@ export function LinksSection({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[150px_1fr] sm:items-end">
+        {/* L'URL d'abord : c'est elle qui remplit tout le reste. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Colle ton lien</Label>
+          <Input
+            placeholder="tiktok.com/@moncompte"
+            value={url}
+            onChange={(e) => onUrlChange(e.target.value)}
+            inputMode="url"
+            autoComplete="url"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {detected
+              ? `${detected} reconnu — l'icône et le nom sont remplis.`
+              : "Instagram, TikTok, YouTube, WhatsApp… on reconnaît la plateforme toute seule."}
+          </p>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[150px_1fr] sm:items-end">
           <div className="space-y-1.5">
             <Label className="text-xs">Type</Label>
-            <Select value={icon} onValueChange={(v) => setIcon(v ?? "custom")}>
+            <Select
+              value={icon}
+              onValueChange={(v) => {
+                setIcon(v ?? "custom");
+                setIconTouched(true);
+              }}
+            >
               <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -228,7 +274,10 @@ export function LinksSection({
             <Input
               placeholder="Mon TikTok"
               value={label}
-              onChange={(e) => setLabel(e.target.value)}
+              onChange={(e) => {
+                setLabel(e.target.value);
+                setLabelTouched(true);
+              }}
               maxLength={60}
             />
           </div>
@@ -247,16 +296,7 @@ export function LinksSection({
           />
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <div className="space-y-1.5">
-            <Label className="text-xs">URL</Label>
-            <Input
-              placeholder="https://tiktok.com/@…"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              inputMode="url"
-            />
-          </div>
+        <div className="mt-4 flex justify-end">
           <Button onClick={add} disabled={isAdding} className="gap-1.5">
             {isAdding ? (
               <Loader2 className="size-4 animate-spin" />

@@ -19,6 +19,7 @@ import {
   BLOCK_TYPE_META,
   type BlockType,
 } from "@/lib/blocks/types";
+import { detectLink } from "@/lib/links/detect";
 import type { ShopRow } from "@/lib/types/database";
 
 /**
@@ -82,6 +83,27 @@ export function BlockEditorDialog({
   const set = (key: string, value: unknown) =>
     setConfig((cur) => ({ ...cur, [key]: value }));
 
+  /**
+   * Coller une adresse remplit l'icône et le libellé.
+   *
+   * Le libellé n'est rempli que s'il est encore vide : dans cet éditeur on
+   * revient souvent sur un bloc existant, et écraser « Ma chaîne YouTube »
+   * par « YouTube » parce qu'on a corrigé l'adresse serait une perte.
+   */
+  const setLinkUrl = (value: string) => {
+    const found = detectLink(value);
+    setConfig((cur) => ({
+      ...cur,
+      url: value,
+      ...(found.recognized
+        ? {
+            icon: found.icon,
+            label: String(cur.label ?? "").trim() || found.label,
+          }
+        : {}),
+    }));
+  };
+
   const submit = async () => {
     // Valider ici avec le schéma partagé évite un aller-retour réseau pour
     // une faute de frappe, et donne un message avant l'envoi.
@@ -113,20 +135,25 @@ export function BlockEditorDialog({
         <div className="space-y-4">
           {type === "LINK" && (
             <>
+              {/* L'adresse d'abord : c'est elle qui remplit le reste. */}
+              <Field
+                label="Colle ton lien"
+                hint="Instagram, TikTok, YouTube, WhatsApp… la plateforme est reconnue toute seule."
+              >
+                <Input
+                  value={String(config.url ?? "")}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="tiktok.com/@moncompte"
+                  inputMode="url"
+                  autoComplete="url"
+                />
+              </Field>
               <Field label="Libellé">
                 <Input
                   value={String(config.label ?? "")}
                   onChange={(e) => set("label", e.target.value)}
                   placeholder="Mon TikTok"
                   maxLength={120}
-                />
-              </Field>
-              <Field label="Adresse">
-                <Input
-                  value={String(config.url ?? "")}
-                  onChange={(e) => set("url", e.target.value)}
-                  placeholder="https://tiktok.com/@moi"
-                  inputMode="url"
                 />
               </Field>
               <Field label="Vignette (optionnelle)" hint="Adresse d'image en https://">
