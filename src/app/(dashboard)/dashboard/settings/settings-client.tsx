@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -81,6 +82,8 @@ import { LinksSection } from "@/components/dashboard/links-section";
 interface SettingsClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
+  /** La rédaction assistée fait partie du plan Pro. */
+  canUseAi: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +359,11 @@ function BioThemeSwatch({
 // Main SettingsClient
 // ---------------------------------------------------------------------------
 
-export function SettingsClient({ shop, links }: SettingsClientProps) {
+export function SettingsClient({
+  shop,
+  links,
+  canUseAi,
+}: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -723,21 +730,41 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="shop-desc">Description</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={writeBio}
-                  disabled={isWritingBio || name.trim().length < 2}
-                  className="h-7 gap-1.5 px-2 text-xs"
-                >
-                  {isWritingBio ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-3.5" />
-                  )}
-                  Écrire ma bio
-                </Button>
+                {canUseAi ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={writeBio}
+                    disabled={isWritingBio || name.trim().length < 2}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {isWritingBio ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-3.5" />
+                    )}
+                    Écrire ma bio
+                  </Button>
+                ) : (
+                  /* Visible mais fermé : une porte qu'on voit vaut mieux
+                     qu'une fonctionnalité dont on ignore l'existence. */
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                  >
+                    <Link href="/pricing">
+                      <Sparkles className="size-3.5" />
+                      Écrire ma bio
+                      <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        Pro
+                      </span>
+                    </Link>
+                  </Button>
+                )}
               </div>
               <Textarea
                 id="shop-desc"

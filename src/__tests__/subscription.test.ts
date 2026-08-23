@@ -12,6 +12,7 @@ import {
   PLAN_PRICES,
   getBoost,
   getEffectivePlan,
+  getPlanLimits,
   getPrepaidPrice,
   isPrepaidMonths,
   prepaidSavingsPercent,
@@ -335,5 +336,27 @@ describe("BOOSTS catalogue", () => {
   it("getBoost looks up by type", () => {
     expect(getBoost("featured_24h")).toBe(BOOSTS.featured_24h);
     expect(getBoost("custom_domain").type).toBe("custom_domain");
+  });
+});
+
+describe("PLAN_LIMITS.aiWriting", () => {
+  test("la rédaction assistée est réservée au plan Pro", () => {
+    // Chaque génération est un appel facturé : c'est une dépense, pas une
+    // fonctionnalité gratuite qu'on peut ouvrir par distraction.
+    expect(PLAN_LIMITS.free.aiWriting).toBe(false);
+    expect(PLAN_LIMITS.starter.aiWriting).toBe(false);
+    expect(PLAN_LIMITS.pro.aiWriting).toBe(true);
+  });
+
+  test("un abonnement prépayé expiré perd l'accès à la rédaction assistée", () => {
+    // Le cas qui compte : sans prélèvement récurrent, personne ne nous
+    // prévient qu'une période Pro s'est terminée.
+    const expired = {
+      plan: "pro" as const,
+      status: "active" as const,
+      provider: "geniuspay" as const,
+      current_period_end: "2020-01-01T00:00:00Z",
+    };
+    expect(getPlanLimits(getEffectivePlan(expired)).aiWriting).toBe(false);
   });
 });

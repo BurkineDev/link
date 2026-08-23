@@ -31,20 +31,31 @@ export const PLAN_LIMITS = {
     maxProducts: 5,
     commissionRate: 0.05,
     label: "Découverte",
+    // Chaque génération coûte un appel à un modèle facturé. Un vendeur qui ne
+    // paie rien ne peut pas décider de cette dépense à notre place.
+    aiWriting: false,
   },
   starter: {
     maxProducts: 20,
     commissionRate: 0.03,
     label: "Starter",
+    aiWriting: false,
   },
   pro: {
     maxProducts: Infinity,
     commissionRate: 0,
     label: "Pro",
+    aiWriting: true,
   },
 } as const satisfies Record<
   SubscriptionPlan,
-  { maxProducts: number; commissionRate: number; label: string }
+  {
+    maxProducts: number;
+    commissionRate: number;
+    label: string;
+    /** Rédaction assistée réservée aux plans payants (voir /api/outils/bio). */
+    aiWriting: boolean;
+  }
 >;
 
 // ---------------------------------------------------------------------------

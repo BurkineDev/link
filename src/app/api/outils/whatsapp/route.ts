@@ -63,7 +63,9 @@ Le message doit:
 Réponds uniquement avec le message, sans introduction ni commentaire.`;
 
     const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      // Identifiant sans suffixe de date : il désigne le modèle,
+      // pas une version figée qui finira par être retirée.
+      model: "claude-haiku-4-5",
       max_tokens: 250,
       messages: [{ role: "user", content: prompt }],
     });

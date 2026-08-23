@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { enforceAiLimits } from "@/lib/rate-limit";
+import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
 import { parseBioOptions } from "@/lib/ai/bio-options";
 
 export const runtime = "nodejs";
@@ -17,6 +20,10 @@ const client = new Anthropic();
 //
 // Trois propositions plutôt qu'une : choisir coûte moins cher que regénérer,
 // et un seul appel sert les trois.
+//
+// Réservée au plan Pro. Chaque génération est un appel facturé : sans compte
+// et sans plan, cette route serait une dépense ouverte à qui trouve l'URL.
+// La limite de débit par IP protège du volume, pas du principe.
 // ---------------------------------------------------------------------------
 
 /** Une bio de page bio est courte par nature — deux phrases suffisent. */
@@ -29,6 +36,34 @@ export async function POST(request: NextRequest) {
   try {
     const blocked = await enforceAiLimits(request, "bio");
     if (blocked) return blocked;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
+    // Lu avec la clé service : l'abonnement décide d'une dépense, il ne se
+    // lit pas à travers une politique que le client pourrait contourner.
+    const { data: sub } = await getAdminClient()
+      .from("creator_subscriptions")
+      .select("plan, status, provider, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const plan = getEffectivePlan(sub);
+    if (!getPlanLimits(plan).aiWriting) {
+      return NextResponse.json(
+        {
+          error:
+            "La rédaction assistée fait partie du plan Pro. Passe en Pro pour l'utiliser.",
+          code: "PLAN_REQUIRED",
+        },
+        { status: 402 },
+      );
+    }
 
     const body = (await request.json()) as {
       shopName?: string;
@@ -50,11 +85,11 @@ export async function POST(request: NextRequest) {
     }
 
     const message = await client.messages.create({
-      model: "claude-opus-5",
+      // Le modèle le moins cher du catalogue, choisi délibérément : écrire
+      // deux phrases ne demande pas davantage, et la fonctionnalité doit
+      // rester rentable à l'échelle d'un abonnement mensuel.
+      model: "claude-haiku-4-5",
       max_tokens: 1000,
-      // Une bio de deux phrases ne demande pas de longue réflexion, et le
-      // vendeur attend devant son écran.
-      output_config: { effort: "low" },
       system: `Tu écris des bios courtes pour les pages « lien en bio » de vendeurs d'Afrique de l'Ouest — le genre de page qu'on met dans sa bio TikTok ou Instagram.
 
 Contraintes de forme, sans exception :
