@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
       // trace côté serveur est impossible à diagnostiquer après coup — c'est
       // exactement ce qui s'est passé au premier paiement réel.
       console.info(
-        `[verify] order ${order.id} still pending — geniuspay status=${payment.status} ref=${payment.reference} method=${payment.payment_method ?? "?"} provider=${payment.payment_provider ?? "?"}`,
+        `[verify] order ${order.id} still pending — geniuspay status=${payment.status} ref=${payment.reference} method=${payment.payment_method ?? "?"} provider=${payment.payment_provider ?? "?"} env=${payment.environment} gateway=${payment.gateway ?? "?"}`,
       );
 
       // 202 — l'opérateur n'a pas encore confirmé. La page de retour reboucle
