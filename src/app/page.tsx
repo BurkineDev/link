@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -616,64 +617,8 @@ function Pillars() {
 // ---------------------------------------------------------------------------
 //
 // Le design plaçait ici le mockup « Studio Clay » de Linktree. Remplacé par
-// une vraie page Bio-Lien : montrer notre produit vaut mieux que montrer
-// celui d'un concurrent, en plus d'être le seul choix honnête.
-
-function BioPageMockup() {
-  return (
-    <div
-      className="relative w-full max-w-[420px] overflow-hidden rounded-[var(--brand-radius-card)]"
-      style={{ background: "#fff", boxShadow: "0 26px 60px rgba(0,0,0,.3)" }}
-    >
-      <div
-        className="px-7 pb-6 pt-9 text-center"
-        style={{ background: "var(--brand-forest)" }}
-      >
-        <div
-          className="mx-auto grid size-[72px] place-items-center rounded-full text-2xl font-extrabold"
-          style={{ background: "var(--brand-yellow)", color: "var(--brand-ink)" }}
-        >
-          A
-        </div>
-        <p className="mt-3.5 text-lg font-extrabold text-white">Atelier Awa</p>
-        <p className="text-xs" style={{ color: "rgba(255,255,255,.6)" }}>
-          Pagnes &amp; prêt-à-porter · Abidjan
-        </p>
-      </div>
-
-      <div className="space-y-2.5 p-5">
-        <div className="flex gap-2">
-          <span
-            className="flex-1 rounded-full py-2 text-center text-xs font-extrabold"
-            style={{ background: "var(--hero-orange)", color: "#fff" }}
-          >
-            Liens
-          </span>
-          <span
-            className="flex-1 rounded-full py-2 text-center text-xs font-extrabold"
-            style={{ background: "var(--brand-cream-deep)" }}
-          >
-            Boutique
-          </span>
-        </div>
-        {["Ma nouvelle collection", "Commander sur WhatsApp", "Mon TikTok"].map(
-          (label) => (
-            <div
-              key={label}
-              className="rounded-[13px] px-4 py-3 text-xs font-extrabold"
-              style={{
-                background: "var(--brand-cream)",
-                border: "1.5px solid rgba(0,0,0,.1)",
-              }}
-            >
-              {label}
-            </div>
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
+// une illustration 3D de la personnalisation : thèmes, couleurs et polices,
+// le sujet exact de cette section.
 
 const COPILOT = [
   { emoji: "✦", label: "Une bio brillante grâce à l'IA" },
@@ -690,45 +635,26 @@ function Copilot() {
       style={{ background: "var(--brand-cream-deep)" }}
     >
       <div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        {/* L'illustration porte son propre fond lilas : le panneau reprend la
+            même teinte pour que les bords arrondis se fondent dedans. */}
         <div
-          className="relative flex min-h-[420px] items-center justify-center overflow-hidden rounded-[var(--brand-radius-hero)] p-10 sm:min-h-[560px]"
-          style={{ background: "var(--brand-clay)" }}
+          className="relative overflow-hidden rounded-[var(--brand-radius-hero)]"
+          style={{ background: "#ddd3f6" }}
         >
-          <div
-            aria-hidden
-            className="absolute -bottom-24 -left-14 size-80 rounded-full"
-            style={{ background: "var(--brand-yellow)" }}
+          <Image
+            src="/accueil-personnalisation.webp"
+            alt="Une page Bio-Lien sur un téléphone, entourée de panneaux de couleurs, de choix de polices et de thèmes."
+            width={1200}
+            height={871}
+            sizes="(min-width: 1024px) 560px, 100vw"
+            className="h-auto w-full"
           />
-          <div
-            aria-hidden
-            className="absolute -right-16 top-12 size-52 rounded-full"
-            style={{ border: "35px solid var(--brand-lilac)" }}
-          />
-          <BioPageMockup />
-          {/* Sur téléphone la maquette occupe presque tout le panneau : la
-              pastille se replie dans le coin pour ne pas recouvrir un libellé
-              de lien. */}
-          <div
-            className="absolute bottom-3 right-3 rounded-[18px] bg-white px-3.5 py-3 sm:bottom-7 sm:right-7 sm:px-4.5 sm:py-4"
-            style={{ boxShadow: "0 20px 44px rgba(0,0,0,.25)" }}
-          >
-            <p
-              className="mb-1.5 text-sm sm:mb-2 sm:text-base"
-              style={{ color: "var(--brand-violet)" }}
-            >
-              ▮▮▮
-            </p>
-            <p className="text-xl font-extrabold sm:text-2xl">2 849</p>
-            <p className="text-[11.5px]" style={{ color: "rgba(0,0,0,.5)" }}>
-              vues ce mois
-            </p>
-          </div>
         </div>
 
         <div>
           <p
             className="text-xs font-extrabold uppercase tracking-[.2em]"
-            style={{ color: "var(--brand-clay)" }}
+            style={{ color: "var(--brand-violet)" }}
           >
             Ton copilote créatif
           </p>
