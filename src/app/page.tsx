@@ -629,25 +629,33 @@ const COPILOT = [
 
 function Copilot() {
   return (
+    // Le fond de la section reprend le dégradé lilas de l'illustration :
+    // plus de panneau, plus de bord — l'image est posée à même le fond.
     <section
       id="product"
-      className="px-6 py-20 sm:py-28"
-      style={{ background: "var(--brand-cream-deep)" }}
+      className="overflow-hidden px-6 py-20 sm:py-28"
+      style={{ background: "linear-gradient(225deg, #d8c9f6 0%, #e2d8f8 45%, #f1eefc 100%)" }}
     >
-      <div className="mx-auto grid max-w-[1200px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
-        {/* L'illustration porte son propre fond lilas : le panneau reprend la
-            même teinte pour que les bords arrondis se fondent dedans. */}
-        <div
-          className="relative overflow-hidden rounded-[var(--brand-radius-hero)]"
-          style={{ background: "#ddd3f6" }}
-        >
+      <div className="mx-auto grid max-w-[1200px] items-center gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12">
+        {/* Le rectangle de l'image et le fond de la section ne sont jamais
+            exactement à la même teinte au pixel près : un fondu de 8 % sur
+            chaque bord efface la couture. */}
+        <div className="-mx-6 sm:mx-0 lg:-ml-24">
           <Image
             src="/accueil-personnalisation.webp"
             alt="Une page Bio-Lien sur un téléphone, entourée de panneaux de couleurs, de choix de polices et de thèmes."
             width={1200}
             height={871}
-            sizes="(min-width: 1024px) 560px, 100vw"
+            sizes="(min-width: 1024px) 700px, 100vw"
             className="h-auto w-full"
+            style={{
+              maskImage:
+                "linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%)",
+              maskComposite: "intersect",
+              WebkitMaskComposite: "source-in",
+            }}
           />
         </div>
 
