@@ -198,7 +198,7 @@ function Navbar() {
             asChild
           >
             <Link href="/register">
-              Créer ma boutique
+              Créer ma page
               <ChevronRight className="ml-1 size-3.5" />
             </Link>
           </Button>
@@ -245,7 +245,7 @@ function Navbar() {
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                 asChild
               >
-                <Link href="/register">Créer ma boutique gratuitement</Link>
+                <Link href="/register">Créer ma page gratuitement</Link>
               </Button>
             </div>
           </nav>
@@ -280,8 +280,12 @@ function Hero() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
+              {/* « Plateforme #1 » a été retiré : invérifiable, et surtout
+                  contre-productif. L'obstacle du visiteur n'est pas de savoir
+                  si on est les meilleurs — c'est de croire que c'est
+                  technique. Autant répondre à ça tout de suite. */}
               <Badge className="mb-6 bg-primary text-primary-foreground border-0 hover:bg-primary/90 text-sm px-3 py-1 font-semibold">
-                🌍 Plateforme #1 pour les créateurs africains
+                Aucune compétence technique
               </Badge>
             </motion.div>
 
@@ -291,9 +295,9 @@ function Hero() {
               transition={{ duration: 0.55, delay: 0.08 }}
               className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.08] tracking-tight mb-6"
             >
-              Crée ta boutique en ligne en{" "}
+              Un seul lien dans ta bio.{" "}
               <span className="bg-primary text-primary-foreground rounded-lg px-2 inline-block">
-                5 minutes
+                Et tu vends dessus.
               </span>
             </motion.h1>
 
@@ -303,9 +307,10 @@ function Hero() {
               transition={{ duration: 0.55, delay: 0.16 }}
               className="text-lg sm:text-xl text-white/85 mb-8 leading-relaxed max-w-lg"
             >
-              Partage ton lien unique sur TikTok et Instagram. Encaisse par
-              carte bancaire et Mobile Money (Wave, Orange, MTN, Moov).
-              Vends partout en Afrique.
+              Tes réseaux, tes produits, ton WhatsApp — réunis sur une page à
+              toi, au lieu de liens qui traînent partout. Tu colles ton lien,
+              on reconnaît TikTok, Instagram ou YouTube tout seuls. Et le jour
+              où tu veux vendre, tu encaisses en Mobile Money ou par carte.
             </motion.p>
 
             <motion.div
@@ -320,7 +325,7 @@ function Hero() {
                 asChild
               >
                 <Link href="/register">
-                  Créer ma boutique gratuite
+                  Créer ma page gratuite
                   <ArrowRight className="ml-2 size-4" />
                 </Link>
               </Button>
@@ -341,7 +346,7 @@ function Hero() {
               className="mt-5 text-sm text-white/60 flex items-center gap-2"
             >
               <Check className="size-4 text-white/80" />
-              Gratuit pour commencer · Pas de carte bancaire requise
+              Gratuit pour commencer · Sans carte bancaire · En ligne en 5 minutes
             </motion.p>
           </div>
 
@@ -366,9 +371,11 @@ function Hero() {
 
 function StatsBar() {
   const stats = [
-    { value: "5 min", label: "pour lancer ta boutique" },
-    { value: "Stripe", label: "paiement sécurisé" },
-    { value: "@username", label: "ton lien unique" },
+    { value: "5 min", label: "pour être en ligne" },
+    // « Stripe » ne dit rien à quelqu'un qui paie en Mobile Money ; le nom du
+    // prestataire n'est pas un argument, le moyen de paiement en est un.
+    { value: "Mobile Money", label: "ou carte bancaire" },
+    { value: "@toi", label: "ton lien à partager" },
     { value: "0 FCFA", label: "pour démarrer" },
   ];
 
@@ -408,20 +415,20 @@ function HowItWorks() {
     },
     {
       number: "02",
-      title: "Personnalise ta boutique",
-      subtitle: "Templates pro inclus",
+      title: "Colle tes liens",
+      subtitle: "Rien à configurer",
       description:
-        "Choisis parmi nos templates conçus pour l'Afrique. Ajoute tes produits avec photos, prix et stocks.",
-      emoji: "🎨",
+        "Ton TikTok, ton Instagram, ton WhatsApp. Tu colles l'adresse, on reconnaît la plateforme et on remplit le reste. Tes produits viennent après, si tu en vends.",
+      emoji: "🔗",
       bg: "bg-muted",
       border: "border-border",
     },
     {
       number: "03",
       title: "Partage et encaisse",
-      subtitle: "Lien @username unique",
+      subtitle: "Ton lien bio-lien.com/@toi",
       description:
-        "Copie ton lien bio-lien.com/@toi et partage-le sur TikTok, Instagram, WhatsApp. Encaisse par carte bancaire dès aujourd'hui.",
+        "Mets-le dans ta bio TikTok, Instagram, WhatsApp. Et le jour où tu vends, tu es payé en Mobile Money ou par carte.",
       emoji: "💰",
       bg: "bg-[var(--success)]/10",
       border: "border-[var(--success)]/30",
@@ -440,7 +447,8 @@ function HowItWorks() {
             <span className="text-primary">bonjour</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-            En 3 étapes, tu as une boutique professionnelle prête à vendre.
+            Trois étapes, et ta page est en ligne. Rien à installer, rien à
+            paramétrer.
           </p>
         </FadeIn>
 
@@ -505,9 +513,12 @@ function Features() {
     },
     {
       icon: Package,
-      title: "Gestion des stocks",
+      title: "Suivi des stocks",
+      // « Alertes automatiques quand le stock est bas » a été retiré : cette
+      // fonctionnalité n'existe nulle part dans le code. Ce qui suit décrit
+      // ce que `reserve_stock` fait réellement.
       description:
-        "Suis tes inventaires en temps réel. Alertes automatiques quand le stock est bas.",
+        "Le compteur baisse à chaque commande payée, et un article épuisé n'est plus commandable.",
       color: "text-[var(--success)]",
       bg: "bg-[var(--success)]/10",
     },
@@ -529,9 +540,13 @@ function Features() {
     },
     {
       icon: Headphones,
-      title: "Support 24/7",
+      title: "Un vrai humain te répond",
+      // Disait « Support 24/7 — notre équipe basée en Afrique répond en
+      // français, anglais et langues locales ». Rien de tout cela n'est vrai
+      // aujourd'hui : ni l'astreinte permanente, ni l'équipe, ni les langues.
+      // Une promesse de support invérifiable se paie au premier client déçu.
       description:
-        "Notre équipe basée en Afrique répond en français, anglais et langues locales. Toujours là pour toi.",
+        "Écris à support@bio-lien.com et une personne te répond en français. Pas de robot, pas de formulaire à rallonge.",
       color: "text-foreground",
       bg: "bg-muted",
     },
@@ -1017,11 +1032,14 @@ function FinalCTA() {
         <FadeIn>
           <div className="text-5xl mb-6">🌍</div>
           <h2 className="text-3xl sm:text-5xl font-black mb-4 leading-tight">
-            Lance ta boutique gratuitement
+            Ta page, gratuitement
           </h2>
+          {/* Disait « trois minutes » quand l'accroche promet cinq. Une
+              promesse qui varie d'un bout à l'autre de la page ne rassure
+              personne. */}
           <p className="text-lg sm:text-xl text-background/80 mb-10 max-w-xl mx-auto">
-            Trois minutes pour créer ta boutique, ton lien, et le partager dans
-            ta bio. Pas de carte bancaire, pas d&apos;engagement.
+            Cinq minutes pour réunir tes liens, avoir ton adresse à toi, et la
+            mettre dans ta bio. Pas de carte bancaire, pas d&apos;engagement.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">

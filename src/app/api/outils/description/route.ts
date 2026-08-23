@@ -49,7 +49,9 @@ La description doit:
 Réponds uniquement avec la description, sans introduction ni commentaire.`;
 
     const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      // Identifiant sans suffixe de date : il désigne le modèle,
+      // pas une version figée qui finira par être retirée.
+      model: "claude-haiku-4-5",
       max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });

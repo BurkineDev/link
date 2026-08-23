@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -81,6 +82,8 @@ import { LinksSection } from "@/components/dashboard/links-section";
 interface SettingsClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
+  /** La rédaction assistée fait partie du plan Pro. */
+  canUseAi: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +359,11 @@ function BioThemeSwatch({
 // Main SettingsClient
 // ---------------------------------------------------------------------------
 
-export function SettingsClient({ shop, links }: SettingsClientProps) {
+export function SettingsClient({
+  shop,
+  links,
+  canUseAi,
+}: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -365,6 +372,36 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   const [name, setName] = useState(shop.name);
   const [slug, setSlug] = useState(shop.slug);
   const [description, setDescription] = useState(shop.description ?? "");
+  const [bioOptions, setBioOptions] = useState<string[]>([]);
+  const [isWritingBio, setIsWritingBio] = useState(false);
+
+  /**
+   * Propose des bios plutôt que d'en imposer une.
+   *
+   * Le champ vide est ce qui bloque : il ne s'agit pas d'écrire à la place du
+   * vendeur mais de lui donner un point de départ qu'il corrigera.
+   */
+  const writeBio = async () => {
+    setIsWritingBio(true);
+    setBioOptions([]);
+    try {
+      const res = await fetch("/api/outils/bio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopName: name, activity: description }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Impossible de générer la bio.");
+        return;
+      }
+      setBioOptions(data.options ?? []);
+    } catch {
+      toast.error("Connexion perdue. Réessaye.");
+    } finally {
+      setIsWritingBio(false);
+    }
+  };
   const [logoUrl, setLogoUrl] = useState(shop.logo_url);
   const [bannerUrl, setBannerUrl] = useState(shop.banner_url);
 
@@ -691,7 +728,44 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="shop-desc">Description</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="shop-desc">Description</Label>
+                {canUseAi ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={writeBio}
+                    disabled={isWritingBio || name.trim().length < 2}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {isWritingBio ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-3.5" />
+                    )}
+                    Écrire ma bio
+                  </Button>
+                ) : (
+                  /* Visible mais fermé : une porte qu'on voit vaut mieux
+                     qu'une fonctionnalité dont on ignore l'existence. */
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                  >
+                    <Link href="/pricing">
+                      <Sparkles className="size-3.5" />
+                      Écrire ma bio
+                      <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        Pro
+                      </span>
+                    </Link>
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="shop-desc"
                 rows={4}
@@ -699,6 +773,27 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+
+              {bioOptions.length > 0 && (
+                <div className="space-y-1.5 rounded-lg border border-border bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">
+                    Choisis-en une, puis modifie-la comme tu veux.
+                  </p>
+                  {bioOptions.map((option, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setDescription(option);
+                        setBioOptions([]);
+                      }}
+                      className="block w-full rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition-colors hover:border-foreground/40"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
