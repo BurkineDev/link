@@ -1,4 +1,5 @@
 export const metadata = {
+  alternates: { canonical: "/legal/terms" },
   title: "Conditions générales d'utilisation",
   description:
     "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",

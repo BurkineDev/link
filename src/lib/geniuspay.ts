@@ -1,5 +1,5 @@
 /**
- * Genius Pay client (https://pay.genius.ci/docs/api).
+ * Genius Pay client (https://geniuspay.ci/docs/api).
  *
  * Used as the Mobile Money payment rail for African buyers (Wave,
  * Orange Money, MTN MoMo, Moov, M-Pesa, etc.). Stripe handles cards.
@@ -9,7 +9,11 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const DEFAULT_BASE_URL = "https://pay.genius.ci/api/v1/merchant";
+// Hôte documenté. `pay.genius.ci` sert la même API — vérifié, réponses
+// identiques — mais c'est un alias que la documentation ne mentionne nulle
+// part : en dépendre par défaut, c'est parier sur un domaine qui peut
+// disparaître sans préavis, au milieu de l'encaissement.
+const DEFAULT_BASE_URL = "https://geniuspay.ci/api/v1/merchant";
 
 // ---------------------------------------------------------------------------
 // Config

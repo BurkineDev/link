@@ -1,11 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Compass } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Page introuvable",
   description: "Cette page n'existe pas ou a été déplacée.",
+  robots: { index: false, follow: true },
+  alternates: { canonical: null },
 };
 
 /**

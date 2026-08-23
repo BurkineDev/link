@@ -10,6 +10,7 @@ import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
 
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
+import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,6 +99,29 @@ const PHONE_CODES = [
   { code: "+1", flag: "🇺🇸", label: "US" },
 ];
 
+/**
+ * Indicatif téléphonique par pays de livraison.
+ *
+ * Les deux champs étaient indépendants, et l'indicatif restait figé sur +225.
+ * Un acheteur burkinabè qui choisissait « Burkina Faso » puis tapait son
+ * numéro repartait avec `+225` collé devant : un numéro qui n'existe nulle
+ * part. Genius Pay acceptait le paiement, ne trouvait aucun opérateur à qui
+ * l'adresser, et la transaction restait « en attente » pour toujours. C'est
+ * ce qui est arrivé au tout premier paiement réel.
+ */
+const DIAL_CODE_BY_COUNTRY: Record<string, string> = {
+  SN: "+221",
+  CI: "+225",
+  ML: "+223",
+  BF: "+226",
+  CM: "+237",
+  GH: "+233",
+  NG: "+234",
+  KE: "+254",
+  MA: "+212",
+  US: "+1",
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -118,6 +142,9 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     : "Boutique";
 
   const [phoneCountryCode, setPhoneCountryCode] = useState("+225");
+  // Un choix manuel de l'acheteur l'emporte : on ne le lui reprend pas quand
+  // il modifie ensuite son pays de livraison.
+  const [phoneCodePinned, setPhoneCodePinned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [paymentSelection, setPaymentSelection] = useState<{
@@ -148,6 +175,29 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
   });
 
   const requiresShipping = useWatch({ control, name: "requires_shipping" });
+  const shippingCountry = useWatch({ control, name: "country" });
+
+  // L'indicatif suit le pays de livraison tant que l'acheteur ne l'a pas
+  // choisi lui-même. Dérivé plutôt que synchronisé : il n'y a qu'une seule
+  // source de vérité, et rien à resynchroniser après coup.
+  const dialCode = phoneCodePinned
+    ? phoneCountryCode
+    : (shippingCountry && DIAL_CODE_BY_COUNTRY[shippingCountry]) ||
+      phoneCountryCode;
+
+  const countryLabel =
+    AFRICAN_COUNTRIES.find((c) => c.code === shippingCountry)?.name ?? null;
+
+  // Genius Pay ne couvre pas tous les pays en Mobile Money : hors couverture,
+  // il accepte le paiement mais n'envoie jamais le push. On bascule sur la
+  // carte plutôt que de laisser partir une commande qui ne peut pas aboutir.
+  // Dérivé, pas synchronisé : le choix de l'acheteur reste intact s'il revient
+  // à un pays couvert.
+  const mobileMoneyCovered = isMobileMoneyCovered(shippingCountry);
+  const payment =
+    !mobileMoneyCovered && paymentSelection.type === "mobile_money"
+      ? { type: "card" as PaymentType, mobileProvider: undefined }
+      : paymentSelection;
 
   useEffect(() => {
     if (items.length === 0) router.back();
@@ -207,7 +257,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
         buyerDetails: {
           full_name: values.full_name,
           email: values.email,
-          phone: phoneCountryCode + values.phone.replace(/\s+/g, ""),
+          phone: dialCode + values.phone.replace(/\s+/g, ""),
         },
         shippingAddress: values.requires_shipping
           ? {
@@ -215,7 +265,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
               address_line1: values.address_line1!,
               city: values.city!,
               country: values.country!,
-              phone: phoneCountryCode + values.phone.replace(/\s+/g, ""),
+              phone: dialCode + values.phone.replace(/\s+/g, ""),
             }
           : null,
         items: items.map((item) => ({
@@ -225,8 +275,8 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
           unit_price: item.price,
         })),
         paymentMethod: {
-          type: paymentSelection.type,
-          mobileProvider: paymentSelection.mobileProvider,
+          type: payment.type,
+          mobileProvider: payment.mobileProvider,
         },
         notes: values.notes || undefined,
         currency,
@@ -263,7 +313,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
 
   const currencyMeta = CURRENCY_META[currency];
   const paymentBlurb =
-    paymentSelection.type === "mobile_money"
+    payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
       : "Paiement sécurisé via Stripe";
 
@@ -323,8 +373,11 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                   <Label htmlFor="phone">Numéro de téléphone</Label>
                   <div className="flex gap-2">
                     <Select
-                      value={phoneCountryCode}
-                      onValueChange={(v) => setPhoneCountryCode(v ?? "+225")}
+                      value={dialCode}
+                      onValueChange={(v) => {
+                        setPhoneCountryCode(v ?? "+225");
+                        setPhoneCodePinned(true);
+                      }}
                     >
                       <SelectTrigger className="w-24 shrink-0">
                         <SelectValue />
@@ -420,9 +473,11 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
             <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <h2 className="mb-4 text-base font-semibold">Mode de paiement</h2>
               <PaymentMethods
-                value={paymentSelection}
+                value={payment}
                 onChange={setPaymentSelection}
                 mobileMoneyDisabled={!mobileMoneyEnabled}
+                buyerCountry={shippingCountry}
+                buyerCountryLabel={countryLabel}
               />
             </section>
 

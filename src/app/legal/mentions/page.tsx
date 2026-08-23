@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
+  alternates: { canonical: "/legal/mentions" },
   title: "Mentions légales",
   description: "Informations légales sur l'éditeur du service Bio-Lien.",
 };

@@ -6,6 +6,7 @@ import { ShopCard } from "@/components/explore/shop-card";
 import type { ShopRow } from "@/lib/types/database";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/explore" },
   title: "Explorer les boutiques",
   description:
     "Découvre toutes les boutiques de créateurs et entrepreneurs sur Bio-Lien. Mode, beauté, artisanat, formations — directement depuis tes réseaux préférés.",

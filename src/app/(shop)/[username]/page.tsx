@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 import { resolveBioTheme } from "@/lib/bio-themes";
+import { JsonLd, storeJsonLd } from "@/lib/seo/json-ld";
 import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
 import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
@@ -43,14 +44,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
 
+  // Une boutique dépubliée ou renommée ne doit pas laisser une page vide
+  // dans l'index des moteurs.
   if (!shop) {
-    return { title: "Boutique introuvable" };
+    return { title: "Boutique introuvable", robots: { index: false } };
   }
 
   return {
     title: `${shop.name}`,
     description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
+    // Un lien de bio se partage avec toutes sortes de paramètres de suivi.
+    // La canonique dit aux moteurs qu'il n'y a qu'une seule boutique derrière.
+    alternates: { canonical: `/${username}` },
     openGraph: {
+      url: `/${username}`,
       title: shop.name,
       description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
       ...(shop.banner_url && {
@@ -164,13 +171,18 @@ export default async function Page({ params }: Props) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+  const pageUrl = `${appUrl}/${shop.slug}`;
+
   return (
-    <ShopPage
-      shop={shop}
-      products={products}
-      categories={categories}
-      blocks={blocks}
-      pageUrl={`${appUrl}/${shop.slug}`}
-    />
+    <>
+      <JsonLd data={storeJsonLd({ shop, url: pageUrl })} />
+      <ShopPage
+        shop={shop}
+        products={products}
+        categories={categories}
+        blocks={blocks}
+        pageUrl={pageUrl}
+      />
+    </>
   );
 }
