@@ -10,6 +10,7 @@ import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
 
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
+import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,6 +185,20 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     : (shippingCountry && DIAL_CODE_BY_COUNTRY[shippingCountry]) ||
       phoneCountryCode;
 
+  const countryLabel =
+    AFRICAN_COUNTRIES.find((c) => c.code === shippingCountry)?.name ?? null;
+
+  // Genius Pay ne couvre pas tous les pays en Mobile Money : hors couverture,
+  // il accepte le paiement mais n'envoie jamais le push. On bascule sur la
+  // carte plutôt que de laisser partir une commande qui ne peut pas aboutir.
+  // Dérivé, pas synchronisé : le choix de l'acheteur reste intact s'il revient
+  // à un pays couvert.
+  const mobileMoneyCovered = isMobileMoneyCovered(shippingCountry);
+  const payment =
+    !mobileMoneyCovered && paymentSelection.type === "mobile_money"
+      ? { type: "card" as PaymentType, mobileProvider: undefined }
+      : paymentSelection;
+
   useEffect(() => {
     if (items.length === 0) router.back();
   }, [items.length, router]);
@@ -260,8 +275,8 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
           unit_price: item.price,
         })),
         paymentMethod: {
-          type: paymentSelection.type,
-          mobileProvider: paymentSelection.mobileProvider,
+          type: payment.type,
+          mobileProvider: payment.mobileProvider,
         },
         notes: values.notes || undefined,
         currency,
@@ -298,7 +313,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
 
   const currencyMeta = CURRENCY_META[currency];
   const paymentBlurb =
-    paymentSelection.type === "mobile_money"
+    payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
       : "Paiement sécurisé via Stripe";
 
@@ -458,9 +473,11 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
             <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
               <h2 className="mb-4 text-base font-semibold">Mode de paiement</h2>
               <PaymentMethods
-                value={paymentSelection}
+                value={payment}
                 onChange={setPaymentSelection}
                 mobileMoneyDisabled={!mobileMoneyEnabled}
+                buyerCountry={shippingCountry}
+                buyerCountryLabel={countryLabel}
               />
             </section>
 
