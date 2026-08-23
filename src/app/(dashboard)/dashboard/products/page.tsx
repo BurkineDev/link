@@ -4,7 +4,7 @@ import type { Row } from "@/lib/types/database";
 import { ProductsClient } from "./products-client";
 
 export const metadata = {
-  title: "Produits — Bio-Lien",
+  title: "Produits",
 };
 
 export default async function ProductsPage() {
@@ -16,11 +16,11 @@ export default async function ProductsPage() {
 
   const { data: shopRaw } = await supabase
     .from("shops")
-    .select("id, name, currency")
+    .select("id, name, slug, currency")
     .eq("owner_id", user.id)
     .single();
 
-  const shop = shopRaw as Pick<Row<"shops">, "id" | "name" | "currency"> | null;
+  const shop = shopRaw as Pick<Row<"shops">, "id" | "name" | "slug" | "currency"> | null;
   if (!shop) redirect("/dashboard");
 
   const { data: productsRaw } = await supabase
@@ -35,6 +35,7 @@ export default async function ProductsPage() {
     <ProductsClient
       products={products}
       shopId={shop.id}
+      shopSlug={shop.slug}
       currency={shop.currency}
     />
   );

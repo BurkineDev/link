@@ -108,6 +108,21 @@ export type MagicLinkInput = z.infer<typeof magicLinkSchema>;
 // Update profile
 // ---------------------------------------------------------------------------
 
+/**
+ * Single source of truth for usernames, aligned with the DB constraint
+ * profiles_username_format (^[a-z0-9_-]+$, 3-30 chars). Register, onboarding
+ * and profile updates must all use this one — two different rules cost us a
+ * seller at the second form.
+ */
+export const usernameSchema = z
+  .string()
+  .min(3, "Le nom d'utilisateur doit contenir au moins 3 caractères.")
+  .max(30, "Le nom d'utilisateur ne peut pas dépasser 30 caractères.")
+  .regex(
+    /^[a-z0-9_-]+$/,
+    "Uniquement des lettres minuscules, chiffres, tirets et underscores.",
+  );
+
 export const updateProfileSchema = z.object({
   full_name: z
     .string()
@@ -115,15 +130,7 @@ export const updateProfileSchema = z.object({
     .max(100, "Full name must be at most 100 characters")
     .trim()
     .optional(),
-  username: z
-    .string()
-    .min(3, "Username must be at least 3 characters")
-    .max(30, "Username must be at most 30 characters")
-    .regex(
-      /^[a-z0-9_-]+$/,
-      "Username can only contain lowercase letters, numbers, hyphens, and underscores",
-    )
-    .optional(),
+  username: usernameSchema.optional(),
   bio: z.string().max(500, "Bio must be at most 500 characters").trim().optional(),
 });
 

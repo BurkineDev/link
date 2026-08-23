@@ -51,29 +51,46 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Bio-Lien | Crée ta boutique en ligne",
+  // Un seul endroit décide de la forme d'un titre d'onglet. Les pages
+  // fournissent leur nom, le gabarit ajoute la marque — sinon chacune recolle
+  // le suffixe à sa façon et l'onglet mélange « | » et « — ».
+  title: {
+    default: "Bio-Lien | Crée ta boutique en ligne",
+    template: "%s | Bio-Lien",
+  },
   description:
-    "Bio-Lien te permet de créer ta boutique en ligne en 5 minutes. Partage ton lien sur TikTok et Instagram, accepte les paiements Mobile Money (Orange, MTN, Wave) et vends partout en Afrique.",
+    "Crée ta boutique en ligne en 5 minutes et vends en Afrique de l'Ouest — Côte d'Ivoire, Sénégal, Burkina Faso, Bénin, Mali, Togo. Partage ton lien sur TikTok et Instagram, encaisse en Mobile Money (Orange, MTN, Wave, Moov) ou par carte bancaire.",
+  // Google ne se sert plus de cette balise pour classer ; elle ne coûte rien
+  // et reste lue par d'autres moteurs. Ce qui pèse vraiment, c'est le titre,
+  // la description et le contenu des pages.
   keywords: [
-    "boutique en ligne Afrique",
+    "boutique en ligne Afrique de l'Ouest",
+    "boutique en ligne Côte d'Ivoire",
+    "boutique en ligne Sénégal",
+    "boutique en ligne Burkina Faso",
+    "vendre sur TikTok Afrique",
+    "vendre sur WhatsApp",
     "Mobile Money",
     "Orange Money",
     "MTN MoMo",
     "Wave",
-    "vendre en ligne",
+    "Moov Money",
+    "lien bio boutique",
     "créateur africain",
-    "lien bio shop",
   ],
   authors: [{ name: "Bio-Lien" }],
   creator: "Bio-Lien",
   metadataBase: new URL("https://www.bio-lien.com"),
+  // Canonique par défaut. Chaque page publique déclare la sienne ; celle-ci
+  // ne sert que pour l'accueil, seule page sans `generateMetadata`.
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "fr_FR",
     url: "https://www.bio-lien.com",
     title: "Bio-Lien | Crée ta boutique en ligne",
     description:
-      "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money et vends via TikTok & Instagram.",
+      "Crée ta boutique en ligne en 5 minutes et vends partout en Afrique de l'Ouest. Mobile Money ou carte bancaire, depuis TikTok et Instagram.",
     siteName: "Bio-Lien",
     // OG image is generated dynamically from src/app/opengraph-image.tsx
   },
@@ -87,6 +104,16 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  // Les fichiers icon.svg / apple-icon.png / favicon.ico de src/app sont
+  // détectés automatiquement ; seul le manifeste demande à être déclaré.
+  manifest: "/manifest.webmanifest",
+  // Nom affiché sous l'icône quand un vendeur ajoute Bio-Lien à son écran
+  // d'accueil sur iOS, où le manifeste n'est pas lu.
+  appleWebApp: {
+    capable: true,
+    title: "Bio-Lien",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -96,7 +123,7 @@ export const viewport: Viewport = {
   userScalable: true,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
 };
 

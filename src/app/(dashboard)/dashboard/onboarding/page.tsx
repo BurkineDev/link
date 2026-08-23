@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,74 +24,37 @@ import {
   ArrowLeft,
   Loader2,
   Palette,
+  Target,
 } from "lucide-react";
+import {
+  BIO_THEME_LIST,
+  DEFAULT_BIO_THEME,
+  resolveBioTheme,
+  type BioThemeId,
+} from "@/lib/bio-themes";
+import {
+  DEFAULT_ACCENT_COLOR,
+  DEFAULT_BORDER_RADIUS,
+  DEFAULT_CTA_SHAPE,
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_THEME_COLOR,
+} from "@/lib/constants";
+import { ThemePreview } from "@/components/dashboard/theme-preview";
+import {
+  INTENTION_META,
+  INTENTIONS,
+  SOCIAL_NETWORK_META,
+  SOCIAL_NETWORKS,
+  seedBlocksForIntentions,
+  type Intention,
+  type SocialNetwork,
+} from "@/lib/onboarding/intentions";
+import { usernameSchema } from "@/lib/validations/auth";
+import { safeNextPath } from "@/lib/validations/next-path";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────
-type Template = {
-  id: string;
-  name: string;
-  description: string;
-  config: {
-    primaryColor: string;
-    secondaryColor: string;
-    font: string;
-    layout: string;
-    heroStyle: string;
-  };
-};
-
-const TEMPLATES: Template[] = [
-  {
-    id: "boutique",
-    name: "Vibrant",
-    description: "Coloré et énergique, parfait pour la mode",
-    config: {
-      primaryColor: "#FF6B35",
-      secondaryColor: "#FFD700",
-      font: "Inter",
-      layout: "grid",
-      heroStyle: "fullscreen",
-    },
-  },
-  {
-    id: "minimal",
-    name: "Minimaliste",
-    description: "Épuré et élégant pour un look premium",
-    config: {
-      primaryColor: "#1A1A2E",
-      secondaryColor: "#E94560",
-      font: "Playfair Display",
-      layout: "masonry",
-      heroStyle: "split",
-    },
-  },
-  {
-    id: "market",
-    name: "Market",
-    description: "Style marché africain, chaleureux et accessible",
-    config: {
-      primaryColor: "#2D6A4F",
-      secondaryColor: "#74C69D",
-      font: "Nunito",
-      layout: "list",
-      heroStyle: "banner",
-    },
-  },
-  {
-    id: "artisan",
-    name: "Artisan",
-    description: "Aspect fait-main et chaleureux pour les créateurs",
-    config: {
-      primaryColor: "#9A3412",
-      secondaryColor: "#FDBA74",
-      font: "Lora",
-      layout: "grid",
-      heroStyle: "centered",
-    },
-  },
-];
 
 const CURRENCIES = [
   { value: "XOF", label: "FCFA (Afrique de l'Ouest)" },
@@ -107,17 +70,17 @@ const CURRENCIES = [
 const STEPS = [
   { id: 1, label: "Profil", icon: "👤" },
   { id: 2, label: "Boutique", icon: "🏪" },
-  { id: 3, label: "Thème", icon: "🎨" },
-  { id: 4, label: "Terminé", icon: "🎉" },
+  { id: 3, label: "Objectifs", icon: "🎯" },
+  { id: 4, label: "Thème", icon: "🎨" },
+  { id: 5, label: "Terminé", icon: "🎉" },
 ];
 
 // ─── Schemas ─────────────────────────────────────────────────
 const step1Schema = z.object({
   fullName: z.string().min(2, "Minimum 2 caractères"),
-  username: z.string()
-    .min(3, "Minimum 3 caractères")
-    .max(30, "Maximum 30 caractères")
-    .regex(/^[a-z0-9_]+$/, "Lettres minuscules, chiffres et _ uniquement"),
+  // Same rule as the register page and the DB constraint — the seller must
+  // never see their signup username rejected here.
+  username: usernameSchema,
 });
 
 const step2Schema = z
@@ -148,23 +111,113 @@ const step2Schema = z
 type Step1Values = z.infer<typeof step1Schema>;
 type Step2Values = z.infer<typeof step2Schema>;
 
+// ─── Live preview ────────────────────────────────────────────
+// The page the seller is building, rendered while they type. Same resolver
+// and component as the settings preview, so what they see here is what a
+// visitor gets after publishing.
+function OnboardingPreview({
+  shopName,
+  slug,
+  bioTheme,
+}: {
+  shopName: string;
+  slug: string;
+  bioTheme: BioThemeId;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="relative flex size-2">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+        </span>
+        Aperçu en direct
+      </p>
+      <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
+        <div className="h-[420px]">
+          <ThemePreview
+            shopName={shopName || "Ma boutique"}
+            slug={slug}
+            bioTheme={bioTheme}
+            primaryColor={DEFAULT_THEME_COLOR}
+            accentColor={DEFAULT_ACCENT_COLOR}
+            fontFamily={DEFAULT_FONT_FAMILY}
+            borderRadius={DEFAULT_BORDER_RADIUS}
+            ctaShape={DEFAULT_CTA_SHAPE}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────
 export default function OnboardingPage() {
   const router = useRouter();
+  // Le visiteur qui avait choisi un plan avant de s'inscrire y retourne une
+  // fois sa boutique créée, plutôt que d'atterrir sur un tableau de bord qui
+  // ne dit rien de ce qu'il était venu faire. Re-validé ici : le paramètre a
+  // transité par une URL, il n'est pas plus fiable qu'à l'arrivée.
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
   const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template>(TEMPLATES[0]);
+  const [bioTheme, setBioTheme] = useState<BioThemeId>(DEFAULT_BIO_THEME);
 
   // Step 1 data
   const [step1Data, setStep1Data] = useState<Step1Values | null>(null);
   const [step2Data, setStep2Data] = useState<Step2Values | null>(null);
+
+  // Step 3 — ce que le vendeur veut faire, et le minimum pour le lui livrer.
+  const [intentions, setIntentions] = useState<Intention[]>([]);
+  const [handles, setHandles] = useState<Partial<Record<SocialNetwork, string>>>(
+    {},
+  );
+  const [announcement, setAnnouncement] = useState("");
+
+  const toggleIntention = (value: Intention) =>
+    setIntentions((current) =>
+      current.includes(value)
+        ? current.filter((i) => i !== value)
+        : [...current, value],
+    );
 
   // Slug availability
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
 
   const form1 = useForm<Step1Values>({ resolver: zodResolver(step1Schema) });
+
+  // Prefill step 1 from what the seller already typed at signup (stored in
+  // auth user_metadata by the register page). They just confirm and continue.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled || !user) return;
+      const meta = (user.user_metadata ?? {}) as {
+        full_name?: string;
+        username?: string;
+      };
+      if (meta.full_name && !form1.getValues("fullName")) {
+        form1.setValue("fullName", meta.full_name);
+      }
+      if (
+        meta.username &&
+        !form1.getValues("username") &&
+        usernameSchema.safeParse(meta.username).success
+      ) {
+        form1.setValue("username", meta.username);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const form2 = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
     defaultValues: { currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" },
@@ -249,14 +302,7 @@ export default function OnboardingPage() {
 
       if (profileError) throw profileError;
 
-      // Look up matching template
-      const { data: templateRecord } = await supabase
-        .from("templates")
-        .select("id")
-        .eq("id", selectedTemplate.id)
-        .maybeSingle();
-
-      const { error: shopError } = await supabase
+      const { data: createdShop, error: shopError } = await supabase
         .from("shops")
         .insert({
           owner_id: user.id,
@@ -264,8 +310,10 @@ export default function OnboardingPage() {
           slug: step2Data.shopSlug,
           description: step2Data.description ?? null,
           currency: step2Data.currency as "XOF" | "XAF" | "GHS" | "NGN" | "KES" | "MAD" | "USD",
-          template_id: templateRecord?.id ?? null,
-          theme_color: selectedTemplate.config.primaryColor,
+          template_id: null,
+          bio_theme: bioTheme,
+          theme_color: DEFAULT_THEME_COLOR,
+          accent_color: DEFAULT_ACCENT_COLOR,
           is_published: false,
           logo_url: null,
           banner_url: null,
@@ -277,9 +325,37 @@ export default function OnboardingPage() {
             step2Data.checkoutMode === "whatsapp"
               ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
               : null,
-        });
+          intentions,
+        })
+        .select("id")
+        .single();
 
       if (shopError) throw shopError;
+
+      // La première page est composée à partir des intentions. Si l'insertion
+      // des blocs échoue, la boutique existe quand même : le vendeur arrive
+      // sur un Page Builder vide plutôt que sur une erreur, et rien n'est
+      // perdu — mieux vaut ça que de rejouer tout l'onboarding.
+      const seeds = seedBlocksForIntentions({
+        intentions,
+        whatsappNumber: step2Data.whatsappNumber,
+        handles,
+        announcement,
+        shopName: step2Data.shopName,
+      });
+
+      if (createdShop && seeds.length > 0) {
+        const { error: blocksError } = await supabase.from("page_blocks").insert(
+          seeds.map((seed) => ({
+            shop_id: (createdShop as { id: string }).id,
+            type: seed.type,
+            position: seed.position,
+            title: seed.title,
+            config: seed.config as never,
+          })),
+        );
+        if (blocksError) console.error("[onboarding] page_blocks", blocksError);
+      }
 
       await supabase
         .from("profiles")
@@ -287,7 +363,7 @@ export default function OnboardingPage() {
         .eq("id", user.id);
 
       toast.success("Ta boutique est créée ! 🎉");
-      router.push("/dashboard");
+      router.push(nextPath ?? "/dashboard");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
@@ -392,7 +468,7 @@ export default function OnboardingPage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Lettres minuscules, chiffres et _ uniquement
+                      Lettres minuscules, chiffres, tirets et _
                     </p>
                   </div>
 
@@ -595,14 +671,165 @@ export default function OnboardingPage() {
                     </Button>
                   </div>
                 </form>
+
+                <OnboardingPreview
+                  shopName={watchedShopName ?? ""}
+                  slug={watchedSlug ?? ""}
+                  bioTheme={bioTheme}
+                />
               </Card>
             </motion.div>
           )}
 
-          {/* ─── STEP 3: Template ─── */}
+
+          {/* ─── STEP 3: Intentions ─── */}
           {step === 3 && (
             <motion.div
               key="step3"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="p-6 space-y-6">
+                <div className="text-center space-y-1">
+                  <div className="flex justify-center">
+                    <Target className="h-10 w-10 text-primary" />
+                  </div>
+                  <h1 className="text-2xl font-bold">
+                    Que veux-tu faire avec Bio-Lien&nbsp;?
+                  </h1>
+                  <p className="text-muted-foreground">
+                    Choisis tout ce qui te correspond. On prépare ta page à
+                    partir de ça — tu pourras tout changer ensuite.
+                  </p>
+                </div>
+
+                <div
+                  role="group"
+                  aria-label="Tes objectifs"
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  {INTENTIONS.map((value) => {
+                    const meta = INTENTION_META[value];
+                    const selected = intentions.includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => toggleIntention(value)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "relative rounded-xl border-2 p-4 text-left transition-all",
+                          selected
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/40",
+                        )}
+                      >
+                        <span className="text-2xl" aria-hidden>
+                          {meta.emoji}
+                        </span>
+                        <p className="mt-2 font-semibold text-sm">{meta.label}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {meta.description}
+                        </p>
+                        {selected && (
+                          <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-primary">
+                            <Check className="size-3 text-primary-foreground" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Le minimum pour que l'intention produise vraiment un bloc :
+                    demandé ici, une fois, plutôt que laissé à découvrir dans
+                    un éditeur vide. */}
+                {intentions.includes("socials") && (
+                  <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-sm font-semibold">
+                      Tes réseaux — on en fait des boutons
+                    </p>
+                    {SOCIAL_NETWORKS.map((network) => (
+                      <div key={network} className="space-y-1.5">
+                        <Label htmlFor={`handle-${network}`} className="text-xs">
+                          {SOCIAL_NETWORK_META[network].label}
+                        </Label>
+                        <Input
+                          id={`handle-${network}`}
+                          value={handles[network] ?? ""}
+                          onChange={(e) =>
+                            setHandles((current) => ({
+                              ...current,
+                              [network]: e.target.value,
+                            }))
+                          }
+                          placeholder={SOCIAL_NETWORK_META[network].placeholder}
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          className="h-11"
+                        />
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground">
+                      Ton pseudo suffit, ou colle l&apos;adresse complète. Laisse
+                      vide ce que tu n&apos;utilises pas.
+                    </p>
+                  </div>
+                )}
+
+                {intentions.includes("promote") && (
+                  <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-4">
+                    <Label htmlFor="announcement" className="text-sm font-semibold">
+                      Ton annonce du moment
+                    </Label>
+                    <Textarea
+                      id="announcement"
+                      value={announcement}
+                      onChange={(e) => setAnnouncement(e.target.value)}
+                      placeholder="Livraison offerte à Ouaga jusqu'à dimanche 🎉"
+                      rows={2}
+                      maxLength={2000}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Elle s&apos;affichera tout en haut de ta page.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 h-12 gap-2"
+                    onClick={() => setStep(2)}
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Retour
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1 h-12 gap-2"
+                    onClick={() => setStep(4)}
+                    disabled={intentions.length === 0}
+                  >
+                    Continuer <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                {intentions.length === 0 && (
+                  <p className="text-center text-xs text-muted-foreground -mt-2">
+                    Choisis au moins un objectif pour continuer.
+                  </p>
+                )}
+              </Card>
+            </motion.div>
+          )}
+
+          {/* ─── STEP 4: Thème de la page bio ─── */}
+          {step === 4 && (
+            <motion.div
+              key="step4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -615,57 +842,86 @@ export default function OnboardingPage() {
                   </div>
                   <h1 className="text-2xl font-bold">Choisis ton thème</h1>
                   <p className="text-muted-foreground">
-                    Tu pourras le modifier plus tard
+                    C&apos;est ce que verront tes clients depuis ta bio. Tu
+                    pourras le changer quand tu veux.
                   </p>
                 </div>
 
-                <div className="grid gap-4">
-                  {TEMPLATES.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => setSelectedTemplate(template)}
-                      className={cn(
-                        "relative rounded-xl border-2 p-4 text-left transition-all",
-                        selectedTemplate.id === template.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      )}
-                    >
-                      {/* Color preview */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1">
-                          <div
-                            className="h-8 w-8 rounded-full"
-                            style={{ backgroundColor: template.config.primaryColor }}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {BIO_THEME_LIST.filter((t) => t.id !== "brand").map((theme) => {
+                    const palette = resolveBioTheme({
+                      bio_theme: theme.id,
+                      theme_color: DEFAULT_THEME_COLOR,
+                      accent_color: DEFAULT_ACCENT_COLOR,
+                    });
+                    const selected = bioTheme === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setBioTheme(theme.id)}
+                        aria-pressed={selected}
+                        title={theme.description}
+                        className={cn(
+                          "relative overflow-hidden rounded-xl border-2 text-left transition-all",
+                          selected
+                            ? "border-primary ring-2 ring-primary/30"
+                            : "border-border hover:border-primary/50",
+                        )}
+                      >
+                        {/* Miniature of the page the buyer will land on */}
+                        <div
+                          className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 p-3"
+                          style={{ background: palette.background }}
+                        >
+                          <span
+                            className="size-5 rounded-full"
+                            style={{ backgroundColor: palette.surface }}
                           />
-                          <div
-                            className="h-8 w-8 rounded-full"
-                            style={{ backgroundColor: template.config.secondaryColor }}
+                          <span
+                            className="h-1 w-8 rounded-full"
+                            style={{ backgroundColor: palette.accent }}
+                          />
+                          <span
+                            className="h-3 w-full rounded-full"
+                            style={{
+                              backgroundColor: palette.surface,
+                              border: `1px solid ${palette.border}`,
+                            }}
+                          />
+                          <span
+                            className="h-3 w-full rounded-full"
+                            style={{
+                              backgroundColor: palette.surface,
+                              border: `1px solid ${palette.border}`,
+                            }}
                           />
                         </div>
-                        <div>
-                          <p className="font-semibold">{template.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {template.description}
-                          </p>
-                        </div>
-                        {selectedTemplate.id === template.id && (
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-primary">
-                            <Check className="h-4 w-4 text-primary-foreground" />
+                        <p className="px-2.5 py-2 text-xs font-semibold">
+                          {theme.label}
+                        </p>
+                        {selected && (
+                          <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary">
+                            <Check className="size-3 text-primary-foreground" />
                           </div>
                         )}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                <OnboardingPreview
+                  shopName={step2Data?.shopName ?? ""}
+                  slug={step2Data?.shopSlug ?? ""}
+                  bioTheme={bioTheme}
+                />
 
                 <div className="flex gap-3 pt-2">
                   <Button
                     type="button"
                     variant="outline"
                     className="flex-1 h-12 gap-2"
-                    onClick={() => setStep(2)}
+                    onClick={() => setStep(3)}
                   >
                     <ArrowLeft className="h-4 w-4" /> Retour
                   </Button>

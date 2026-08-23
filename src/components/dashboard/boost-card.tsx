@@ -12,6 +12,8 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BOOSTS, PREPAID_CURRENCY } from "@/lib/subscription";
+import { formatPrice } from "@/lib/utils/format";
 
 interface BoostCardProps {
   shopId: string;
@@ -40,7 +42,7 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
   async function buy() {
     setLoading(true);
     try {
-      const res = await fetch("/api/boosts/checkout", {
+      const res = await fetch("/api/boosts/geniuspay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shopId, type: "featured_24h" }),
@@ -91,7 +93,9 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
         ) : (
           <>
             <div className="flex items-baseline justify-between">
-              <p className="text-2xl font-black">1,99 $CA</p>
+              <p className="text-2xl font-black">
+                {formatPrice(BOOSTS.featured_24h.amountXof, PREPAID_CURRENCY)}
+              </p>
               <p className="text-xs text-muted-foreground">paiement unique</p>
             </div>
             <Button
@@ -108,6 +112,9 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
                 </>
               )}
             </Button>
+            <p className="text-[11px] text-muted-foreground text-center">
+              Mobile Money : Wave, Orange, MTN, Moov.
+            </p>
           </>
         )}
       </CardContent>

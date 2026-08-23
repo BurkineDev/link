@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   const admin = getAdminClient();
   const { data: sub } = await admin
     .from("creator_subscriptions")
-    .select("plan, status")
+    .select("plan, status, provider, current_period_end")
     .eq("user_id", user.id)
     .maybeSingle();
 

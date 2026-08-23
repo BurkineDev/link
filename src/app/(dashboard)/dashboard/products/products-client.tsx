@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Row } from "@/lib/types/database";
 import { CURRENCY_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { shareGeneratedImage } from "@/lib/utils/share-image";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ import {
   Plus,
   Search,
   MoreVertical,
+  Share2,
   Pencil,
   Trash2,
   Package,
@@ -57,6 +59,7 @@ type FilterTab = "all" | "published" | "draft" | "out_of_stock";
 interface ProductsClientProps {
   products: Product[];
   shopId: string;
+  shopSlug: string;
   currency: string;
 }
 
@@ -98,19 +101,19 @@ function EmptyState({ filter }: { filter: FilterTab }) {
   const messages: Record<FilterTab, { title: string; desc: string }> = {
     all: {
       title: "Aucun produit pour l'instant",
-      desc: "Ajoutez votre premier produit pour commencer à vendre.",
+      desc: "Ajoute ton premier produit pour commencer à vendre.",
     },
     published: {
       title: "Aucun produit publié",
-      desc: "Publiez un brouillon pour qu'il apparaisse dans votre boutique.",
+      desc: "Publie un brouillon pour qu'il apparaisse dans ta boutique.",
     },
     draft: {
       title: "Aucun brouillon",
-      desc: "Tous vos produits sont publiés. Bravo !",
+      desc: "Tous tes produits sont publiés. Bravo !",
     },
     out_of_stock: {
       title: "Aucune rupture de stock",
-      desc: "Tous vos produits ont du stock disponible.",
+      desc: "Tous tes produits ont du stock disponible.",
     },
   };
 
@@ -143,6 +146,7 @@ function EmptyState({ filter }: { filter: FilterTab }) {
 
 interface ProductCardProps {
   product: Product;
+  shopSlug: string;
   currency: string;
   onDelete: (id: string) => void;
   onTogglePublish: (id: string, published: boolean) => void;
@@ -150,11 +154,24 @@ interface ProductCardProps {
 
 function ProductCard({
   product,
+  shopSlug,
   currency,
   onDelete,
   onTogglePublish,
 }: ProductCardProps) {
   const firstImage = product.images?.[0];
+
+  const shareStory = async () => {
+    // Only published products render a story — the route 404s on drafts.
+    try {
+      await shareGeneratedImage(
+        `/api/story/${shopSlug}/${product.slug}`,
+        `bio-lien-story-${product.slug}.png`,
+      );
+    } catch {
+      toast.error("Impossible de générer l'image. Le produit est-il publié ?");
+    }
+  };
 
   return (
     <Card className="group/card overflow-hidden">
@@ -218,6 +235,12 @@ function ProductCard({
                     </>
                   )}
                 </DropdownMenuItem>
+                {product.is_published && (
+                  <DropdownMenuItem onSelect={shareStory}>
+                    <Share2 className="size-4" />
+                    Partager en story
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <AlertDialogTrigger
                   render={
@@ -289,10 +312,7 @@ function ProductCard({
 // Main client component
 // ---------------------------------------------------------------------------
 
-export function ProductsClient({
-  products: initialProducts,
-  currency,
-}: ProductsClientProps) {
+export function ProductsClient({ products: initialProducts, shopSlug, currency }: ProductsClientProps) {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [filter, setFilter] = useState<FilterTab>("all");
@@ -376,8 +396,8 @@ export function ProductsClient({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Produits</h1>
           <p className="text-sm text-muted-foreground">
-            {products.length} produit{products.length !== 1 ? "s" : ""} dans
-            votre boutique
+            {products.length} produit{products.length > 1 ? "s" : ""} dans
+            ta boutique
           </p>
         </div>
         <Button asChild>
@@ -439,6 +459,7 @@ export function ProductsClient({
             <ProductCard
               key={product.id}
               product={product}
+              shopSlug={shopSlug}
               currency={currency}
               onDelete={handleDelete}
               onTogglePublish={handleTogglePublish}

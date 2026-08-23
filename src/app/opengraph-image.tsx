@@ -17,7 +17,7 @@ export default async function Image() {
           height: "100%",
           padding: 72,
           background:
-            "linear-gradient(135deg, #FF6B35 0%, #FFD700 100%)",
+            "linear-gradient(135deg, #FF6B35 0%, #F1CB1C 100%)",
           color: "#0F0F0F",
           fontFamily: "system-ui, -apple-system, sans-serif",
         }}
@@ -32,7 +32,7 @@ export default async function Image() {
               height: 72,
               borderRadius: 16,
               background: "#0F0F0F",
-              color: "#FFD700",
+              color: "#F1CB1C",
               fontSize: 40,
               fontWeight: 900,
             }}
@@ -48,7 +48,7 @@ export default async function Image() {
                 padding: "4px 12px",
                 borderRadius: 8,
                 background: "#0F0F0F",
-                color: "#FFD700",
+                color: "#F1CB1C",
                 fontSize: 20,
               }}
             >

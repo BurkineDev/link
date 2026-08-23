@@ -14,6 +14,7 @@ import {
   formatOrderMessageForSeller,
   isWhatsAppCloudConfigured,
   sendCloudApiMessage,
+  sendOrderTemplate,
 } from "@/lib/whatsapp";
 import type { OrderItem } from "@/lib/types/database";
 
@@ -70,10 +71,23 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
   });
 
   if (isWhatsAppCloudConfigured()) {
-    const sent = await sendCloudApiMessage({ to: shop.whatsapp_number, body });
-    if (sent) return;
-    // Fall through to logging the wa.me fallback so the seller can act
-    // on it manually from a future "Notifications" tab in the dashboard.
+    // Template first: business-initiated messages outside a 24h service
+    // window are only deliverable as pre-approved templates (Meta 131047).
+    const buyerLabel = order.buyer_phone
+      ? `${order.buyer_name} (${order.buyer_phone})`
+      : order.buyer_name;
+    const viaTemplate = await sendOrderTemplate(shop.whatsapp_number, {
+      buyerLabel,
+      itemCount: items.reduce((sum, it) => sum + it.quantity, 0),
+      totalLabel,
+      orderShortId: order.id.slice(0, 8).toUpperCase(),
+    });
+    if (viaTemplate) return;
+
+    // Free text lands whenever the seller has messaged the business in the
+    // last 24 hours (e.g. a buyer relayed their order confirmation).
+    const viaText = await sendCloudApiMessage({ to: shop.whatsapp_number, body });
+    if (viaText) return;
   }
 
   console.info(

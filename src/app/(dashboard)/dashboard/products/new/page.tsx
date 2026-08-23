@@ -7,7 +7,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Nouveau produit — Bio-Lien",
+  title: "Nouveau produit",
 };
 
 export default async function NewProductPage() {
@@ -19,11 +19,11 @@ export default async function NewProductPage() {
 
   const { data: shopRaw } = await supabase
     .from("shops")
-    .select("id, currency")
+    .select("id, slug, currency")
     .eq("owner_id", user.id)
     .single();
 
-  const shop = shopRaw as Pick<Row<"shops">, "id" | "currency"> | null;
+  const shop = shopRaw as Pick<Row<"shops">, "id" | "slug" | "currency"> | null;
   if (!shop) redirect("/dashboard");
 
   const { data: categoriesRaw } = await supabase
@@ -49,12 +49,13 @@ export default async function NewProductPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Nouveau produit</h1>
         <p className="text-sm text-muted-foreground">
-          Remplissez les informations de votre produit en 3 étapes.
+          Remplis les informations de ton produit en 3 étapes.
         </p>
       </div>
 
       <ProductForm
         shopId={shop.id}
+        shopSlug={shop.slug}
         categories={categories}
         defaultValues={{ currency: shop.currency }}
       />

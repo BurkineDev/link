@@ -7,10 +7,17 @@
 
 import {
   BOOSTS,
+  PLAN_CURRENCY,
   PLAN_LIMITS,
   PLAN_PRICES,
   getBoost,
   getEffectivePlan,
+  getPlanLimits,
+  getPrepaidPrice,
+  isPrepaidMonths,
+  prepaidSavingsPercent,
+  PREPAID_CURRENCY,
+  PREPAID_MONTHS,
   getStripePriceId,
   isUpgrade,
 } from "@/lib/subscription";
@@ -91,6 +98,183 @@ describe("getEffectivePlan", () => {
   });
 });
 
+describe("getEffectivePlan — abonnement payé d'avance", () => {
+  const NOW = new Date("2026-06-15T12:00:00Z");
+  const future = "2026-07-15T12:00:00Z";
+  const past = "2026-06-14T12:00:00Z";
+
+  it("accorde le plan tant que la période court", () => {
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "active",
+          provider: "geniuspay",
+          current_period_end: future,
+        },
+        NOW,
+      ),
+    ).toBe("pro");
+  });
+
+  it("retire le plan dès que la période est passée", () => {
+    // Le cœur du sujet : personne d'extérieur ne vient éteindre un abonnement
+    // prépayé. Sans cette règle, un mois acheté vaudrait à vie.
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "active",
+          provider: "geniuspay",
+          current_period_end: past,
+        },
+        NOW,
+      ),
+    ).toBe("free");
+  });
+
+  it("retire le plan à l'instant exact de l'expiration", () => {
+    expect(
+      getEffectivePlan(
+        {
+          plan: "starter",
+          status: "active",
+          provider: "geniuspay",
+          current_period_end: NOW.toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe("free");
+  });
+
+  it("refuse un abonnement prépayé sans période — rien n'a été encaissé", () => {
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "active",
+          provider: "geniuspay",
+          current_period_end: null,
+        },
+        NOW,
+      ),
+    ).toBe("free");
+  });
+
+  it("refuse une date illisible plutôt que d'accorder le plan", () => {
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "active",
+          provider: "geniuspay",
+          current_period_end: "pas-une-date",
+        },
+        NOW,
+      ),
+    ).toBe("free");
+  });
+
+  it("ne fait pas expirer un abonnement Stripe sur la date", () => {
+    // Stripe renouvelle et prévient : appliquer la date ferait clignoter le
+    // plan d'un client à jour dès qu'un webhook a une seconde de retard.
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "active",
+          provider: "stripe",
+          current_period_end: past,
+        },
+        NOW,
+      ),
+    ).toBe("pro");
+  });
+
+  it("traite un abonnement sans provider comme du Stripe (héritage)", () => {
+    expect(
+      getEffectivePlan(
+        { plan: "pro", status: "active", current_period_end: past },
+        NOW,
+      ),
+    ).toBe("pro");
+  });
+
+  it("un statut inactif l'emporte, même avec une période valide", () => {
+    expect(
+      getEffectivePlan(
+        {
+          plan: "pro",
+          status: "cancelled",
+          provider: "geniuspay",
+          current_period_end: future,
+        },
+        NOW,
+      ),
+    ).toBe("free");
+  });
+});
+
+describe("barème des périodes payées d'avance", () => {
+  it("propose une durée pour chaque plan payant", () => {
+    PREPAID_MONTHS.forEach((months) => {
+      expect(getPrepaidPrice("starter", months)).toBeGreaterThan(0);
+      expect(getPrepaidPrice("pro", months)).toBeGreaterThan(0);
+    });
+  });
+
+  it("fait payer Pro plus cher que Starter, à durée égale", () => {
+    PREPAID_MONTHS.forEach((months) => {
+      expect(getPrepaidPrice("pro", months)).toBeGreaterThan(
+        getPrepaidPrice("starter", months),
+      );
+    });
+  });
+
+  it("rend les longues durées plus avantageuses que le mois à mois", () => {
+    expect(prepaidSavingsPercent("pro", 1)).toBe(0);
+    expect(prepaidSavingsPercent("pro", 3)).toBeGreaterThan(0);
+    expect(prepaidSavingsPercent("pro", 12)).toBeGreaterThan(
+      prepaidSavingsPercent("pro", 3),
+    );
+    expect(prepaidSavingsPercent("starter", 12)).toBeGreaterThan(0);
+  });
+
+  it("n'accepte que les durées proposées", () => {
+    expect(isPrepaidMonths(1)).toBe(true);
+    expect(isPrepaidMonths(12)).toBe(true);
+    expect(isPrepaidMonths(2)).toBe(false);
+    expect(isPrepaidMonths(0)).toBe(false);
+    expect(isPrepaidMonths(-1)).toBe(false);
+    expect(isPrepaidMonths("3")).toBe(false);
+  });
+
+  it("facture en FCFA, la devise du Mobile Money", () => {
+    expect(PREPAID_CURRENCY).toBe("XOF");
+  });
+});
+
+describe("boosts en FCFA", () => {
+  it("donne un prix FCFA à chaque boost", () => {
+    Object.values(BOOSTS).forEach((boost) => {
+      expect(boost.amountXof).toBeGreaterThan(0);
+    });
+  });
+
+  it("facture le boost disponible en FCFA, pas en dollars", () => {
+    const featured = BOOSTS.featured_24h;
+    expect(featured.available).toBe(true);
+    expect(featured.amountXof).toBe(1_000);
+    // XOF n'a pas de décimale : le montant est le montant, pas des centimes.
+    expect(Number.isInteger(featured.amountXof)).toBe(true);
+  });
+
+  it("garde un prix carte pour ceux qui en ont une", () => {
+    expect(BOOSTS.featured_24h.amount).toBeGreaterThan(0);
+    expect(BOOSTS.featured_24h.currency).toBe(PLAN_CURRENCY);
+  });
+});
+
 describe("isUpgrade", () => {
   it("ranks free < starter < pro", () => {
     expect(isUpgrade("free", "starter")).toBe(true);
@@ -152,5 +336,27 @@ describe("BOOSTS catalogue", () => {
   it("getBoost looks up by type", () => {
     expect(getBoost("featured_24h")).toBe(BOOSTS.featured_24h);
     expect(getBoost("custom_domain").type).toBe("custom_domain");
+  });
+});
+
+describe("PLAN_LIMITS.aiWriting", () => {
+  test("la rédaction assistée est réservée au plan Pro", () => {
+    // Chaque génération est un appel facturé : c'est une dépense, pas une
+    // fonctionnalité gratuite qu'on peut ouvrir par distraction.
+    expect(PLAN_LIMITS.free.aiWriting).toBe(false);
+    expect(PLAN_LIMITS.starter.aiWriting).toBe(false);
+    expect(PLAN_LIMITS.pro.aiWriting).toBe(true);
+  });
+
+  test("un abonnement prépayé expiré perd l'accès à la rédaction assistée", () => {
+    // Le cas qui compte : sans prélèvement récurrent, personne ne nous
+    // prévient qu'une période Pro s'est terminée.
+    const expired = {
+      plan: "pro" as const,
+      status: "active" as const,
+      provider: "geniuspay" as const,
+      current_period_end: "2020-01-01T00:00:00Z",
+    };
+    expect(getPlanLimits(getEffectivePlan(expired)).aiWriting).toBe(false);
   });
 });

@@ -19,6 +19,15 @@ const linkSchema = z.object({
       "URL invalide (http(s)://, mailto: ou tel:)",
     ),
   icon: z.string().trim().min(1).max(30).default("custom"),
+  thumbnail_url: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === "" || v.startsWith("https://"), "L'image doit être en https://")
+    .transform((v) => (v === "" ? null : v))
+    .nullable()
+    .optional(),
+
   position: z.number().int().min(0).max(100).default(0),
   is_active: z.boolean().default(true),
 });

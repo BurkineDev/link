@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -11,12 +11,17 @@ import {
   ArrowLeft,
   RefreshCw,
   Mail,
+  MessageCircle,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { CURRENCY_META, type Currency } from "@/lib/constants";
+import { buildWaMeLink } from "@/lib/whatsapp";
+import { isValidWhatsAppNumber } from "@/lib/utils/whatsapp";
+import { useCart } from "@/hooks/use-cart";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,12 +43,21 @@ interface OrderDetails {
   }>;
   shop_name?: string;
   shop_slug?: string;
+  shop_whatsapp?: string | null;
 }
 
 type VerifyState =
   | { status: "loading" }
+  | { status: "pending"; reference: string | null; timedOut: boolean }
   | { status: "success"; order: OrderDetails }
   | { status: "error"; message: string };
+
+// Le Mobile Money est asynchrone : l'acheteur revient du site de l'opérateur
+// souvent avant que celui-ci ait notifié Genius Pay. Une seule vérification
+// tombait donc sur un 202 « en cours de traitement » qu'on affichait comme un
+// échec — l'acheteur avait payé et lisait « Paiement non confirmé ».
+const POLL_INTERVAL_MS = 4_000;
+const POLL_WINDOW_MS = 150_000;
 
 // ---------------------------------------------------------------------------
 // Inner component (uses useSearchParams → must be wrapped in Suspense)
@@ -52,33 +66,107 @@ type VerifyState =
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const clearCart = useCart((s) => s.clearCart);
 
+  // Deux fournisseurs arrivent ici : Stripe renvoie `session_id`, Genius Pay
+  // l'identifiant de commande. Sans le second cas, tout acheteur Mobile Money
+  // — la majorité — atterrissait sur « Référence de transaction manquante »
+  // alors que son paiement était bien passé.
   const sessionId = searchParams.get("session_id");
+  const orderId = searchParams.get("order");
+  const provider = searchParams.get("provider");
+  const reference = searchParams.get("reference");
+
+  const hasParams = Boolean(sessionId || orderId || reference);
 
   const [state, setState] = useState<VerifyState>(() =>
-    sessionId
+    hasParams
       ? { status: "loading" }
       : { status: "error", message: "Référence de transaction manquante." },
   );
+  // Incrémenté par « Vérifier à nouveau » : relance une fenêtre de polling.
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => {
+    setState({ status: "loading" });
+    setAttempt((n) => n + 1);
+  }, []);
+
+  const buildQuery = useCallback(() => {
+    const params = new URLSearchParams();
+    if (sessionId) params.set("session_id", sessionId);
+    if (provider) params.set("provider", provider);
+    if (orderId) params.set("order", orderId);
+    if (reference) params.set("reference", reference);
+    return params.toString();
+  }, [sessionId, provider, orderId, reference]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!hasParams) return;
 
-    const params = new URLSearchParams({ session_id: sessionId });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = Date.now();
 
-    fetch(`/api/checkout/verify?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setState({ status: "success", order: data.order as OrderDetails });
-      })
-      .catch((err) => {
+    const poll = async () => {
+      let res: Response;
+      let data: { order?: OrderDetails; error?: string; reference?: string } = {};
+
+      try {
+        res = await fetch(`/api/checkout/verify?${buildQuery()}`);
+        data = await res.json().catch(() => ({}));
+      } catch {
+        // Coupure réseau — fréquent quand l'acheteur bascule entre son
+        // navigateur et son application Mobile Money. On retente.
+        if (cancelled) return;
+        if (Date.now() - startedAt < POLL_WINDOW_MS) {
+          timer = setTimeout(poll, POLL_INTERVAL_MS);
+        } else {
+          setState({ status: "pending", reference: null, timedOut: true });
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      if (res.ok && data.order) {
+        setState({ status: "success", order: data.order });
+        return;
+      }
+
+      // 202 = l'opérateur n'a pas encore confirmé. Ce n'est pas un échec.
+      if (res.status === 202) {
+        const timedOut = Date.now() - startedAt >= POLL_WINDOW_MS;
         setState({
-          status: "error",
-          message: err instanceof Error ? err.message : "Vérification échouée.",
+          status: "pending",
+          reference: data.reference ?? null,
+          timedOut,
         });
+        if (!timedOut) timer = setTimeout(poll, POLL_INTERVAL_MS);
+        return;
+      }
+
+      setState({
+        status: "error",
+        message: data.error ?? "Vérification échouée.",
       });
-  }, [sessionId]);
+    };
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [hasParams, buildQuery, attempt]);
+
+  // Le panier ne se vide qu'ici, une fois le paiement confirmé. Il était
+  // auparavant vidé avant même la redirection vers l'opérateur : un paiement
+  // abandonné ou refusé laissait l'acheteur avec un panier vide et rien à
+  // reprendre.
+  useEffect(() => {
+    if (state.status === "success") clearCart();
+  }, [state.status, clearCart]);
 
   // ---- Loading ----
   if (state.status === "loading") {
@@ -88,6 +176,90 @@ function SuccessContent() {
         <p className="text-sm text-muted-foreground">
           Vérification du paiement en cours…
         </p>
+      </div>
+    );
+  }
+
+  // ---- Pending : payé chez l'opérateur, pas encore confirmé chez nous ----
+  if (state.status === "pending") {
+    const shortRef = orderId ? `#${orderId.slice(0, 8).toUpperCase()}` : null;
+
+    return (
+      <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
+        <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-amber-100">
+          {state.timedOut ? (
+            <Clock className="size-10 text-amber-600" />
+          ) : (
+            <Loader2 className="size-10 animate-spin text-amber-600" />
+          )}
+        </div>
+
+        <h1 className="mb-2 text-2xl font-bold">
+          {state.timedOut
+            ? "Confirmation plus longue que prévu"
+            : "Paiement en cours de confirmation"}
+        </h1>
+
+        <p className="mb-6 text-muted-foreground">
+          {state.timedOut ? (
+            <>
+              Votre opérateur n&apos;a pas encore confirmé le paiement à Genius
+              Pay. Si le montant a été débité, la commande sera validée
+              automatiquement dès réception — vous n&apos;avez rien à refaire.
+              Ne payez pas une seconde fois.
+            </>
+          ) : (
+            <>
+              Nous attendons la confirmation de votre opérateur Mobile Money.
+              Cela prend en général moins d&apos;une minute. Gardez cette page
+              ouverte.
+            </>
+          )}
+        </p>
+
+        {(shortRef || state.reference) && (
+          <Card className="mb-6 w-full text-left">
+            <CardContent className="space-y-2 pt-6 text-sm">
+              {shortRef && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Commande</span>
+                  <span className="font-mono font-medium">{shortRef}</span>
+                </div>
+              )}
+              {state.reference && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Transaction</span>
+                  <span className="font-mono font-medium">
+                    {state.reference}
+                  </span>
+                </div>
+              )}
+              <p className="pt-1 text-xs text-muted-foreground">
+                Notez cette référence : elle identifie votre paiement auprès du
+                vendeur et du support.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={retry}
+          >
+            <RefreshCw className="size-4" />
+            Vérifier à nouveau
+          </Button>
+          {state.timedOut && (
+            <Button variant="outline" className="gap-2" asChild>
+              <a href="mailto:support@bio-lien.com">
+                <Mail className="size-4" />
+                Contacter le support
+              </a>
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -102,26 +274,13 @@ function SuccessContent() {
         <h1 className="mb-2 text-2xl font-bold">Paiement non confirmé</h1>
         <p className="mb-6 text-muted-foreground">{state.message}</p>
         <div className="flex flex-col gap-3 sm:flex-row">
+          {/* Renvoie bien tous les paramètres : l'ancien bouton ne réémettait
+              que `session_id`, donc il ne pouvait rien vérifier pour un
+              acheteur Mobile Money — le seul cas où il servait vraiment. */}
           <Button
             variant="outline"
             className="gap-2"
-            onClick={() => {
-              setState({ status: "loading" });
-              const params = new URLSearchParams();
-              if (sessionId) params.set("session_id", sessionId);
-              fetch(`/api/checkout/verify?${params.toString()}`)
-                .then((r) => r.json())
-                .then((data) => {
-                  if (data.error) throw new Error(data.error);
-                  setState({ status: "success", order: data.order });
-                })
-                .catch((err) => {
-                  setState({
-                    status: "error",
-                    message: err instanceof Error ? err.message : "Vérification échouée.",
-                  });
-                });
-            }}
+            onClick={retry}
           >
             <RefreshCw className="size-4" />
             Réessayer
@@ -148,6 +307,21 @@ function SuccessContent() {
   // ---- Success ----
   const { order } = state;
   const currencyMeta = CURRENCY_META[order.currency];
+
+  const sellerWaLink =
+    order.shop_whatsapp && isValidWhatsAppNumber(order.shop_whatsapp)
+      ? buildWaMeLink(
+          order.shop_whatsapp,
+          [
+            `Bonjour ${order.shop_name ?? ""} 👋`.replace(/\s+/g, " ").trim(),
+            `Je viens de passer commande sur votre boutique Bio-Lien.`,
+            "",
+            `Référence : #${order.id.slice(0, 8).toUpperCase()}`,
+            `Total : ${formatPrice(order.total_amount)}`,
+            `Nom : ${order.buyer_name}`,
+          ].join("\n"),
+        )
+      : null;
 
   function formatPrice(amount: number) {
     const fmt =
@@ -257,6 +431,38 @@ function SuccessContent() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ── Buyer relay: confirm the order in the seller's WhatsApp ── */}
+      {/* Works with zero API setup, matches how buyers already talk to     */}
+      {/* sellers here — and it opens the 24h service window that lets the  */}
+      {/* Cloud API deliver free-text alerts afterwards.                    */}
+      {sellerWaLink && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-6"
+        >
+          <a
+            href={sellerWaLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "flex h-12 w-full items-center justify-center gap-2 rounded-xl",
+              "text-base font-semibold text-white shadow-sm",
+              "transition-transform active:scale-[0.99]",
+            )}
+            style={{ backgroundColor: "#25D366" }}
+          >
+            <MessageCircle className="size-5" />
+            Prévenir le vendeur sur WhatsApp
+          </a>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Envoie ta confirmation à {order.shop_name ?? "la boutique"}
+            {" — le message est déjà écrit, tu n'as qu'à appuyer sur envoyer."}
+          </p>
+        </motion.div>
+      )}
 
       {/* CTA */}
       <motion.div

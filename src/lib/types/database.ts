@@ -9,6 +9,10 @@
 // JSON / JSONB helpers
 // ---------------------------------------------------------------------------
 
+import type { BioThemeId } from "@/lib/bio-themes";
+import type { BlockType } from "@/lib/blocks/types";
+import type { Intention } from "@/lib/onboarding/intentions";
+
 export type Json =
   | string
   | number
@@ -162,11 +166,15 @@ export type ProfileRow = {
   created_at: string;
 };
 
+/** Qui encaisse l'abonnement — décide de la règle d'expiration. */
+export type SubscriptionProvider = "stripe" | "geniuspay";
+
 export type CreatorSubscriptionRow = {
   id: string;
   user_id: string;
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
+  provider: SubscriptionProvider;
   billing_interval: BillingInterval | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
@@ -178,9 +186,45 @@ export type CreatorSubscriptionRow = {
 
 export type CreatorSubscriptionInsert = Omit<
   CreatorSubscriptionRow,
-  "id" | "created_at" | "updated_at" | "billing_interval"
+  "id" | "created_at" | "updated_at" | "billing_interval" | "provider"
 > & {
   billing_interval?: BillingInterval | null;
+  provider?: SubscriptionProvider;
+};
+
+/** Un encaissement d'abonnement = une période achetée d'avance. */
+export type SubscriptionPaymentRow = {
+  id: string;
+  user_id: string;
+  plan: SubscriptionPlan;
+  months: number;
+  amount: number;
+  currency: string;
+  provider: SubscriptionProvider;
+  reference: string;
+  status: PaymentStatus;
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubscriptionPaymentInsert = Omit<
+  SubscriptionPaymentRow,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "currency"
+  | "provider"
+  | "status"
+  | "period_start"
+  | "period_end"
+> & {
+  currency?: string;
+  provider?: SubscriptionProvider;
+  status?: PaymentStatus;
+  period_start?: string | null;
+  period_end?: string | null;
 };
 
 export type CreatorSubscriptionUpdate = Partial<
@@ -211,6 +255,7 @@ export type ShopRow = {
   card_style: ShopCardStyle;
   cta_shape: ShopCtaShape;
   cta_style: ShopCtaStyle;
+  bio_theme: BioThemeId;
   currency: Currency;
   contact_email: string | null;
   contact_phone: string | null;
@@ -219,6 +264,7 @@ export type ShopRow = {
   meta_pixel_id: string | null;
   whatsapp_number: string | null;
   checkout_mode: ShopCheckoutMode;
+  intentions: Intention[];
   featured_until: string | null;
   created_at: string;
   updated_at: string;
@@ -232,6 +278,9 @@ export type BoostPurchaseRow = {
   amount: number;
   currency: string;
   status: BoostStatus;
+  provider: SubscriptionProvider;
+  /** Référence Genius Pay — absente sur les achats par carte. */
+  reference: string | null;
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;
   activated_at: string | null;
@@ -243,8 +292,11 @@ export type BoostPurchaseRow = {
 
 export type BoostPurchaseInsert = Omit<
   BoostPurchaseRow,
-  "id" | "created_at" | "updated_at"
->;
+  "id" | "created_at" | "updated_at" | "provider" | "reference"
+> & {
+  provider?: SubscriptionProvider;
+  reference?: string | null;
+};
 
 export type BoostPurchaseUpdate = Partial<
   Omit<BoostPurchaseRow, "id" | "shop_id" | "user_id" | "created_at">
@@ -256,14 +308,64 @@ export type ShopLinkRow = {
   label: string;
   url: string;
   icon: string;
+  thumbnail_url: string | null;
+  click_count: number;
   position: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 };
 
-export type ShopLinkInsert = Omit<ShopLinkRow, "id" | "created_at" | "updated_at">;
+export type ShopLinkInsert = Omit<
+  ShopLinkRow,
+  "id" | "created_at" | "updated_at" | "thumbnail_url" | "click_count"
+> & {
+  thumbnail_url?: string | null;
+  click_count?: number;
+};
 export type ShopLinkUpdate = Partial<Omit<ShopLinkRow, "id" | "shop_id" | "created_at">>;
+
+export type PageBlockRow = {
+  id: string;
+  shop_id: string;
+  type: BlockType;
+  position: number;
+  title: string | null;
+  config: Json;
+  style: Json;
+  visible: boolean;
+  click_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PageBlockInsert = Omit<
+  PageBlockRow,
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "title"
+  | "config"
+  | "style"
+  | "visible"
+  | "click_count"
+> & {
+  title?: string | null;
+  config?: Json;
+  style?: Json;
+  visible?: boolean;
+  click_count?: number;
+};
+
+export type PageBlockUpdate = Partial<
+  Omit<PageBlockRow, "id" | "shop_id" | "created_at">
+>;
+
+export type ShopPageViewRow = {
+  shop_id: string;
+  day: string;
+  views: number;
+};
 
 export type PromoCodeRow = {
   id: string;
@@ -406,7 +508,9 @@ export type ShopInsert = Omit<
   | "card_style"
   | "cta_shape"
   | "cta_style"
+  | "bio_theme"
   | "checkout_mode"
+  | "intentions"
   | "featured_until"
 > & {
   tiktok_pixel_id?: string | null;
@@ -418,7 +522,9 @@ export type ShopInsert = Omit<
   card_style?: ShopCardStyle;
   cta_shape?: ShopCtaShape;
   cta_style?: ShopCtaStyle;
+  bio_theme?: BioThemeId;
   checkout_mode?: ShopCheckoutMode;
+  intentions?: Intention[];
   featured_until?: string | null;
 };
 
@@ -508,6 +614,21 @@ export interface Database {
         Insert: ShopLinkInsert;
         Update: ShopLinkUpdate;
       } & NoRelationships;
+      page_blocks: {
+        Row: PageBlockRow;
+        Insert: PageBlockInsert;
+        Update: PageBlockUpdate;
+      } & NoRelationships;
+      shop_page_views: {
+        Row: ShopPageViewRow;
+        Insert: ShopPageViewRow;
+        Update: Partial<ShopPageViewRow>;
+      } & NoRelationships;
+      subscription_payments: {
+        Row: SubscriptionPaymentRow;
+        Insert: SubscriptionPaymentInsert;
+        Update: Partial<SubscriptionPaymentRow>;
+      } & NoRelationships;
       promo_codes: {
         Row: PromoCodeRow;
         Insert: PromoCodeInsert;
@@ -531,6 +652,30 @@ export interface Database {
       };
       redeem_promo_code: {
         Args: { p_shop_id: string; p_code: string; p_order_total: number };
+        Returns: Json;
+      };
+      track_shop_link_click: {
+        Args: { p_link_id: string };
+        Returns: void;
+      };
+      track_shop_page_view: {
+        Args: { p_shop_id: string };
+        Returns: void;
+      };
+      reorder_page_blocks: {
+        Args: { p_shop_id: string; p_block_ids: string[] };
+        Returns: void;
+      };
+      track_page_block_click: {
+        Args: { p_block_id: string };
+        Returns: void;
+      };
+      apply_subscription_payment: {
+        Args: { p_reference: string };
+        Returns: Json;
+      };
+      apply_boost_payment: {
+        Args: { p_reference: string };
         Returns: Json;
       };
     };

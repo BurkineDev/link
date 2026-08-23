@@ -10,6 +10,8 @@ import { Loader2, UserIcon, Sparkles, ArrowRight, Crown, CalendarClock } from "l
 
 import { updateProfileSchema, type UpdateProfileInput } from "@/lib/validations/auth";
 import { createClient } from "@/lib/supabase/client";
+import { PLAN_LIMITS, getEffectivePlan } from "@/lib/subscription";
+import type { SubscriptionProvider } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +30,7 @@ type ProfileData = {
 type SubscriptionData = {
   plan: "free" | "starter" | "pro";
   status: "active" | "trialing" | "past_due" | "cancelled" | "incomplete";
+  provider: SubscriptionProvider;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
 } | null;
@@ -102,7 +105,14 @@ export function ProfileClient({
     }
   }
 
-  const isPro = subscription?.plan === "pro" && subscription.status !== "cancelled";
+  // Le plan affiché doit être celui dont le vendeur bénéficie *maintenant* :
+  // une période payée d'avance et arrivée à terme ne donne plus rien, et
+  // personne d'extérieur ne vient le signaler.
+  const effectivePlan = getEffectivePlan(subscription);
+  const isPaid = effectivePlan !== "free";
+  const planLabel = PLAN_LIMITS[effectivePlan].label;
+  // Rien ne se renouvelle en prépayé : la date est une fin, pas une échéance.
+  const prepaid = subscription?.provider === "geniuspay";
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10 space-y-6">
@@ -119,7 +129,7 @@ export function ProfileClient({
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-start gap-3">
               <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                {isPro ? (
+                {isPaid ? (
                   <Crown className="size-5 text-primary" />
                 ) : (
                   <Sparkles className="size-5 text-primary" />
@@ -128,24 +138,34 @@ export function ProfileClient({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold">
-                    Plan {isPro ? "Pro" : "Gratuit"}
+                    Plan {planLabel}
                   </h2>
-                  {subscription?.status === "past_due" && (
+                  {!prepaid && subscription?.status === "past_due" && (
                     <Badge variant="destructive">Paiement en retard</Badge>
                   )}
-                  {subscription?.cancel_at_period_end && (
+                  {!prepaid && subscription?.cancel_at_period_end && (
                     <Badge variant="secondary">Annulation programmée</Badge>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {isPro
-                    ? "Produits illimités · 0% commission · Analytics avancés"
+                  {isPaid
+                    ? `${
+                        Number.isFinite(PLAN_LIMITS[effectivePlan].maxProducts)
+                          ? `Jusqu'à ${PLAN_LIMITS[effectivePlan].maxProducts} produits`
+                          : "Produits illimités"
+                      } · ${Math.round(
+                        PLAN_LIMITS[effectivePlan].commissionRate * 100,
+                      )} % de commission`
                     : "Jusqu'à 5 produits · 5% de commission sur les ventes"}
                 </p>
-                {subscription?.current_period_end && isPro && (
+                {subscription?.current_period_end && isPaid && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
                     <CalendarClock className="size-3" />
-                    {subscription.cancel_at_period_end ? "Se termine le" : "Renouvellement le"}{" "}
+                    {prepaid
+                      ? "Ton accès se termine le"
+                      : subscription.cancel_at_period_end
+                        ? "Se termine le"
+                        : "Renouvellement le"}{" "}
                     {new Date(subscription.current_period_end).toLocaleDateString("fr-FR", {
                       day: "numeric",
                       month: "long",
@@ -157,7 +177,10 @@ export function ProfileClient({
             </div>
 
             <div>
-              {isPro ? (
+              {/* Un abonnement prépayé n'a pas de portail de facturation à
+                  gérer : il n'y a ni carte enregistrée ni prélèvement à
+                  arrêter. Ce qu'on peut lui proposer, c'est de prolonger. */}
+              {isPaid && !prepaid ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -172,7 +195,7 @@ export function ProfileClient({
               ) : (
                 <Button size="sm" asChild>
                   <Link href="/pricing">
-                    Passer en Pro
+                    {isPaid ? "Prolonger" : "Passer en Pro"}
                     <ArrowRight className="ml-1 size-3.5" />
                   </Link>
                 </Button>

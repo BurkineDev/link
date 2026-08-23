@@ -5,10 +5,14 @@
  * sets metadata, then delegates rendering to <ShopPage> (client component).
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
+import { resolveBioTheme } from "@/lib/bio-themes";
+import { JsonLd, storeJsonLd } from "@/lib/seo/json-ld";
+import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
+import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
 
 interface Props {
@@ -40,14 +44,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
 
+  // Une boutique dépubliée ou renommée ne doit pas laisser une page vide
+  // dans l'index des moteurs.
   if (!shop) {
-    return { title: "Boutique introuvable | Bio-Lien" };
+    return { title: "Boutique introuvable", robots: { index: false } };
   }
 
   return {
-    title: `${shop.name} | Bio-Lien`,
+    title: `${shop.name}`,
     description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
+    // Un lien de bio se partage avec toutes sortes de paramètres de suivi.
+    // La canonique dit aux moteurs qu'il n'y a qu'une seule boutique derrière.
+    alternates: { canonical: `/${username}` },
     openGraph: {
+      url: `/${username}`,
       title: shop.name,
       description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
       ...(shop.banner_url && {
@@ -60,6 +70,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ...(shop.banner_url && { images: [shop.banner_url] }),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Viewport
+// ---------------------------------------------------------------------------
+
+/**
+ * Paints the mobile browser chrome in the seller's own theme, so opening the
+ * page from a TikTok bio feels like entering their space, not a tab.
+ */
+export async function generateViewport({ params }: Props): Promise<Viewport> {
+  const { username } = await params;
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("shops")
+    .select("bio_theme, theme_color, accent_color")
+    .eq("slug", username)
+    .eq("is_published", true)
+    .single();
+
+  const shop = data as Pick<
+    ShopRow,
+    "bio_theme" | "theme_color" | "accent_color"
+  > | null;
+
+  if (!shop) return {};
+  return { themeColor: resolveBioTheme(shop).backgroundSolid };
 }
 
 // ---------------------------------------------------------------------------
@@ -82,42 +120,69 @@ export default async function Page({ params }: Props) {
     notFound();
   }
 
-  const [productsResult, categoriesResult, linksResult] = await Promise.all([
-    supabase
-      .from("products")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .eq("is_published", true)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("categories")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .order("position", { ascending: true }),
-    supabase
-      .from("shop_links")
-      .select("id, label, url, icon, position")
-      .eq("shop_id", shop.id)
-      .eq("is_active", true)
-      .order("position", { ascending: true }),
-  ]);
+  const [productsResult, categoriesResult, linksResult, blocksResult] =
+    await Promise.all([
+      supabase
+        .from("products")
+        .select("*")
+        .eq("shop_id", shop.id)
+        .eq("is_published", true)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("categories")
+        .select("*")
+        .eq("shop_id", shop.id)
+        .order("position", { ascending: true }),
+      supabase
+        .from("shop_links")
+        .select("id, label, url, icon, thumbnail_url, position")
+        .eq("shop_id", shop.id)
+        .eq("is_active", true)
+        .order("position", { ascending: true }),
+      supabase
+        .from("page_blocks")
+        .select("id, type, position, title, config, style, visible")
+        .eq("shop_id", shop.id)
+        .order("position", { ascending: true }),
+    ]);
 
   const products = (productsResult.data ?? []) as ProductRow[];
   const categories = (categoriesResult.data ?? []) as CategoryRow[];
-  const links = (linksResult.data ?? []) as Array<{
-    id: string;
-    label: string;
-    url: string;
-    icon: string;
-    position: number;
-  }>;
+  const links = (linksResult.data ?? []) as LegacyLink[];
+  const rows = (blocksResult.data ?? []) as PageBlockRow[];
+
+  // La composition est résolue ici, côté serveur : la page publique ne connaît
+  // que des blocs. Une boutique qui n'en a pas encore en reçoit une synthèse
+  // fidèle de ses liens et de sa grille produits — rien ne change pour elle
+  // tant qu'elle n'a pas ouvert le Page Builder.
+  const { blocks } = resolveBioPageBlocks({
+    rows: rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      position: row.position,
+      title: row.title,
+      config: row.config,
+      style: row.style,
+      visible: row.visible,
+    })),
+    links,
+    hasProducts: products.length > 0,
+  });
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  const pageUrl = `${appUrl}/${shop.slug}`;
 
   return (
-    <ShopPage
-      shop={shop}
-      products={products}
-      categories={categories}
-      links={links}
-    />
+    <>
+      <JsonLd data={storeJsonLd({ shop, url: pageUrl })} />
+      <ShopPage
+        shop={shop}
+        products={products}
+        categories={categories}
+        blocks={blocks}
+        pageUrl={pageUrl}
+      />
+    </>
   );
 }

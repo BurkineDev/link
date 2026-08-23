@@ -5,7 +5,8 @@ import type { SubscriptionPlan } from "@/lib/types/database";
 import { PricingClient } from "./pricing-client";
 
 export const metadata: Metadata = {
-  title: "Tarifs — Bio-Lien",
+  alternates: { canonical: "/pricing" },
+  title: "Tarifs",
   description:
     "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
 };
@@ -20,7 +21,7 @@ export default async function PricingPage() {
   if (user) {
     const { data: sub } = await supabase
       .from("creator_subscriptions")
-      .select("plan, status")
+      .select("plan, status, provider, current_period_end")
       .eq("user_id", user.id)
       .maybeSingle();
     currentPlan = getEffectivePlan(sub);

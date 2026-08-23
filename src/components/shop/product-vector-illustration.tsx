@@ -28,7 +28,6 @@ import {
   Flower2,
   Leaf,
 } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface ProductVectorIllustrationProps {
   name: string;
@@ -91,30 +90,41 @@ const UNIVERSES: Record<string, Universe> = {
 function determineUniverse(name: string, description: string = ""): Universe {
   const text = `${name} ${description}`.toLowerCase();
 
+  /**
+   * Whole-word match. Substring matching used to classify "cousue main" as
+   * AI & Tech (the "ai" inside "main"), so a wax dress rendered a CPU icon.
+   * A trailing s/x keeps French plurals ("bijou" → "bijoux") matching.
+   */
+  const has = (keyword: string) =>
+    new RegExp(
+      `(^|[^\\p{L}])${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|x)?([^\\p{L}]|$)`,
+      "u",
+    ).test(text);
+
   // AI & Technology
   if (
-    text.includes("ai") ||
-    text.includes("ia") ||
-    text.includes("tech") ||
-    text.includes("logiciel") ||
-    text.includes("software") ||
-    text.includes("prompt") ||
-    text.includes("code") ||
-    text.includes("sais") ||
-    text.includes("digital") ||
-    text.includes("app") ||
-    text.includes("ordinateur") ||
-    text.includes("téléphone") ||
-    text.includes("phone")
+    has("ai") ||
+    has("ia") ||
+    has("tech") ||
+    has("logiciel") ||
+    has("software") ||
+    has("prompt") ||
+    has("code") ||
+    has("sais") ||
+    has("digital") ||
+    has("app") ||
+    has("ordinateur") ||
+    has("téléphone") ||
+    has("phone")
   ) {
     // Specific icon override based on name keywords
-    if (text.includes("brain") || text.includes("cerveau") || text.includes("intelligence")) {
+    if (has("brain") || has("cerveau") || has("intelligence")) {
       return { ...UNIVERSES.ai_tech, icon: Brain };
     }
-    if (text.includes("code") || text.includes("develop") || text.includes("dev")) {
+    if (has("code") || has("develop") || has("dev")) {
       return { ...UNIVERSES.ai_tech, icon: Terminal };
     }
-    if (text.includes("data") || text.includes("analytics")) {
+    if (has("data") || has("analytics")) {
       return { ...UNIVERSES.ai_tech, icon: Binary };
     }
     return UNIVERSES.ai_tech;
@@ -122,27 +132,27 @@ function determineUniverse(name: string, description: string = ""): Universe {
 
   // Fashion & Style
   if (
-    text.includes("wax") ||
-    text.includes("tissu") ||
-    text.includes("robe") ||
-    text.includes("shirt") ||
-    text.includes("t-shirt") ||
-    text.includes("vetement") ||
-    text.includes("vêtement") ||
-    text.includes("mode") ||
-    text.includes("couture") ||
-    text.includes("bijou") ||
-    text.includes("bague") ||
-    text.includes("collier") ||
-    text.includes("sac")
+    has("wax") ||
+    has("tissu") ||
+    has("robe") ||
+    has("shirt") ||
+    has("t-shirt") ||
+    has("vetement") ||
+    has("vêtement") ||
+    has("mode") ||
+    has("couture") ||
+    has("bijou") ||
+    has("bague") ||
+    has("collier") ||
+    has("sac")
   ) {
-    if (text.includes("bijou") || text.includes("gem") || text.includes("diamant")) {
+    if (has("bijou") || has("gem") || has("diamant")) {
       return { ...UNIVERSES.fashion, icon: Gem };
     }
-    if (text.includes("couture") || text.includes("ciseaux")) {
+    if (has("couture") || has("ciseaux")) {
       return { ...UNIVERSES.fashion, icon: Scissors };
     }
-    if (text.includes("luxe") || text.includes("or") || text.includes("gold") || text.includes("royal")) {
+    if (has("luxe") || has("or") || has("gold") || has("royal")) {
       return { ...UNIVERSES.fashion, icon: Crown };
     }
     return UNIVERSES.fashion;
@@ -150,25 +160,25 @@ function determineUniverse(name: string, description: string = ""): Universe {
 
   // Food & Gastronomy
   if (
-    text.includes("cafe") ||
-    text.includes("café") ||
-    text.includes("boisson") ||
-    text.includes("food") ||
-    text.includes("nourriture") ||
-    text.includes("épicerie") ||
-    text.includes("epicerie") ||
-    text.includes("miel") ||
-    text.includes("chocolat") ||
-    text.includes("pâtisserie") ||
-    text.includes("gateau")
+    has("cafe") ||
+    has("café") ||
+    has("boisson") ||
+    has("food") ||
+    has("nourriture") ||
+    has("épicerie") ||
+    has("epicerie") ||
+    has("miel") ||
+    has("chocolat") ||
+    has("pâtisserie") ||
+    has("gateau")
   ) {
-    if (text.includes("resto") || text.includes("cuisine") || text.includes("repas")) {
+    if (has("resto") || has("cuisine") || has("repas")) {
       return { ...UNIVERSES.food, icon: Utensils };
     }
-    if (text.includes("cookie") || text.includes("biscuit") || text.includes("pain")) {
+    if (has("cookie") || has("biscuit") || has("pain")) {
       return { ...UNIVERSES.food, icon: Cookie };
     }
-    if (text.includes("soupe") || text.includes("sauce") || text.includes("plat")) {
+    if (has("soupe") || has("sauce") || has("plat")) {
       return { ...UNIVERSES.food, icon: Soup };
     }
     return UNIVERSES.food;
@@ -176,24 +186,24 @@ function determineUniverse(name: string, description: string = ""): Universe {
 
   // Art, Decor & Craft
   if (
-    text.includes("art") ||
-    text.includes("peinture") ||
-    text.includes("tableau") ||
-    text.includes("deco") ||
-    text.includes("déco") ||
-    text.includes("craft") ||
-    text.includes("artisan") ||
-    text.includes("poterie") ||
-    text.includes("bois") ||
-    text.includes("handmade")
+    has("art") ||
+    has("peinture") ||
+    has("tableau") ||
+    has("deco") ||
+    has("déco") ||
+    has("craft") ||
+    has("artisan") ||
+    has("poterie") ||
+    has("bois") ||
+    has("handmade")
   ) {
-    if (text.includes("dessin") || text.includes("pinceau")) {
+    if (has("dessin") || has("pinceau")) {
       return { ...UNIVERSES.artisan, icon: Brush };
     }
-    if (text.includes("outil") || text.includes("marteau")) {
+    if (has("outil") || has("marteau")) {
       return { ...UNIVERSES.artisan, icon: Hammer };
     }
-    if (text.includes("plume") || text.includes("ecriture")) {
+    if (has("plume") || has("ecriture")) {
       return { ...UNIVERSES.artisan, icon: Feather };
     }
     return UNIVERSES.artisan;
@@ -201,24 +211,24 @@ function determineUniverse(name: string, description: string = ""): Universe {
 
   // Business & Knowledge
   if (
-    text.includes("livre") ||
-    text.includes("book") ||
-    text.includes("ebook") ||
-    text.includes("formation") ||
-    text.includes("cours") ||
-    text.includes("audit") ||
-    text.includes("consult") ||
-    text.includes("coaching") ||
-    text.includes("guide") ||
-    text.includes("pdf")
+    has("livre") ||
+    has("book") ||
+    has("ebook") ||
+    has("formation") ||
+    has("cours") ||
+    has("audit") ||
+    has("consult") ||
+    has("coaching") ||
+    has("guide") ||
+    has("pdf")
   ) {
-    if (text.includes("formation") || text.includes("diplome") || text.includes("academie")) {
+    if (has("formation") || has("diplome") || has("academie")) {
       return { ...UNIVERSES.business, icon: GraduationCap };
     }
-    if (text.includes("consult") || text.includes("business") || text.includes("finance")) {
+    if (has("consult") || has("business") || has("finance")) {
       return { ...UNIVERSES.business, icon: Briefcase };
     }
-    if (text.includes("growth") || text.includes("strategie") || text.includes("croissance")) {
+    if (has("growth") || has("strategie") || has("croissance")) {
       return { ...UNIVERSES.business, icon: TrendingUp };
     }
     return UNIVERSES.business;
@@ -226,19 +236,19 @@ function determineUniverse(name: string, description: string = ""): Universe {
 
   // Home & Gardening
   if (
-    text.includes("maison") ||
-    text.includes("home") ||
-    text.includes("plante") ||
-    text.includes("fleur") ||
-    text.includes("jardin") ||
-    text.includes("meuble") ||
-    text.includes("salon") ||
-    text.includes("lampe")
+    has("maison") ||
+    has("home") ||
+    has("plante") ||
+    has("fleur") ||
+    has("jardin") ||
+    has("meuble") ||
+    has("salon") ||
+    has("lampe")
   ) {
-    if (text.includes("plante") || text.includes("feuille") || text.includes("nature")) {
+    if (has("plante") || has("feuille") || has("nature")) {
       return { ...UNIVERSES.home, icon: Leaf };
     }
-    if (text.includes("fleur") || text.includes("rose")) {
+    if (has("fleur") || has("rose")) {
       return { ...UNIVERSES.home, icon: Flower2 };
     }
     return UNIVERSES.home;
@@ -288,17 +298,8 @@ export function ProductVectorIllustration({
         }}
       />
 
-      {/* 🚀 Main Card Container with Floating Animation */}
-      <motion.div
-        initial={{ y: 0 }}
-        animate={{ y: [-4, 4, -4] }}
-        transition={{
-          duration: 6,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="relative z-10 flex flex-col items-center justify-center"
-      >
+      {/* 🚀 Main Card Container with Floating Animation (CSS, see globals.css) */}
+      <div className="animate-bio-float relative z-10 flex flex-col items-center justify-center">
         {/* Animated flat glassmorphic plate for the vector icon */}
         <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-md transition-all duration-300 group-hover:border-white/30 group-hover:bg-white/15">
           {/* Subtle icon background shape */}
@@ -319,14 +320,6 @@ export function ProductVectorIllustration({
         <span className="mt-4 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-bold tracking-wider uppercase text-white/90 backdrop-blur-sm transition-colors group-hover:bg-black/30">
           {universe.label}
         </span>
-      </motion.div>
-
-      {/* 📐 Abstract vector geometry lines */}
-      <div className="absolute bottom-4 left-4 font-mono text-[8px] text-white/30 pointer-events-none select-none select-all">
-        SYS.AI // {name.toUpperCase().slice(0, 12)}
-      </div>
-      <div className="absolute right-4 top-4 font-mono text-[8px] text-white/30 pointer-events-none select-none select-all">
-        LAT: {name.length * 3}.{(name.charCodeAt(0) || 0) * 7}N
       </div>
     </div>
   );

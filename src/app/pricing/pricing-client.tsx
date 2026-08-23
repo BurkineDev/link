@@ -19,9 +19,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils/format";
+import {
+  BOOSTS,
+  PREPAID_MONTHS,
+  getPrepaidPrice,
+  prepaidSavingsPercent,
+  type PrepaidMonths,
+} from "@/lib/subscription";
 
 type Plan = "free" | "starter" | "pro";
-type Interval = "month" | "year";
 
 const FREE_FEATURES = [
   "Jusqu'à 5 produits",
@@ -52,6 +59,12 @@ const PRICE_LABELS = {
   pro: { month: "9,99", year: "59" },
 } as const;
 
+const MONTH_LABEL: Record<PrepaidMonths, string> = {
+  1: "1 mois",
+  3: "3 mois",
+  12: "1 an",
+};
+
 export function PricingClient({
   isAuthenticated,
   currentPlan,
@@ -60,12 +73,45 @@ export function PricingClient({
   currentPlan: Plan;
 }) {
   const searchParams = useSearchParams();
-  const [interval, setInterval] = useState<Interval>("month");
+  const [months, setMonths] = useState<PrepaidMonths>(1);
   const [checkingOutPlan, setCheckingOutPlan] = useState<Plan | null>(null);
 
   const wasCancelled = searchParams.get("cancelled") === "1";
+  const paymentFailed = searchParams.get("paiement") === "echec";
 
-  async function startCheckout(plan: "starter" | "pro") {
+  /**
+   * Achat d'une période, en Mobile Money.
+   *
+   * Rien n'est récurrent : le vendeur paie la durée qu'il a choisie, elle
+   * court, elle s'arrête. C'est la voie principale — la carte bancaire, que
+   * peu de vendeurs ont, reste proposée en second recours.
+   */
+  async function startPrepaidCheckout(plan: "starter" | "pro") {
+    if (!isAuthenticated) {
+      window.location.assign(`/register?next=/pricing`);
+      return;
+    }
+
+    setCheckingOutPlan(plan);
+    try {
+      const res = await fetch("/api/subscription/geniuspay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, months }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Impossible d'initialiser le paiement.");
+        return;
+      }
+      window.location.assign(data.url);
+    } finally {
+      setCheckingOutPlan(null);
+    }
+  }
+
+  /** Paiement par carte, via Stripe — facturé en dollars canadiens. */
+  async function startCardCheckout(plan: "starter" | "pro") {
     if (!isAuthenticated) {
       window.location.assign(`/register?next=/pricing`);
       return;
@@ -76,7 +122,10 @@ export function PricingClient({
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, interval }),
+        body: JSON.stringify({
+          plan,
+          interval: months === 12 ? "year" : "month",
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -105,6 +154,12 @@ export function PricingClient({
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-12 sm:py-16">
+        {paymentFailed && (
+          <div className="mx-auto max-w-2xl mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Le paiement n&apos;a pas abouti. Rien n&apos;a été débité — tu peux
+            réessayer.
+          </div>
+        )}
         {wasCancelled && (
           <div className="mx-auto max-w-2xl mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Tu as annulé le paiement. Tu peux réessayer quand tu veux.
@@ -124,40 +179,46 @@ export function PricingClient({
           </p>
         </div>
 
-        {/* Monthly / Yearly toggle */}
-        <div className="flex justify-center mb-10">
-          <div className="inline-flex items-center rounded-full border border-border bg-card p-1">
-            <button
-              type="button"
-              onClick={() => setInterval("month")}
-              className={cn(
-                "px-4 py-1.5 text-sm font-semibold rounded-full transition-colors",
-                interval === "month"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Mensuel
-            </button>
-            <button
-              type="button"
-              onClick={() => setInterval("year")}
-              className={cn(
-                "px-4 py-1.5 text-sm font-semibold rounded-full transition-colors inline-flex items-center gap-2",
-                interval === "year"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Annuel
-              <Badge
-                variant="secondary"
-                className="bg-emerald-100 text-emerald-700 border-0 text-[10px] px-1.5 py-0"
-              >
-                −50 %
-              </Badge>
-            </button>
+        {/* Durée achetée d'avance */}
+        <div className="flex flex-col items-center gap-2 mb-10">
+          <div
+            role="group"
+            aria-label="Durée de l'abonnement"
+            className="inline-flex items-center rounded-full border border-border bg-card p-1"
+          >
+            {PREPAID_MONTHS.map((value) => {
+              const selected = months === value;
+              const savings = prepaidSavingsPercent("pro", value);
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMonths(value)}
+                  aria-pressed={selected}
+                  className={cn(
+                    "px-4 py-1.5 text-sm font-semibold rounded-full transition-colors inline-flex items-center gap-2",
+                    selected
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {MONTH_LABEL[value]}
+                  {savings > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-100 text-emerald-700 border-0 text-[10px] px-1.5 py-0"
+                    >
+                      −{savings} %
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Tu paies la durée choisie, une seule fois. Aucun prélèvement
+            automatique.
+          </p>
         </div>
 
         {/* 3-tier pricing grid */}
@@ -177,9 +238,9 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                0 $CA
+                Gratuit
                 <span className="text-base font-normal text-muted-foreground ml-1">
-                  / mois
+                  / pour toujours
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
@@ -231,9 +292,9 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {PRICE_LABELS.starter[interval]} $CA
+                {formatPrice(getPrepaidPrice("starter", months), "XOF")}
                 <span className="text-base font-normal text-muted-foreground ml-1">
-                  / {interval === "month" ? "mois" : "an"}
+                  / {MONTH_LABEL[months]}
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
@@ -248,7 +309,7 @@ export function PricingClient({
                 <Button
                   variant="outline"
                   className="w-full h-11 mb-6 gap-2"
-                  onClick={() => startCheckout("starter")}
+                  onClick={() => startPrepaidCheckout("starter")}
                   disabled={checkingOutPlan !== null}
                 >
                   {checkingOutPlan === "starter" ? (
@@ -276,9 +337,21 @@ export function PricingClient({
                 ))}
               </ul>
 
-              <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                Sans engagement. Annule à tout moment.
-              </p>
+              <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
+                  carte fonctionne partout. Sans engagement : la période
+                  s&apos;arrête d&apos;elle-même.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => startCardCheckout("starter")}
+                  disabled={checkingOutPlan !== null}
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                >
+                  Payer par carte ({PRICE_LABELS.starter[months === 12 ? "year" : "month"]} $CA)
+                </button>
+              </div>
             </CardContent>
           </Card>
 
@@ -302,9 +375,9 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {PRICE_LABELS.pro[interval]} $CA
+                {formatPrice(getPrepaidPrice("pro", months), "XOF")}
                 <span className="text-base font-normal text-muted-foreground ml-1">
-                  / {interval === "month" ? "mois" : "an"}
+                  / {MONTH_LABEL[months]}
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
@@ -318,7 +391,7 @@ export function PricingClient({
               ) : (
                 <Button
                   className="w-full h-11 mb-6 font-semibold gap-2"
-                  onClick={() => startCheckout("pro")}
+                  onClick={() => startPrepaidCheckout("pro")}
                   disabled={checkingOutPlan !== null}
                 >
                   {checkingOutPlan === "pro" ? (
@@ -346,9 +419,21 @@ export function PricingClient({
                 ))}
               </ul>
 
-              <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                Sans engagement. Annule à tout moment depuis ton profil.
-              </p>
+              <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
+                  carte fonctionne partout. Sans engagement : la période
+                  s&apos;arrête d&apos;elle-même.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => startCardCheckout("pro")}
+                  disabled={checkingOutPlan !== null}
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                >
+                  Payer par carte ({PRICE_LABELS.pro[months === 12 ? "year" : "month"]} $CA)
+                </button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -370,7 +455,9 @@ export function PricingClient({
                 Ta boutique en haut de l&apos;explore pendant 24 heures.
               </p>
             </div>
-            <p className="font-bold whitespace-nowrap">1,99 $CA</p>
+            <p className="font-bold whitespace-nowrap">
+              {formatPrice(BOOSTS.featured_24h.amountXof, "XOF")}
+            </p>
           </div>
         </div>
 
@@ -381,19 +468,23 @@ export function PricingClient({
             {[
               {
                 q: "Quelle est la différence entre les plans ?",
-                a: "Découverte (gratuit, 5 produits, 5 % de commission) sert à tester. Starter (4,99 $CA/mois, 20 produits, 3 %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (9,99 $CA/mois, illimité, 0 %) est le plan optimal dès que tu vends régulièrement.",
+                a: "Découverte (gratuit, 5 produits, 5 % de commission) sert à tester. Starter (2 000 FCFA/mois, 20 produits, 3 %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (4 000 FCFA/mois, illimité, 0 %) est le plan optimal dès que tu vends régulièrement.",
               },
               {
                 q: "Comment fonctionne la commission ?",
                 a: "Sur les plans Découverte et Starter, on prélève automatiquement un % sur le total de chaque vente confirmée. Sur Pro, tu encaisses 100 % du prix de vente — c'est l'abonnement qui couvre les frais.",
               },
               {
-                q: "L'abonnement annuel est-il vraiment moins cher ?",
-                a: "Oui. 59 $CA/an au lieu de ~120 $CA si tu payes au mois — soit ~50 % d'économie. Tu peux annuler à la fin de la période ; aucune donnée n'est supprimée. La facturation est en dollars canadiens, ta carte convertit automatiquement en FCFA.",
+                q: "Comment se passe le paiement de l'abonnement ?",
+                a: "Tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 3 mois ou 1 an revient moins cher que mois par mois. Deux moyens de payer : le Mobile Money là où notre partenaire le propose, et la carte bancaire partout, facturée en dollars canadiens.",
               },
               {
-                q: "Le Mobile Money est-il disponible ?",
-                a: "Oui. Tes clients peuvent payer par Wave, Orange Money, MTN Mobile Money et Moov Money via Genius Pay — en plus de la carte bancaire (Stripe).",
+                q: "Le Mobile Money est-il disponible dans mon pays ?",
+                // Promesse tenue pays par pays. Elle était formulée sans
+                // réserve : un vendeur d'un pays non couvert lançait un
+                // paiement Mobile Money, attendait un push qui n'arrivait
+                // jamais, et n'avait aucune idée de la raison.
+                a: "Le Mobile Money (Wave, Orange Money, MTN MoMo, Moov Money) fonctionne en Côte d'Ivoire, au Sénégal, au Bénin, au Cameroun, au Gabon, au Congo, en RD Congo, au Rwanda, en Sierra Leone, au Kenya, en Ouganda et en Zambie. Ailleurs — Burkina Faso, Mali, Niger, Togo notamment — notre partenaire ne le propose pas encore : le paiement par carte bancaire prend le relais, et ta boutique fonctionne exactement pareil.",
               },
             ].map((item) => (
               <details

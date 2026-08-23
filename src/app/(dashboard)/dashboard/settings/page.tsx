@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
 import { SettingsClient } from "./settings-client";
 
 export const metadata = {
-  title: "Paramètres de la boutique — Bio-Lien",
+  title: "Paramètres de la boutique",
 };
 
 export default async function SettingsPage() {
@@ -27,5 +28,20 @@ export default async function SettingsPage() {
     .eq("shop_id", shop.id)
     .order("position", { ascending: true });
 
-  return <SettingsClient shop={shop} links={links ?? []} />;
+  // La rédaction assistée est réservée au plan Pro. Le bouton reste visible
+  // pour les autres — une porte fermée qu'on voit vaut mieux qu'une
+  // fonctionnalité dont on ignore l'existence.
+  const { data: sub } = await supabase
+    .from("creator_subscriptions")
+    .select("plan, status, provider, current_period_end")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  return (
+    <SettingsClient
+      shop={shop}
+      links={links ?? []}
+      canUseAi={getPlanLimits(getEffectivePlan(sub)).aiWriting}
+    />
+  );
 }

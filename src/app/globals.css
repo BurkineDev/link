@@ -218,3 +218,30 @@
     scrollbar-color: oklch(0.85 0 0) transparent;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Floating product illustration
+ * ---------------------------------------------------------------------------
+ * Replaces a framer-motion loop. The public bio page is opened from a TikTok
+ * or Instagram in-app browser on 3G, so it must not pay ~50 KB of animation
+ * runtime for a decorative 6-second float. Honours reduced-motion.
+ */
+@keyframes bio-float {
+  0%,
+  100% {
+    transform: translateY(-4px);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+.animate-bio-float {
+  animation: bio-float 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bio-float {
+    animation: none;
+  }
+}

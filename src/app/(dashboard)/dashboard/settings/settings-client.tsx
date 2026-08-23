@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -8,21 +9,16 @@ import type { ShopRow, ShopLinkRow } from "@/lib/types/database";
 import type {
   ShopFontFamily,
   ShopBorderRadius,
-  ShopCardStyle,
   ShopCtaShape,
-  ShopCtaStyle,
   ShopCheckoutMode,
 } from "@/lib/types/database";
 import {
   CURRENCIES,
   CURRENCY_META,
-  TEMPLATES,
   SHOP_THEME_COLORS,
   SHOP_FONTS,
   SHOP_BORDER_RADIUS,
-  SHOP_CARD_STYLES,
   SHOP_CTA_SHAPES,
-  SHOP_CTA_STYLES,
   FONT_FAMILY_CLASS,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -68,7 +64,6 @@ import {
   Sparkles,
   Type,
   Square,
-  Layers,
   MousePointerClick,
   Palette,
   RotateCcw,
@@ -77,11 +72,18 @@ import {
 } from "lucide-react";
 
 import { ThemePreview } from "@/components/dashboard/theme-preview";
+import {
+  BIO_THEME_LIST,
+  resolveBioTheme,
+  type BioThemeId,
+} from "@/lib/bio-themes";
 import { LinksSection } from "@/components/dashboard/links-section";
 
 interface SettingsClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
+  /** La rédaction assistée fait partie du plan Pro. */
+  canUseAi: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +148,7 @@ function ImageField({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Upload className="size-6" />
-            <span className="text-xs">Cliquez pour choisir</span>
+            <span className="text-xs">Touche pour choisir</span>
           </div>
         )}
 
@@ -305,104 +307,50 @@ function OptionGrid<T extends string>({
   );
 }
 
-// ---------------------------------------------------------------------------
-// TemplateThumb — color-reactive mini storefront mockup (no static images)
-// ---------------------------------------------------------------------------
-
-type TemplateLayout = "minimal" | "boutique" | "market" | "artisan";
-
-function MockTile({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "rounded-[3px] bg-white shadow-sm ring-1 ring-black/[0.04]",
-        className,
-      )}
-    />
-  );
-}
-
-function TemplateThumb({
-  layout,
-  primary,
-  accent,
+/**
+ * Miniature of a bio-page theme: background, avatar, two buttons. Uses the
+ * live palette resolver so the 'Mes couleurs' card previews the seller's own
+ * colours rather than a placeholder.
+ */
+function BioThemeSwatch({
+  themeId,
+  primaryColor,
+  accentColor,
 }: {
-  layout: TemplateLayout;
-  primary: string;
-  accent: string;
+  themeId: BioThemeId;
+  primaryColor: string;
+  accentColor: string;
 }) {
-  const Bar = (
-    <div
-      className="flex items-center gap-1 px-2 py-1.5"
-      style={{ backgroundColor: primary }}
-    >
-      <span className="size-1.5 rounded-full bg-white/90" />
-      <span className="h-1 w-7 rounded-full bg-white/60" />
-      <span
-        className="ml-auto h-2 w-4 rounded-full"
-        style={{ backgroundColor: accent }}
-      />
-    </div>
-  );
+  const palette = resolveBioTheme({
+    bio_theme: themeId,
+    theme_color: primaryColor,
+    accent_color: accentColor,
+  });
+
+  const buttonStyle: React.CSSProperties = {
+    backgroundColor:
+      palette.buttonVariant === "outline" ? "transparent" : palette.surface,
+    border:
+      palette.buttonVariant === "outline"
+        ? `1px solid ${palette.text}`
+        : `1px solid ${palette.border}`,
+  };
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#f4f4f5]">
-      {layout === "boutique" || layout === "artisan" ? (
-        <div
-          className="flex h-1/3 flex-col items-center justify-center gap-1"
-          style={{ backgroundColor: primary }}
-        >
-          {layout === "artisan" && (
-            <span className="size-3 rounded-full bg-white/90" />
-          )}
-          <span className="h-1.5 w-12 rounded-full bg-white/70" />
-          <span
-            className="h-2 w-8 rounded-full"
-            style={{ backgroundColor: accent }}
-          />
-        </div>
-      ) : (
-        Bar
-      )}
-
-      <div className="flex-1 p-2">
-        {layout === "market" ? (
-          <div className="flex flex-col gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <MockTile className="size-5 shrink-0" />
-                <div className="flex-1 space-y-1">
-                  <span className="block h-1 w-3/4 rounded-full bg-black/15" />
-                  <span
-                    className="block h-1 w-1/3 rounded-full"
-                    style={{ backgroundColor: accent }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : layout === "boutique" ? (
-          <div className="grid grid-cols-2 gap-1.5">
-            <MockTile className="h-10" />
-            <MockTile className="h-7" />
-            <MockTile className="h-7" />
-            <MockTile className="h-10" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            {[0, 1, 2, 3].map((i) => (
-              <MockTile key={i} className="h-8" />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="px-2 pb-2">
-        <div
-          className="h-2.5 w-full rounded-full"
-          style={{ backgroundColor: accent }}
-        />
-      </div>
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-3"
+      style={{ background: palette.background }}
+    >
+      <span
+        className="size-5 rounded-full"
+        style={{ backgroundColor: palette.surface }}
+      />
+      <span
+        className="h-1 w-8 rounded-full"
+        style={{ backgroundColor: palette.accent }}
+      />
+      <span className="h-3.5 w-full rounded-full" style={buttonStyle} />
+      <span className="h-3.5 w-full rounded-full" style={buttonStyle} />
     </div>
   );
 }
@@ -411,7 +359,11 @@ function TemplateThumb({
 // Main SettingsClient
 // ---------------------------------------------------------------------------
 
-export function SettingsClient({ shop, links }: SettingsClientProps) {
+export function SettingsClient({
+  shop,
+  links,
+  canUseAi,
+}: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -420,20 +372,48 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   const [name, setName] = useState(shop.name);
   const [slug, setSlug] = useState(shop.slug);
   const [description, setDescription] = useState(shop.description ?? "");
+  const [bioOptions, setBioOptions] = useState<string[]>([]);
+  const [isWritingBio, setIsWritingBio] = useState(false);
+
+  /**
+   * Propose des bios plutôt que d'en imposer une.
+   *
+   * Le champ vide est ce qui bloque : il ne s'agit pas d'écrire à la place du
+   * vendeur mais de lui donner un point de départ qu'il corrigera.
+   */
+  const writeBio = async () => {
+    setIsWritingBio(true);
+    setBioOptions([]);
+    try {
+      const res = await fetch("/api/outils/bio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopName: name, activity: description }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Impossible de générer la bio.");
+        return;
+      }
+      setBioOptions(data.options ?? []);
+    } catch {
+      toast.error("Connexion perdue. Réessaye.");
+    } finally {
+      setIsWritingBio(false);
+    }
+  };
   const [logoUrl, setLogoUrl] = useState(shop.logo_url);
   const [bannerUrl, setBannerUrl] = useState(shop.banner_url);
 
   // ---- Appearance ----
-  const [templateId, setTemplateId] = useState(shop.template_id ?? "minimal");
   const [themeColor, setThemeColor] = useState(shop.theme_color);
   const [accentColor, setAccentColor] = useState(shop.accent_color);
   const [fontFamily, setFontFamily] = useState<ShopFontFamily>(shop.font_family);
   const [borderRadius, setBorderRadius] = useState<ShopBorderRadius>(
     shop.border_radius,
   );
-  const [cardStyle, setCardStyle] = useState<ShopCardStyle>(shop.card_style);
   const [ctaShape, setCtaShape] = useState<ShopCtaShape>(shop.cta_shape);
-  const [ctaStyle, setCtaStyle] = useState<ShopCtaStyle>(shop.cta_style);
+  const [bioTheme, setBioTheme] = useState<BioThemeId>(shop.bio_theme);
 
   // ---- Contact ----
   const [contactEmail, setContactEmail] = useState(shop.contact_email ?? "");
@@ -496,14 +476,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
     const { error } = await supabase
       .from("shops")
       .update({
-        template_id: templateId,
         theme_color: themeColor,
         accent_color: accentColor,
         font_family: fontFamily,
         border_radius: borderRadius,
-        card_style: cardStyle,
         cta_shape: ctaShape,
-        cta_style: ctaStyle,
+        bio_theme: bioTheme,
         updated_at: new Date().toISOString(),
       })
       .eq("id", shop.id);
@@ -518,14 +496,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
   };
 
   const resetAppearance = () => {
-    setTemplateId(shop.template_id ?? "minimal");
     setThemeColor(shop.theme_color);
     setAccentColor(shop.accent_color);
     setFontFamily(shop.font_family);
     setBorderRadius(shop.border_radius);
-    setCardStyle(shop.card_style);
     setCtaShape(shop.cta_shape);
-    setCtaStyle(shop.cta_style);
+    setBioTheme(shop.bio_theme);
   };
 
   const saveContact = async () => {
@@ -619,14 +595,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
   // Detect unsaved appearance changes
   const appearanceDirty =
-    templateId !== (shop.template_id ?? "minimal") ||
     themeColor !== shop.theme_color ||
     accentColor !== shop.accent_color ||
     fontFamily !== shop.font_family ||
     borderRadius !== shop.border_radius ||
-    cardStyle !== shop.card_style ||
     ctaShape !== shop.cta_shape ||
-    ctaStyle !== shop.cta_style;
+    bioTheme !== shop.bio_theme;
 
   const contactDirty =
     contactEmail !== (shop.contact_email ?? "") ||
@@ -673,7 +647,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground">
-          Gérez votre boutique, son apparence et vos paiements.
+          Gère ta boutique, son apparence et tes paiements.
         </p>
       </div>
 
@@ -747,21 +721,79 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </p>
               ) : slugChanged ? (
                 <p className="text-xs text-amber-600">
-                  ⚠️ Changer l&apos;URL rendra vos anciens liens et QR codes
+                  ⚠️ Changer l&apos;URL rendra tes anciens liens et QR codes
                   invalides.
                 </p>
               ) : null}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="shop-desc">Description</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="shop-desc">Description</Label>
+                {canUseAi ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={writeBio}
+                    disabled={isWritingBio || name.trim().length < 2}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {isWritingBio ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-3.5" />
+                    )}
+                    Écrire ma bio
+                  </Button>
+                ) : (
+                  /* Visible mais fermé : une porte qu'on voit vaut mieux
+                     qu'une fonctionnalité dont on ignore l'existence. */
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                  >
+                    <Link href="/pricing">
+                      <Sparkles className="size-3.5" />
+                      Écrire ma bio
+                      <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        Pro
+                      </span>
+                    </Link>
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="shop-desc"
                 rows={4}
-                placeholder="Décrivez votre boutique…"
+                placeholder="Décris ta boutique…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+
+              {bioOptions.length > 0 && (
+                <div className="space-y-1.5 rounded-lg border border-border bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">
+                    Choisis-en une, puis modifie-la comme tu veux.
+                  </p>
+                  {bioOptions.map((option, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setDescription(option);
+                        setBioOptions([]);
+                      }}
+                      className="block w-full rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition-colors hover:border-foreground/40"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -804,23 +836,28 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             {/* ── Left column: controls ── */}
             <div className="space-y-8 min-w-0">
-              {/* Template */}
+              {/* Thème de la page bio */}
               <section className="space-y-3">
                 <header className="flex items-center gap-2">
-                  <Layers className="size-4 text-muted-foreground" />
+                  <Palette className="size-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold tracking-tight">
-                    Template
+                    Thème de la page
                   </h3>
                 </header>
+                <p className="text-[11px] text-muted-foreground">
+                  C&apos;est le fond et le style des boutons que voient tes
+                  visiteurs quand ils cliquent sur ton lien en bio.
+                </p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {TEMPLATES.map((tpl) => {
-                    const selected = templateId === tpl.id;
+                  {BIO_THEME_LIST.map((theme) => {
+                    const selected = bioTheme === theme.id;
                     return (
                       <button
-                        key={tpl.id}
+                        key={theme.id}
                         type="button"
-                        onClick={() => setTemplateId(tpl.id)}
+                        onClick={() => setBioTheme(theme.id)}
                         aria-pressed={selected}
+                        title={theme.description}
                         className={cn(
                           "group cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-200",
                           selected
@@ -829,10 +866,10 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                         )}
                       >
                         <div className="relative aspect-[4/3] overflow-hidden">
-                          <TemplateThumb
-                            layout={tpl.id as TemplateLayout}
-                            primary={themeColor}
-                            accent={accentColor}
+                          <BioThemeSwatch
+                            themeId={theme.id}
+                            primaryColor={themeColor}
+                            accentColor={accentColor}
                           />
                           {selected && (
                             <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
@@ -841,9 +878,9 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                           )}
                         </div>
                         <div className="p-2.5">
-                          <p className="text-xs font-semibold">{tpl.name}</p>
+                          <p className="text-xs font-semibold">{theme.label}</p>
                           <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                            {tpl.description}
+                            {theme.description}
                           </p>
                         </div>
                       </button>
@@ -851,6 +888,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                   })}
                 </div>
               </section>
+
 
               <Separator />
 
@@ -961,47 +999,12 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
 
               <Separator />
 
-              {/* Style des cartes */}
-              <section className="space-y-3">
-                <header className="flex items-center gap-2">
-                  <Layers className="size-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold tracking-tight">
-                    Style des cartes produits
-                  </h3>
-                </header>
-                <OptionGrid
-                  value={cardStyle}
-                  onChange={setCardStyle}
-                  cols={4}
-                  options={SHOP_CARD_STYLES.map((s) => ({
-                    value: s.value,
-                    label: s.label,
-                    description: s.description,
-                  }))}
-                  renderPreview={(value) => (
-                    <div
-                      className={cn(
-                        "size-10 rounded-md bg-background",
-                        value === "flat" && "",
-                        value === "bordered" &&
-                          "border border-border/60 shadow-sm",
-                        value === "elevated" && "shadow-md",
-                        value === "glass" &&
-                          "border border-white/30 bg-white/40 backdrop-blur",
-                      )}
-                    />
-                  )}
-                />
-              </section>
-
-              <Separator />
-
-              {/* Boutons CTA */}
+              {/* Boutons de liens */}
               <section className="space-y-4">
                 <header className="flex items-center gap-2">
                   <MousePointerClick className="size-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold tracking-tight">
-                    Boutons CTA
+                    Boutons de liens
                   </h3>
                 </header>
                 <div className="space-y-3">
@@ -1025,43 +1028,6 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                         )}
                       />
                     )}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <Label className="text-xs">Style</Label>
-                  <OptionGrid
-                    value={ctaStyle}
-                    onChange={setCtaStyle}
-                    cols={3}
-                    options={SHOP_CTA_STYLES.map((s) => ({
-                      value: s.value,
-                      label: s.label,
-                      description: s.description,
-                    }))}
-                    renderPreview={(value) => {
-                      const baseStyle: React.CSSProperties = {
-                        backgroundColor:
-                          value === "filled"
-                            ? themeColor
-                            : value === "soft"
-                              ? `${themeColor}25`
-                              : "transparent",
-                        color:
-                          value === "filled" ? accentColor : themeColor,
-                        border:
-                          value === "outline"
-                            ? `2px solid ${themeColor}`
-                            : "none",
-                      };
-                      return (
-                        <div
-                          className="flex h-7 w-16 items-center justify-center rounded-xl text-[10px] font-bold"
-                          style={baseStyle}
-                        >
-                          CTA
-                        </div>
-                      );
-                    }}
                   />
                 </div>
               </section>
@@ -1121,14 +1087,14 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                   <div className="h-[560px]">
                     <ThemePreview
                       shopName={name || "Ma boutique"}
+                      slug={slug}
                       logoUrl={logoUrl}
+                      bioTheme={bioTheme}
                       primaryColor={themeColor}
                       accentColor={accentColor}
                       fontFamily={fontFamily}
                       borderRadius={borderRadius}
-                      cardStyle={cardStyle}
                       ctaShape={ctaShape}
-                      ctaStyle={ctaStyle}
                     />
                   </div>
                 </div>
@@ -1147,14 +1113,14 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 <div className="h-[480px]">
                   <ThemePreview
                     shopName={name || "Ma boutique"}
+                    slug={slug}
                     logoUrl={logoUrl}
+                    bioTheme={bioTheme}
                     primaryColor={themeColor}
                     accentColor={accentColor}
                     fontFamily={fontFamily}
                     borderRadius={borderRadius}
-                    cardStyle={cardStyle}
                     ctaShape={ctaShape}
-                    ctaStyle={ctaStyle}
                   />
                 </div>
               </div>
@@ -1380,7 +1346,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Toutes vos commandes et vos prix seront affichés dans cette
+                Toutes tes commandes et tous tes prix seront affichés dans cette
                 devise.
               </p>
             </div>
@@ -1391,11 +1357,11 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
                   <p className="text-sm font-semibold">Méthodes de paiement</p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Vos clients peuvent payer par carte bancaire (Visa,
+                    Tes clients peuvent payer par carte bancaire (Visa,
                     Mastercard) et Mobile Money (Wave, Orange, MTN, Moov). La
                     configuration des moyens de paiement est gérée par
-                    l&apos;équipe Bio-Lien — vous n&apos;avez rien à installer.
-                    Les fonds sont reversés sur le compte que vous fournirez à
+                    l&apos;équipe Bio-Lien — tu n&apos;as rien à installer.
+                    Les fonds sont reversés sur le compte que tu fourniras à
                     l&apos;équipe.
                   </p>
                 </div>
@@ -1448,7 +1414,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     Dépublier la boutique
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Votre boutique ne sera plus visible par vos clients. Vous
+                    Ta boutique ne sera plus visible par tes clients. Tu
                     pourrez la republier à tout moment.
                   </p>
                 </div>
@@ -1474,8 +1440,8 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     </AlertDialogMedia>
                     <AlertDialogTitle>Dépublier la boutique ?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Votre boutique <strong>{shop.name}</strong> ne sera plus
-                      accessible au public. Vous pourrez la republier depuis
+                      Ta boutique <strong>{shop.name}</strong> ne sera plus
+                      accessible au public. Tu pourras la republier depuis
                       les paramètres.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -1499,7 +1465,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     Supprimer la boutique
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Cette action est irréversible. Tous vos produits,
+                    Cette action est irréversible. Tous tes produits,
                     commandes et données seront définitivement supprimés.
                   </p>
                 </div>
@@ -1523,7 +1489,7 @@ export function SettingsClient({ shop, links }: SettingsClientProps) {
                     <AlertDialogDescription>
                       Toutes les données liées à{" "}
                       <strong>{shop.name}</strong> seront supprimées. Pour
-                      confirmer, tapez le nom de votre boutique ci-dessous.
+                      confirmer, tape le nom de ta boutique ci-dessous.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
 

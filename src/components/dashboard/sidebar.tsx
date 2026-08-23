@@ -9,11 +9,14 @@ import {
   PackageIcon,
   ShoppingBagIcon,
   BarChart3Icon,
-  StoreIcon,
   SettingsIcon,
   LogOutIcon,
   ExternalLinkIcon,
   MegaphoneIcon,
+  CreditCardIcon,
+  LayoutPanelLeftIcon,
+  MoreHorizontalIcon,
+  UsersIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,21 +26,31 @@ type NavItemDef = {
   icon: React.ElementType;
 };
 
+// Navigation alignée sur la boucle produit : la BioPage d'abord (c'est le
+// produit), puis ce qu'elle génère (ventes), puis qui elle attire (clients),
+// puis comment la développer. Voir docs/social-commerce-os.md §8.
 const NAV_GROUPS: { label: string; items: NavItemDef[] }[] = [
   {
     label: "Général",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      { label: "Accueil", href: "/dashboard", icon: LayoutDashboardIcon },
+      { label: "Ma page", href: "/dashboard/page", icon: LayoutPanelLeftIcon },
+    ],
+  },
+  {
+    label: "Ventes",
+    items: [
       { label: "Produits", href: "/dashboard/products", icon: PackageIcon },
       { label: "Commandes", href: "/dashboard/orders", icon: ShoppingBagIcon },
+      { label: "Paiements", href: "/dashboard/payments", icon: CreditCardIcon },
     ],
   },
   {
     label: "Croissance",
     items: [
-      { label: "Analytiques", href: "/dashboard/analytics", icon: BarChart3Icon },
+      { label: "Clients", href: "/dashboard/customers", icon: UsersIcon },
       { label: "Marketing", href: "/dashboard/marketing", icon: MegaphoneIcon },
-      { label: "Ma Boutique", href: "/dashboard/shop", icon: StoreIcon },
+      { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3Icon },
     ],
   },
   {
@@ -179,27 +192,22 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
 // Mobile Bottom Nav
 // ---------------------------------------------------------------------------
 
+// Cinq entrées maximum sur mobile : au-delà, les cibles tactiles descendent
+// sous les 44 px recommandés sur un écran de 320 px.
 const BOTTOM_ITEMS: NavItemDef[] = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboardIcon },
-  { label: "Produits", href: "/dashboard/products", icon: PackageIcon },
+  { label: "Accueil", href: "/dashboard", icon: LayoutDashboardIcon },
+  { label: "Ma page", href: "/dashboard/page", icon: LayoutPanelLeftIcon },
   { label: "Commandes", href: "/dashboard/orders", icon: ShoppingBagIcon },
-  { label: "Stats", href: "/dashboard/analytics", icon: BarChart3Icon },
-  { label: "Réglages", href: "/dashboard/settings", icon: SettingsIcon },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3Icon },
+  { label: "Plus", href: "/dashboard/more", icon: MoreHorizontalIcon },
 ];
 
-interface BottomNavProps {
-  shopSlug?: string | null;
-}
-
-export function BottomNav({ shopSlug }: BottomNavProps) {
+export function BottomNav() {
   const pathname = usePathname();
 
-  const items: NavItemDef[] = shopSlug
-    ? [
-        ...BOTTOM_ITEMS.slice(0, 4),
-        { label: "Boutique", href: `/${shopSlug}`, icon: StoreIcon },
-      ]
-    : BOTTOM_ITEMS;
+  // « Plus » regroupe Produits, Paiements, Clients, Marketing et Réglages —
+  // la boutique publique reste accessible depuis « Ma page ».
+  const items: NavItemDef[] = BOTTOM_ITEMS;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 bg-background/95 backdrop-blur-xl safe-bottom border-t border-border">

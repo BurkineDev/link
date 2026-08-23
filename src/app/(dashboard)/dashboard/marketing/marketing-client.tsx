@@ -35,8 +35,14 @@ import {
   QrCode as QrCodeIcon,
   Save,
   Download,
+  Share2,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  downloadGeneratedImage,
+  shareGeneratedImage,
+} from "@/lib/utils/share-image";
 import { QrCode } from "@/components/shared/qr-code";
 import { LinksSection } from "@/components/dashboard/links-section";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
@@ -107,7 +113,7 @@ export function MarketingClient({
         </TabsContent>
 
         <TabsContent value="share" className="pt-6 space-y-6">
-          <ShareSection url={publicShopUrl} />
+          <ShareSection url={publicShopUrl} slug={shop.slug} />
         </TabsContent>
       </Tabs>
     </div>
@@ -444,8 +450,34 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
 // Share / QR code section
 // ---------------------------------------------------------------------------
 
-function ShareSection({ url }: { url: string }) {
+function ShareSection({ url, slug }: { url: string; slug: string }) {
   const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  const storyPath = `/api/story/${slug}`;
+  const storyFile = `bio-lien-story-${slug}.png`;
+
+  const downloadStory = async () => {
+    setSharing(true);
+    try {
+      await downloadGeneratedImage(storyPath, storyFile);
+    } catch {
+      toast.error("Impossible de générer l'image. Réessaie dans un instant.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const shareStory = async () => {
+    setSharing(true);
+    try {
+      await shareGeneratedImage(storyPath, storyFile);
+    } catch {
+      toast.error("Impossible de générer l'image. Réessaie dans un instant.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const copy = async () => {
     try {
@@ -511,6 +543,68 @@ function ShareSection({ url }: { url: string }) {
             <Download className="size-3.5" />
             Télécharger (PNG HD)
           </a>
+        </CardContent>
+      </Card>
+
+      {/* Story image — the growth loop: one tap from dashboard to Instagram */}
+      <Card className="md:col-span-2">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[220px_1fr] sm:items-center">
+            <div className="mx-auto w-[180px] sm:w-full sm:max-w-[220px]">
+              {/* The route renders the PNG server-side; this preview IS the
+                  file the seller will post, just scaled down. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={storyPath}
+                alt="Aperçu de ton image de story"
+                width={220}
+                height={391}
+                loading="lazy"
+                className="aspect-[9/16] w-full rounded-2xl border border-border object-cover shadow-md"
+              />
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-semibold">
+                  <Sparkles className="size-4 text-primary" />
+                  Ton image de story
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Une image prête à poster en story Instagram, TikTok ou
+                  WhatsApp — aux couleurs de ta page, avec ton QR code et ton
+                  lien. Elle se met à jour toute seule quand tu changes de
+                  thème.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={shareStory} disabled={sharing} className="gap-1.5">
+                  {sharing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Share2 className="size-4" />
+                  )}
+                  Partager en story
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={downloadStory}
+                  disabled={sharing}
+                  className="gap-1.5"
+                >
+                  <Download className="size-4" />
+                  Télécharger
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Astuce : poste-la avec un sticker « lien » vers {url.replace(/^https?:\/\//, "")} —
+                tes abonnés scannent ou cliquent, et tu vois les visites dans
+                Analytiques.
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

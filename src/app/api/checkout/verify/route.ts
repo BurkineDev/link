@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import {
   fetchPayment as fetchGeniusPayment,
@@ -16,6 +16,13 @@ import {
 // webhook is the source of truth — this endpoint is a fallback / UX helper
 // so the success page can show the correct state without waiting on the
 // webhook to fire.
+//
+// Uses the ADMIN client on purpose: the buyer is anonymous and the orders
+// RLS policies only grant reads to the shop owner, so the anon client sees
+// no row and every buyer landed on "commande introuvable" after paying.
+// The high-entropy payment_ref (Stripe cs_…, GeniusPay MTX-…) acts as the
+// bearer capability, and the status updates only run after the provider
+// itself confirmed the payment.
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
@@ -24,8 +31,17 @@ export async function GET(request: NextRequest) {
     const sessionId = searchParams.get("session_id");
     const provider = searchParams.get("provider");
     const reference = searchParams.get("reference");
+    const orderId = searchParams.get("order");
 
-    const isGenius = provider === "geniuspay" && reference;
+    // Genius Pay ne nous donne la référence qu'*après* avoir créé le paiement,
+    // alors que l'URL de retour, elle, doit être fournie *pendant*. On y met
+    // donc l'identifiant de commande, connu avant l'appel — la référence est
+    // ensuite relue depuis la commande. (L'ancienne URL portait un gabarit
+    // `{REFERENCE}` que Genius Pay ne remplaçait pas et refusait même de
+    // valider : les accolades ne sont pas des caractères d'URL.)
+    const isGeniusByOrder =
+      provider === "geniuspay" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
+    const isGenius = provider === "geniuspay" && (!!reference || isGeniusByOrder);
     const isStripe = !!sessionId;
 
     if (!isGenius && !isStripe) {
@@ -35,16 +51,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-    const lookupRef = (isGenius ? reference : sessionId) as string;
+    const supabase = getAdminClient();
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select(
-        "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, discount_amount, promo_code",
-      )
-      .eq("payment_ref", lookupRef)
-      .maybeSingle();
+    const selection =
+      "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, payment_ref, discount_amount, promo_code";
+
+    const query = supabase.from("orders").select(selection);
+
+    const { data: order, error: orderError } = await (isGeniusByOrder
+      ? query.eq("id", orderId!)
+      : query.eq("payment_ref", (isGenius ? reference : sessionId) as string)
+    ).maybeSingle();
 
     if (orderError || !order) {
       return NextResponse.json(
@@ -56,10 +73,17 @@ export async function GET(request: NextRequest) {
     const withShop = async (orderObj: typeof order) => {
       const { data: shop } = await supabase
         .from("shops")
-        .select("name, slug")
+        .select("name, slug, whatsapp_number")
         .eq("id", orderObj.shop_id)
         .single();
-      return { ...orderObj, shop_name: shop?.name, shop_slug: shop?.slug };
+      // whatsapp_number is already public (it powers the wa.me CTAs on the
+      // shop page); exposing it here lets the buyer relay their confirmation.
+      return {
+        ...orderObj,
+        shop_name: shop?.name,
+        shop_slug: shop?.slug,
+        shop_whatsapp: shop?.whatsapp_number ?? null,
+      };
     };
 
     // Already settled — idempotent return.
@@ -73,7 +97,9 @@ export async function GET(request: NextRequest) {
     if (isGenius) {
       let payment;
       try {
-        payment = await fetchGeniusPayment(reference!);
+        payment = await fetchGeniusPayment(
+          reference ?? (order.payment_ref as string),
+        );
       } catch (err) {
         console.error("[verify] Genius Pay fetch failed:", err);
         return NextResponse.json(
@@ -117,10 +143,21 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Le paiement a échoué." }, { status: 400 });
       }
 
+      // Tracé volontairement : une commande bloquée en attente sans aucune
+      // trace côté serveur est impossible à diagnostiquer après coup — c'est
+      // exactement ce qui s'est passé au premier paiement réel.
+      console.info(
+        `[verify] order ${order.id} still pending — geniuspay status=${payment.status} ref=${payment.reference} method=${payment.payment_method ?? "?"} provider=${payment.payment_provider ?? "?"} env=${payment.environment} gateway=${payment.gateway ?? "?"}`,
+      );
+
+      // 202 — l'opérateur n'a pas encore confirmé. La page de retour reboucle
+      // dessus ; on lui rend la référence pour qu'elle puisse l'afficher à
+      // l'acheteur, qui en a besoin pour se faire identifier auprès du vendeur.
       return NextResponse.json(
         {
           error:
             "Le paiement est encore en cours de traitement. Réessayez dans quelques instants.",
+          reference: payment.reference ?? (order.payment_ref as string | null),
         },
         { status: 202 },
       );

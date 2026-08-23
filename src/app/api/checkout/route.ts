@@ -337,7 +337,17 @@ export async function POST(request: NextRequest) {
       discount_amount: discountAmount,
     } satisfies OrderInsert;
 
-    const { data: order, error: orderError } = (await supabase
+    // Écrit avec la clé service, et c'est indispensable : `orders` autorise
+    // l'insertion anonyme mais réserve la *lecture* au propriétaire de la
+    // boutique. Or PostgREST traduit `.insert().select()` en
+    // `INSERT ... RETURNING`, que Postgres refuse quand la ligne créée ne
+    // passe pas la politique de lecture — 42501, et donc aucun acheteur non
+    // connecté ne pouvait commander.
+    //
+    // Sans danger : le montant ne vient pas du client. Les prix sont relus
+    // depuis `products` un peu plus haut, la boutique a été vérifiée publiée,
+    // et le stock a déjà été réservé.
+    const { data: order, error: orderError } = (await admin
       .from("orders")
       .insert(orderInsert)
       .select("id")
@@ -353,9 +363,15 @@ export async function POST(request: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+    // Toutes les écritures sur la commande passent par la clé service. La
+    // politique UPDATE d'`orders` est réservée au propriétaire de la boutique :
+    // avec le client utilisateur, ces mises à jour ne levaient aucune erreur,
+    // elles ne touchaient simplement aucune ligne — `payment_ref` n'était donc
+    // jamais écrit, et l'annulation de stock ne s'appliquait pas.
     const rollback = async () => {
       await admin.rpc("release_stock", { items: reservePayload });
-      await supabase
+      await admin
         .from("orders")
         .update({ status: "cancelled", payment_status: "failed" })
         .eq("id", order.id);
@@ -375,7 +391,10 @@ export async function POST(request: NextRequest) {
             country: shippingAddress?.country,
           },
           payment_method: paymentMethod.mobileProvider,
-          success_url: `${appUrl}/checkout/success?provider=geniuspay&reference={REFERENCE}`,
+          // L'identifiant de commande, pas la référence : celle-ci n'existe
+          // qu'après cet appel. Un gabarit `{REFERENCE}` rendait l'URL
+          // invalide et Genius Pay la refusait (validation.url).
+          success_url: `${appUrl}/checkout/success?provider=geniuspay&order=${order.id}`,
           error_url: `${appUrl}/checkout?cancelled=1`,
           metadata: {
             orderId: order.id,
@@ -399,13 +418,11 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        await supabase
+        await admin
           .from("orders")
           .update({ payment_ref: result.reference })
           .eq("id", order.id);
 
-        // Replace the literal placeholder in success_url so the page can
-        // verify the right transaction (Genius Pay does NOT expand it for us).
         return NextResponse.json({
           paymentLink: paymentLink,
           orderId: order.id,
@@ -505,7 +522,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await supabase
+    await admin
       .from("orders")
       .update({ payment_ref: checkoutSession.id })
       .eq("id", order.id);

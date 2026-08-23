@@ -39,16 +39,75 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Après une inscription.
+ *
+ * L'e-mail de confirmation n'arrive pas toujours : boîte pleine, spam, ou nos
+ * propres envois saturés. Sans issue à cet endroit, le vendeur a créé un
+ * compte qu'il ne peut pas ouvrir et n'a plus qu'à abandonner. Le bouton de
+ * renvoi est ce qui manque.
+ */
 function RegistrationBanner() {
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered") === "true";
+  const email = searchParams.get("email") ?? "";
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
+
   if (!registered) return null;
+
+  async function resend() {
+    if (!email) return;
+    setResending(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resend({ type: "signup", email });
+      if (error) {
+        const rateLimited =
+          error.status === 429 || /rate limit|too many/i.test(error.message);
+        toast.error(
+          rateLimited
+            ? "Nos envois sont momentanément saturés. Réessaie dans quelques minutes."
+            : "Impossible de renvoyer l'e-mail pour l'instant.",
+        );
+        return;
+      }
+      setResent(true);
+      toast.success("E-mail renvoyé.", {
+        description: "Pense à regarder dans les spams.",
+      });
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
       <MailCheck className="size-4 mt-0.5 shrink-0 text-blue-600" />
-      <p>
-        <span className="font-semibold">Vérifiez vos emails.</span> Un lien de confirmation vous a été envoyé. Cliquez dessus puis connectez-vous ici.
-      </p>
+      <div className="space-y-1.5">
+        <p>
+          <span className="font-semibold">Vérifie tes e-mails.</span> Un lien de
+          confirmation {email ? <>t&apos;a été envoyé à <strong>{email}</strong></> : "t'a été envoyé"}.
+          Clique dessus, puis connecte-toi ici.
+        </p>
+        <p className="text-xs text-blue-700">
+          Rien reçu ? Regarde dans les spams
+          {email && !resent && (
+            <>
+              , ou{" "}
+              <button
+                type="button"
+                onClick={resend}
+                disabled={resending}
+                className="font-semibold underline underline-offset-2 disabled:opacity-60"
+              >
+                {resending ? "envoi en cours…" : "renvoie l'e-mail"}
+              </button>
+            </>
+          )}
+          .
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,11 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Store } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 
-export const metadata = {
-  title: "Boutique introuvable | Bio-Lien",
+export const metadata: Metadata = {
+  title: "Boutique introuvable",
   description: "Cette boutique n'existe pas ou n'est pas encore publiée.",
+  // Une 404 ne s'indexe pas, et ne se déclare surtout pas canonique vers
+  // l'accueil : ce serait dire aux moteurs que cette adresse *est* l'accueil.
+  robots: { index: false, follow: true },
+  alternates: { canonical: null },
 };
 
 export default function NotFound() {
