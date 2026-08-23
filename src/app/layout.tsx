@@ -73,6 +73,9 @@ export const metadata: Metadata = {
   authors: [{ name: "Bio-Lien" }],
   creator: "Bio-Lien",
   metadataBase: new URL("https://www.bio-lien.com"),
+  // Canonique par défaut. Chaque page publique déclare la sienne ; celle-ci
+  // ne sert que pour l'accueil, seule page sans `generateMetadata`.
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "fr_FR",

@@ -23,6 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
+import {
+  JsonLd,
+  organizationJsonLd,
+  websiteJsonLd,
+} from "@/lib/seo/json-ld";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -1149,9 +1154,16 @@ function Footer() {
 // Page entry point
 // ---------------------------------------------------------------------------
 
+const SITE_URL = "https://www.bio-lien.com";
+
 export default function LandingPage() {
   return (
     <>
+      {/* Entités du site, déclarées une seule fois et ici : les mettre dans le
+          layout racine les collerait aussi sur chaque boutique de vendeur, où
+          « Bio-Lien » viendrait concurrencer le nom du vendeur. */}
+      <JsonLd data={organizationJsonLd(SITE_URL)} />
+      <JsonLd data={websiteJsonLd(SITE_URL)} />
       <Navbar />
       <main>
         <Hero />
