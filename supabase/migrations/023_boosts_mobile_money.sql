@@ -103,4 +103,10 @@ $$;
 comment on function public.apply_boost_payment(text) is
   'Active le boost d''un paiement confirmé. Idempotent, et prolonge un boost encore en cours au lieu de l''écraser.';
 
+-- `revoke ... from public` ne suffit pas : Supabase accorde EXECUTE à
+-- `anon` et `authenticated` par défaut sur le schéma public, et ces
+-- rôles conservent leur droit propre. Sans le revoke explicite ci-dessous,
+-- un vendeur pouvait lancer un paiement, ne pas le régler, puis appeler
+-- cette fonction avec sa propre référence pour se créditer lui-même.
 revoke all on function public.apply_boost_payment(text) from public;
+revoke execute on function public.apply_boost_payment(text) from anon, authenticated;
