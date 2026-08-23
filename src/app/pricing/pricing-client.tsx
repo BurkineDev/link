@@ -339,8 +339,9 @@ export function PricingClient({
 
               <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
                 <p className="text-xs text-muted-foreground">
-                  Mobile Money : Wave, Orange, MTN, Moov. Sans engagement — la
-                  période s&apos;arrête d&apos;elle-même.
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
+                  carte fonctionne partout. Sans engagement : la période
+                  s&apos;arrête d&apos;elle-même.
                 </p>
                 <button
                   type="button"
@@ -420,8 +421,9 @@ export function PricingClient({
 
               <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
                 <p className="text-xs text-muted-foreground">
-                  Mobile Money : Wave, Orange, MTN, Moov. Sans engagement — la
-                  période s&apos;arrête d&apos;elle-même.
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
+                  carte fonctionne partout. Sans engagement : la période
+                  s&apos;arrête d&apos;elle-même.
                 </p>
                 <button
                   type="button"
@@ -474,11 +476,15 @@ export function PricingClient({
               },
               {
                 q: "Comment se passe le paiement de l'abonnement ?",
-                a: "Tu achètes une durée d'avance en Mobile Money (Wave, Orange, MTN, Moov) : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 3 mois ou 1 an revient moins cher que mois par mois. Si tu as une carte bancaire, le paiement par carte reste possible, facturé en dollars canadiens.",
+                a: "Tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 3 mois ou 1 an revient moins cher que mois par mois. Deux moyens de payer : le Mobile Money là où notre partenaire le propose, et la carte bancaire partout, facturée en dollars canadiens.",
               },
               {
-                q: "Le Mobile Money est-il disponible ?",
-                a: "Oui. Tes clients peuvent payer par Wave, Orange Money, MTN Mobile Money et Moov Money via Genius Pay — en plus de la carte bancaire (Stripe).",
+                q: "Le Mobile Money est-il disponible dans mon pays ?",
+                // Promesse tenue pays par pays. Elle était formulée sans
+                // réserve : un vendeur d'un pays non couvert lançait un
+                // paiement Mobile Money, attendait un push qui n'arrivait
+                // jamais, et n'avait aucune idée de la raison.
+                a: "Le Mobile Money (Wave, Orange Money, MTN MoMo, Moov Money) fonctionne en Côte d'Ivoire, au Sénégal, au Bénin, au Cameroun, au Gabon, au Congo, en RD Congo, au Rwanda, en Sierra Leone, au Kenya, en Ouganda et en Zambie. Ailleurs — Burkina Faso, Mali, Niger, Togo notamment — notre partenaire ne le propose pas encore : le paiement par carte bancaire prend le relais, et ta boutique fonctionne exactement pareil.",
               },
             ].map((item) => (
               <details
