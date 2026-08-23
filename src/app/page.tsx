@@ -1,27 +1,33 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  Smartphone,
-  Zap,
+  ArrowRight,
   BarChart3,
   Package,
   Link2,
   Headphones,
   Check,
-  ArrowRight,
+  Camera,
+  ChevronRight,
+  Globe2,
+  Link2,
   Menu,
+  MessageCircle,
+  MoreHorizontal,
+  Music2,
+  Palette,
+  Play,
+  ShoppingBag,
+  Sparkles,
   X,
   ChevronRight,
   Sparkles,
   Hammer,
   MessageCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
 import {
   JsonLd,
@@ -30,135 +36,53 @@ import {
 } from "@/lib/seo/json-ld";
 import { cn } from "@/lib/utils";
 
-// ---------------------------------------------------------------------------
-// Animation helper
-// ---------------------------------------------------------------------------
+const benefits = [
+  { icon: Link2, title: "Tous tes liens. Enfin réunis.", text: "Réseaux, boutique, WhatsApp et contenus : une seule adresse simple à partager." },
+  { icon: Sparkles, title: "Une page qui te ressemble", text: "Couleurs, typographies, blocs et bio assistée par IA. Aucun code à écrire." },
+  { icon: BarChart3, title: "Comprends ton audience", text: "Découvre ce qui attire les clics et améliore ta page avec des données claires." },
+];
 
-function FadeIn({
-  children,
-  delay = 0,
-  className,
-  direction = "up",
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-  direction?: "up" | "left" | "right" | "none";
-}) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-60px" });
+const templates = [
+  { name: "Soraya", role: "Mode & lifestyle", bg: "#f5d6c6", accent: "#ff5d35", avatar: "S", links: ["Ma nouvelle collection", "Shopper mes looks"] },
+  { name: "Kader Beats", role: "Artiste · Producteur", bg: "#d8f83d", accent: "#111111", avatar: "K", links: ["Écouter le nouvel EP", "YouTube"] },
+  { name: "Studio Noma", role: "Design & création", bg: "#c8b9ff", accent: "#5b36e8", avatar: "N", links: ["Voir nos projets", "Nous contacter"] },
+];
 
-  const initialY = direction === "up" ? 32 : 0;
-  const initialX =
-    direction === "left" ? -32 : direction === "right" ? 32 : 0;
-
+function CreatorPhone({ compact = false }: { compact?: boolean }) {
   return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: initialY, x: initialX }}
-      animate={isInView ? { opacity: 1, y: 0, x: 0 } : {}}
-      transition={{ duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Phone mockup
-// ---------------------------------------------------------------------------
-
-function PhoneMockup() {
-  const products = [
-    { name: "Robe Wax Ankara", price: "12 500 FCFA", bg: "bg-[var(--primary)]", emoji: "👗" },
-    { name: "Sac en Raphia", price: "8 000 FCFA", bg: "bg-[var(--success)]", emoji: "👜" },
-    { name: "Bijoux Artisanaux", price: "5 500 FCFA", bg: "bg-foreground", emoji: "💍" },
-    { name: "Huile de Karité", price: "3 200 FCFA", bg: "bg-[var(--primary)]", emoji: "🧴" },
-  ];
-
-  return (
-    <div className="relative mx-auto w-[240px] sm:w-[260px]">
-      {/* Glow effect */}
-      <div className="absolute inset-0 rounded-[2.5rem] bg-white/20 blur-2xl scale-110" />
-
-      {/* Phone shell */}
-      <div className="relative bg-gray-900 rounded-[2.5rem] p-[3px] shadow-2xl">
-        <div className="bg-white rounded-[2.3rem] overflow-hidden">
-          {/* Status bar */}
-          <div className="flex items-center justify-between px-5 pt-3 pb-2 text-[9px] font-semibold text-gray-600">
-            <span>9:41</span>
-            <div className="w-20 h-4 bg-gray-900 rounded-full" />
-            <span>●●●</span>
+    <div className={`relative mx-auto ${compact ? "w-[220px]" : "w-[286px] sm:w-[310px]"}`}>
+      <div className="absolute -inset-10 rounded-full bg-[#ffda46]/25 blur-3xl" />
+      <motion.div
+        initial={{ y: 18, opacity: 0, rotate: 2 }}
+        animate={{ y: 0, opacity: 1, rotate: -2 }}
+        transition={{ duration: .7, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-[2.8rem] border-[7px] border-[#171717] bg-[#f8efd7] p-3 shadow-[0_32px_80px_rgba(24,20,12,.22)]"
+      >
+        <div className="mx-auto mb-3 h-5 w-24 rounded-full bg-[#171717]" />
+        <div className="rounded-[2rem] bg-[#fffaf0] px-4 pb-5 pt-3 text-center">
+          <div className="mb-3 flex justify-between text-[#1f1c16]"><Globe2 className="size-4" /><MoreHorizontal className="size-4" /></div>
+          <div className="relative mx-auto mb-3 grid size-20 place-items-center overflow-hidden rounded-full bg-[#153c32] text-3xl font-black text-[#ffda46] ring-4 ring-white shadow-md">
+            AS
+            <span className="absolute bottom-1 right-1 size-4 rounded-full border-2 border-white bg-[#65c38c]" />
           </div>
-
-          {/* Shop header */}
-          <div className="px-3 pb-3">
-            <div className="bg-foreground rounded-2xl p-3 text-background text-center">
-              <div className="size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg mx-auto mb-1">
-                🛍️
-              </div>
-              <p className="font-bold text-sm">Awa Style</p>
-              <p className="text-[10px] opacity-80">@awa.style · Dakar, SN</p>
-              <div className="flex justify-center gap-1 mt-2">
-                <span className="bg-white/15 text-[9px] rounded-full px-2 py-0.5">Mode</span>
-                <span className="bg-white/15 text-[9px] rounded-full px-2 py-0.5">Artisanat</span>
-              </div>
-            </div>
+          <p className="text-lg font-black">Awa Studio</p>
+          <p className="mt-1 text-xs leading-relaxed text-black/55">Créatrice, entrepreneure & amoureuse<br />des belles choses ✨</p>
+          <div className="mt-3 flex justify-center gap-3"><Camera className="size-4" /><Music2 className="size-4" /><Video className="size-4" /></div>
+          <div className="mt-4 space-y-2.5 text-left text-xs font-bold">
+            <div className="flex items-center gap-3 rounded-2xl bg-[#ffda46] p-2.5 pr-3 shadow-[3px_3px_0_#171717]"><span className="grid size-9 place-items-center rounded-xl bg-white"><ShoppingBag className="size-4" /></span><span className="flex-1">Découvre ma boutique</span><ChevronRight className="size-4" /></div>
+            <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2.5 pr-3"><span className="grid size-9 place-items-center rounded-xl bg-[#f0e9ff]"><Play className="size-4" /></span><span className="flex-1">Ma dernière vidéo</span><ChevronRight className="size-4" /></div>
+            <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2.5 pr-3"><span className="grid size-9 place-items-center rounded-xl bg-[#dbf6e7]"><MessageCircle className="size-4" /></span><span className="flex-1">Discutons sur WhatsApp</span><ChevronRight className="size-4" /></div>
           </div>
-
-          {/* Products grid */}
-          <div className="px-2 pb-3 grid grid-cols-2 gap-1.5">
-            {products.map((p) => (
-              <div key={p.name} className="rounded-xl overflow-hidden bg-gray-50 border border-black/[0.04]">
-                <div className={`h-16 ${p.bg} flex items-center justify-center text-2xl`}>
-                  {p.emoji}
-                </div>
-                <div className="p-1.5">
-                  <p className="text-[9px] font-semibold text-gray-800 truncate">{p.name}</p>
-                  <p className="text-[9px] text-foreground font-bold">{p.price}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Payments bar */}
-          <div className="mx-2 mb-3 bg-gray-50 rounded-xl px-3 py-2 flex items-center gap-2">
-            <span className="text-sm">💳</span>
-            <div>
-              <p className="text-[9px] font-semibold text-gray-700">Paiement sécurisé</p>
-              <p className="text-[8px] text-muted-foreground">
-                Carte bancaire · Mobile Money
-              </p>
-            </div>
-          </div>
+          <p className="mt-5 text-[10px] font-black tracking-tight">Bio<span className="text-[#dc552f]">-Lien</span></p>
         </div>
-      </div>
-
-      {/* Floating badges */}
-      <motion.div
-        animate={{ y: [0, -6, 0] }}
-        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-        className="absolute -right-4 top-16 bg-white rounded-2xl shadow-xl px-3 py-2 text-xs font-semibold flex items-center gap-1.5 border border-black/5"
-      >
-        <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-        Nouvelle vente! 🎉
       </motion.div>
-
-      <motion.div
-        animate={{ y: [0, 6, 0] }}
-        transition={{ repeat: Infinity, duration: 3, ease: "easeInOut", delay: 1 }}
-        className="absolute -left-6 bottom-24 bg-white rounded-2xl shadow-xl px-3 py-2 text-xs font-semibold border border-black/5"
-      >
-        💰 +12 500 FCFA
-      </motion.div>
+      {!compact && <>
+        <motion.div animate={{ y: [0,-8,0] }} transition={{ duration: 3, repeat: Infinity }} className="absolute -right-8 top-28 rounded-2xl border border-black/5 bg-white px-4 py-3 text-xs font-bold shadow-xl"><span className="mr-2 text-[#5c35e8]">↗</span> +48 clics aujourd’hui</motion.div>
+        <motion.div animate={{ y: [0,7,0] }} transition={{ duration: 3.5, repeat: Infinity }} className="absolute -left-10 bottom-24 rounded-2xl bg-[#153c32] px-4 py-3 text-xs font-bold text-white shadow-xl">● En ligne</motion.div>
+      </>}
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Navbar
-// ---------------------------------------------------------------------------
 
 function Navbar() {
   const [open, setOpen] = useState(false);
@@ -1129,48 +1053,11 @@ function Footer() {
             </ul>
           </div>
 
-          {/* Entreprise */}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-300 mb-4">
-              Entreprise
-            </p>
-            <ul className="space-y-2.5 text-sm">
-              {[
-                { label: "Tarifs", href: "/pricing" },
-                { label: "Conditions d'utilisation", href: "/legal/terms" },
-                { label: "Confidentialité", href: "/legal/privacy" },
-                { label: "Mentions légales", href: "/legal/mentions" },
-              ].map((l) => (
-                <li key={l.href}>
-                  <a
-                    href={l.href}
-                    className="hover:text-white transition-colors"
-                  >
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+      <section id="why" className="px-5 py-24 sm:py-32"><div className="mx-auto max-w-7xl"><div className="mb-14 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mb-3 text-xs font-black uppercase tracking-[.2em] text-[#dc552f]">Plus qu’un arbre de liens</p><h2 className="max-w-2xl text-4xl font-black leading-tight tracking-[-.04em] sm:text-6xl">Ta présence digitale,<br />sans la prise de tête.</h2></div><p className="max-w-sm text-black/55">Simple à créer. Beau à regarder. Puissant pour grandir.</p></div><div className="grid gap-4 md:grid-cols-3">{benefits.map((item, i) => <motion.article key={item.title} whileHover={{ y: -6 }} className={`rounded-[2rem] border border-black/10 p-7 sm:p-9 ${i===1 ? "bg-[#153c32] text-white" : i===2 ? "bg-[#f3ecff]" : "bg-[#ffed9d]"}`}><div className={`mb-12 grid size-12 place-items-center rounded-2xl ${i===1 ? "bg-[#ffda46] text-black" : "bg-white"}`}><item.icon /></div><h3 className="text-2xl font-black tracking-tight">{item.title}</h3><p className={`mt-3 leading-relaxed ${i===1 ? "text-white/65" : "text-black/55"}`}>{item.text}</p></motion.article>)}</div></div></section>
 
-        {/* Bottom bar */}
-        <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
-          <p>© {currentYear} Bio-Lien. Tous droits réservés.</p>
-          <div className="flex items-center gap-2 font-semibold text-gray-500">
-            <span>🌍</span>
-            <span>Made in Africa, for Africa</span>
-            <span>❤️</span>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
+      <section id="product" className="bg-[#f1ede4] px-5 py-24 sm:py-32"><div className="mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-2"><div className="relative min-h-[570px] overflow-hidden rounded-[3rem] bg-[#dc552f] p-10"><div className="absolute -bottom-20 -left-10 size-80 rounded-full bg-[#ffda46]" /><div className="absolute -right-14 top-12 size-52 rounded-full border-[35px] border-[#c8b9ff]" /><CreatorPhone compact /><div className="absolute bottom-7 right-7 rounded-2xl bg-white p-4 shadow-xl"><BarChart3 className="mb-3 text-[#5b36e8]" /><p className="text-2xl font-black">2 849</p><p className="text-xs text-black/50">vues ce mois</p></div></div><div><p className="text-xs font-black uppercase tracking-[.2em] text-[#dc552f]">Ton copilote créatif</p><h2 className="mt-4 text-4xl font-black leading-tight tracking-[-.04em] sm:text-6xl">Tu imagines.<br />Bio-Lien fait le reste.</h2><div className="mt-10 space-y-7">{[{icon:Sparkles,t:"Une bio brillante grâce à l’IA"},{icon:Palette,t:"Des thèmes vraiment personnalisables"},{icon:Zap,t:"Des liens détectés et habillés automatiquement"},{icon:BarChart3,t:"Des statistiques lisibles, enfin"}].map(({icon:Icon,t})=><div key={t} className="flex items-center gap-4 border-b border-black/10 pb-6"><span className="grid size-11 place-items-center rounded-xl bg-white"><Icon className="size-5" /></span><p className="font-bold">{t}</p></div>)}</div></div></div></section>
 
-// ---------------------------------------------------------------------------
-// Page entry point
-// ---------------------------------------------------------------------------
+      <section id="templates" className="px-5 py-24 sm:py-32"><div className="mx-auto max-w-7xl text-center"><p className="text-xs font-black uppercase tracking-[.2em] text-[#5b36e8]">Trouve ton style</p><h2 className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">Pas un profil comme les autres.</h2><p className="mx-auto mt-5 max-w-xl text-black/55">Pars d’un template et rends-le totalement unique. Change tout, quand tu veux.</p><div className="mt-14 grid gap-5 md:grid-cols-3">{templates.map((t, i)=><motion.div key={t.name} whileHover={{ y:-8, rotate: i===1 ? 1 : -1 }} className="rounded-[2.2rem] border border-black/10 p-3 text-left shadow-sm" style={{background:t.bg}}><div className="rounded-[1.7rem] bg-white/75 p-6 text-center backdrop-blur"><div className="mx-auto grid size-16 place-items-center rounded-full text-2xl font-black text-white" style={{background:t.accent}}>{t.avatar}</div><h3 className="mt-4 text-xl font-black">{t.name}</h3><p className="text-xs text-black/50">{t.role}</p><div className="mt-6 space-y-2">{t.links.map(link=><div key={link} className="rounded-xl px-4 py-3 text-xs font-bold text-white" style={{background:t.accent}}>{link}</div>)}</div></div></motion.div>)}</div><Link href="/register" className="mt-10 inline-flex items-center gap-2 rounded-full border-2 border-black px-6 py-3 text-sm font-black">Voir tous les templates <ArrowRight className="size-4" /></Link></div></section>
 
 const SITE_URL = "https://www.bio-lien.com";
 
