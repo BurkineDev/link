@@ -207,6 +207,11 @@
 }
 
 @layer utilities {
+  .bio-grid {
+    background-image: radial-gradient(circle, rgb(23 23 23 / 12%) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: linear-gradient(to bottom, black, transparent 80%);
+  }
   /* Mobile-first touch targets — minimum 44px for Africa mobile UX */
   .touch-target {
     @apply min-h-[44px] min-w-[44px];
