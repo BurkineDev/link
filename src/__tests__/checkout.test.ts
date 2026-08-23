@@ -60,13 +60,31 @@ jest.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 // Admin client (subscription past_due check + stock RPCs since the 006
 // security hardening migration revoked EXECUTE from public roles).
 const mockAdminClient = {
-  from: () => ({
-    select: () => ({
-      eq: () => ({
-        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  // La commande s'écrit avec la clé service : `orders` autorise l'insertion
+  // publique mais réserve la lecture au propriétaire, et PostgREST traduit
+  // `.insert().select()` en `INSERT ... RETURNING`, que Postgres refuse alors.
+  from: (table: string) => {
+    if (table === "orders") {
+      return {
+        insert: () => ({
+          select: () => ({
+            single: () =>
+              _orderError
+                ? Promise.resolve({ data: null, error: _orderError })
+                : Promise.resolve({ data: { id: ORDER_ID }, error: null }),
+          }),
+        }),
+        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      };
+    }
+    return {
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        }),
       }),
-    }),
-  }),
+    };
+  },
   rpc: (fn: string) => {
     if (fn === "reserve_stock") {
       return Promise.resolve({ data: _reserveResult, error: null });
