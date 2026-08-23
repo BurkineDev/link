@@ -513,9 +513,12 @@ function Features() {
     },
     {
       icon: Package,
-      title: "Gestion des stocks",
+      title: "Suivi des stocks",
+      // « Alertes automatiques quand le stock est bas » a été retiré : cette
+      // fonctionnalité n'existe nulle part dans le code. Ce qui suit décrit
+      // ce que `reserve_stock` fait réellement.
       description:
-        "Suis tes inventaires en temps réel. Alertes automatiques quand le stock est bas.",
+        "Le compteur baisse à chaque commande payée, et un article épuisé n'est plus commandable.",
       color: "text-[var(--success)]",
       bg: "bg-[var(--success)]/10",
     },
@@ -537,9 +540,13 @@ function Features() {
     },
     {
       icon: Headphones,
-      title: "Support 24/7",
+      title: "Un vrai humain te répond",
+      // Disait « Support 24/7 — notre équipe basée en Afrique répond en
+      // français, anglais et langues locales ». Rien de tout cela n'est vrai
+      // aujourd'hui : ni l'astreinte permanente, ni l'équipe, ni les langues.
+      // Une promesse de support invérifiable se paie au premier client déçu.
       description:
-        "Notre équipe basée en Afrique répond en français, anglais et langues locales. Toujours là pour toi.",
+        "Écris à support@bio-lien.com et une personne te répond en français. Pas de robot, pas de formulaire à rallonge.",
       color: "text-foreground",
       bg: "bg-muted",
     },
