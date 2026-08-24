@@ -7,64 +7,55 @@
 /* ---------------------------------------------------------------------------
    Jetons de marque
    ---------------------------------------------------------------------------
-   Le système de design de la page d'accueil, tel que fourni.
+   UN seul système, et un seul. La page portait trois palettes qui ne se
+   parlaient pas (crème/jaune, orange/blanc, lilas) : c'est ça, et pas le
+   détail des composants, qui donnait l'impression que personne n'avait
+   dessiné l'ensemble.
+
+   Le système retenu : orange en primaire, violet en secondaire, encre marine
+   pour le texte et les surfaces sombres, blanc et brume pour les fonds. Deux
+   couleurs d'accent, pas cinq — c'est ce qui fait tenir les lignes.
 
    Volontairement séparés des jetons sémantiques de l'application
    (`--primary`, `--background`…) : ceux-là habillent aussi le tableau de bord
    et, surtout, les boutiques publiques, où chaque vendeur superpose son propre
    thème. Les écraser repeindrait la boutique de tout le monde sans que
    personne l'ait demandé.
-
-   Ces variables-ci ne s'appliquent qu'aux surfaces de marque.
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Fonds */
-  --brand-cream: #faf6ec;
-  --brand-cream-deep: #f1ede4;
-  --brand-cream-soft: #f8efd7;
-  --brand-paper: #fffaf0;
+  /* Accent primaire */
+  --b-orange: #f2621a;
+  --b-orange-deep: #d94f0c;
+  --b-orange-soft: #fff1e6;
 
-  /* Encre */
-  --brand-ink: #171717;
+  /* Accent secondaire */
+  --b-violet: #6d40e8;
+  --b-violet-deep: #5a2fd0;
+  --b-violet-soft: #f2ecff;
 
-  /* Accents */
-  --brand-yellow: #ffda46;
-  --brand-yellow-soft: #ffed9d;
-  --brand-clay: #dc552f;
-  --brand-forest: #153c32;
-  --brand-violet: #5b36e8;
-  --brand-violet-soft: #f3ecff;
+  /* Encre & surfaces */
+  --b-ink: #14181f;
+  --b-ink-soft: #1d232e;
+  --b-slate: #4a5565;
+  --b-line: #e9e9ee;
+  --b-paper: #ffffff;
+  --b-mist: #fbf9f8;
 
-  /* Teintes des templates */
-  --brand-lilac: #c8b9ff;
-  --brand-lime: #d8f83d;
-  --brand-peach: #f5d6c6;
-  --brand-orange: #ff5d35;
+  /* Rayons — une seule échelle */
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 26px;
+  --r-xl: 36px;
+  --r-full: 999px;
 
-  /* Ombres dures — la signature du système : aucun flou. */
-  --brand-shadow-sm: 3px 3px 0 var(--brand-ink);
-  --brand-shadow: 4px 4px 0 var(--brand-ink);
-  --brand-shadow-accent: 6px 6px 0 var(--brand-yellow);
-
-  /* --- Système « lien en bio » : orange sur blanc ---------------------
-     Second système de marque, apporté par le design du héros. Il coexiste
-     avec le système crème/jaune plutôt que de l'écraser : les deux servent
-     des sections différentes de la même page, et fusionner les deux
-     palettes donnerait une troisième chose que personne n'a dessinée. */
-  --hero-orange: #f2621a;
-  --hero-orange-deep: #e2540f;
-  --hero-orange-soft: #fff1e6;
-  --hero-navy: #14181f;
-  --hero-slate: #4a5565;
-  --hero-peach: #fff6ef;
-  --hero-line: #ececec;
-
-  /* Rayons */
-  --brand-radius-pill: 999px;
-  --brand-radius-card: 32px;
-  --brand-radius-hero: 48px;
-  --brand-radius-chip: 16px;
+  /* Ombres — une seule famille, diffuse. Plus d'ombres dures décalées :
+     les deux langages ne peuvent pas cohabiter sur une même page. */
+  --sh-1: 0 1px 2px rgb(20 24 31 / 6%), 0 4px 14px rgb(20 24 31 / 5%);
+  --sh-2: 0 10px 34px rgb(20 24 31 / 9%);
+  --sh-3: 0 26px 64px rgb(20 24 31 / 14%);
+  --sh-orange: 0 12px 30px rgb(242 98 26 / 30%);
+  --sh-violet: 0 12px 30px rgb(109 64 232 / 26%);
 }
 
 @theme inline {
@@ -219,10 +210,60 @@
   }
 }
 
-/* Flottement léger des vignettes du héros. Coupé net quand le visiteur a
-   demandé moins d'animations — un mouvement permanent en arrière-plan est
-   exactement ce que ce réglage existe pour supprimer. */
-@keyframes floaty {
+/* ---------------------------------------------------------------------------
+   Verre liquide
+   ---------------------------------------------------------------------------
+   Trois ingrédients, pas un de plus : des masses de couleur floues qui
+   dérivent lentement (`liquid-blob`), des surfaces translucides qui laissent
+   passer ce qui bouge derrière (`.glass`), et un reflet qui balaie la surface
+   une fois de temps en temps (`.glass-sheen`).
+
+   `backdrop-filter` coûte cher sur un Android d'entrée de gamme, et nos
+   visiteurs ouvrent la page depuis le navigateur intégré de TikTok sur une
+   connexion lente. D'où la discipline : quelques surfaces en verre, quatre
+   masses au maximum par section, aucun flou au-delà de 70px, et tout se coupe
+   net si le visiteur a demandé moins d'animations.
+--------------------------------------------------------------------------- */
+
+@keyframes liquid-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(7%, -9%, 0) scale(1.09);
+  }
+  66% {
+    transform: translate3d(-6%, 7%, 0) scale(0.94);
+  }
+}
+
+/* Le contour qui ondule : c'est lui qui fait « liquide » plutôt que
+   « bulle floue ». */
+@keyframes liquid-morph {
+  0%,
+  100% {
+    border-radius: 42% 58% 55% 45% / 48% 42% 58% 52%;
+  }
+  33% {
+    border-radius: 58% 42% 38% 62% / 55% 60% 40% 45%;
+  }
+  66% {
+    border-radius: 38% 62% 62% 38% / 42% 48% 52% 58%;
+  }
+}
+
+@keyframes glass-sheen {
+  0% {
+    transform: translateX(-130%) skewX(-18deg);
+  }
+  45%,
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+  }
+}
+
+@keyframes bio-float {
   0%,
   100% {
     transform: translateY(-5px);
@@ -232,9 +273,75 @@
   }
 }
 
+@layer utilities {
+  .liquid-blob {
+    position: absolute;
+    filter: blur(58px);
+    opacity: 0.5;
+    will-change: transform;
+    animation:
+      liquid-drift 22s ease-in-out infinite,
+      liquid-morph 18s ease-in-out infinite;
+  }
+
+  .glass {
+    background: linear-gradient(
+      135deg,
+      rgb(255 255 255 / 72%),
+      rgb(255 255 255 / 44%)
+    );
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgb(255 255 255 / 70%);
+    box-shadow:
+      var(--sh-2),
+      inset 0 1px 0 rgb(255 255 255 / 85%);
+  }
+
+  /* Même recette sur fond sombre : le verre y prend la lumière par le haut. */
+  .glass-dark {
+    background: linear-gradient(
+      135deg,
+      rgb(255 255 255 / 12%),
+      rgb(255 255 255 / 5%)
+    );
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgb(255 255 255 / 14%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 18%);
+  }
+
+  .glass-sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .glass-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 38%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 20%),
+      transparent
+    );
+    pointer-events: none;
+    animation: glass-sheen 11s ease-in-out infinite;
+  }
+
+  .animate-bio-float {
+    animation: bio-float 6s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [style*="floaty"] {
-    animation: none !important;
+  .liquid-blob,
+  .glass-sheen::after,
+  .animate-bio-float {
+    animation: none;
   }
 }
 
@@ -298,32 +405,5 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: oklch(0.85 0 0) transparent;
-  }
-}
-
-/* ---------------------------------------------------------------------------
- * Floating product illustration
- * ---------------------------------------------------------------------------
- * Replaces a framer-motion loop. The public bio page is opened from a TikTok
- * or Instagram in-app browser on 3G, so it must not pay ~50 KB of animation
- * runtime for a decorative 6-second float. Honours reduced-motion.
- */
-@keyframes bio-float {
-  0%,
-  100% {
-    transform: translateY(-4px);
-  }
-  50% {
-    transform: translateY(4px);
-  }
-}
-
-.animate-bio-float {
-  animation: bio-float 6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-bio-float {
-    animation: none;
   }
 }
