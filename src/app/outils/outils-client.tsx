@@ -3,9 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  BrandBackdrop,
+  Wordmark,
+} from "@/components/brand/brand-shell";
+import {
   ArrowRight,
   Calculator,
-  Check,
   Clipboard,
   Loader2,
   MessageCircle,
@@ -17,8 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type Tone = "pro" | "friendly" | "premium";
@@ -135,7 +136,11 @@ function DescriptionGenerator() {
         onChange={(value) => setTone(value as Tone)}
         options={Object.entries(toneLabels).map(([value, label]) => ({ value, label }))}
       />
-      <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2">
+      <Button
+        onClick={handleGenerate}
+        disabled={loading}
+        className="w-full gap-2 rounded-[var(--r-full)] bg-[var(--b-ink)] py-6 font-bold text-[var(--b-on-dark)] hover:bg-[var(--b-ink-hover)]"
+      >
         {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
         {loading ? "Génération IA en cours…" : "Générer avec IA"}
       </Button>
@@ -144,7 +149,7 @@ function DescriptionGenerator() {
           <Output value={result} />
           <Button
             type="button"
-            className="w-full gradient-brand text-white"
+            className="w-full rounded-[var(--r-full)] bg-[var(--b-lime)] font-bold text-[var(--b-ink)] hover:bg-[var(--b-lime-deep)]"
             onClick={() => saveProductDraft({ name, description: result })}
           >
             Utiliser dans ma boutique
@@ -196,7 +201,7 @@ function WhatsAppGenerator() {
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nom de ta boutique">
-          <Input placeholder="ex: Awa Beauty" value={shopName} onChange={(e) => setShopName(e.target.value)} />
+          <Input placeholder="ex : Ma boutique" value={shopName} onChange={(e) => setShopName(e.target.value)} />
         </Field>
         <Field label="Produit (optionnel)">
           <Input placeholder="ex: Huile de coco" value={product} onChange={(e) => setProduct(e.target.value)} />
@@ -208,7 +213,11 @@ function WhatsAppGenerator() {
         onChange={(value) => setIntent(value as FollowUpIntent)}
         options={Object.entries(followUpLabels).map(([value, label]) => ({ value, label }))}
       />
-      <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white">
+      <Button
+        onClick={handleGenerate}
+        disabled={loading}
+        className="w-full gap-2 rounded-[var(--r-full)] bg-[var(--b-ink)] py-6 font-bold text-[var(--b-on-dark)] hover:bg-[var(--b-ink-hover)]"
+      >
         {loading ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />}
         {loading ? "Génération IA en cours…" : "Générer avec IA"}
       </Button>
@@ -273,21 +282,41 @@ function MarginCalculator() {
         </Field>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
+        {/* Le prix conseillé est la réponse à la question posée : la maquette
+            le met en citron, les deux autres restent des appoints. */}
         {[
-          ["Prix conseillé", formatCurrency(numbers.price)],
-          ["Coût total", formatCurrency(numbers.totalCost)],
-          ["Profit", formatCurrency(numbers.profit)],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-border bg-muted/40 p-4">
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 text-lg font-black">{value}</p>
+          ["Prix conseillé", formatCurrency(numbers.price), true],
+          ["Coût total", formatCurrency(numbers.totalCost), false],
+          ["Profit", formatCurrency(numbers.profit), false],
+        ].map(([label, value, lead]) => (
+          <div
+            key={label as string}
+            className="rounded-[var(--r-md)] p-4.5"
+            style={
+              lead
+                ? { background: "var(--b-lime)" }
+                : {
+                    background: "var(--b-wash)",
+                    border: "1px solid var(--b-line)",
+                  }
+            }
+          >
+            <p
+              className="text-[12px] font-bold uppercase tracking-[0.06em]"
+              style={{ color: lead ? "var(--b-olive)" : "var(--b-faint)" }}
+            >
+              {label}
+            </p>
+            <p className="mt-1.5 text-[24px] font-bold tracking-[-0.02em]">
+              {value}
+            </p>
           </div>
         ))}
       </div>
       <Output value={summary} />
       <Button
         type="button"
-        className="w-full gradient-brand text-white"
+        className="w-full rounded-[var(--r-full)] bg-[var(--b-lime)] font-bold text-[var(--b-ink)] hover:bg-[var(--b-lime-deep)]"
         onClick={() => saveProductDraft({ price: Math.round(numbers.price) })}
       >
         Envoyer ce prix vers ma fiche produit
@@ -310,29 +339,35 @@ function ToolCard({
   accent: "emerald" | "sky" | "amber";
   children: React.ReactNode;
 }) {
-  const accentClass = {
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    sky: "bg-sky-50 text-sky-700 border-sky-100",
-    amber: "bg-amber-50 text-amber-700 border-amber-100",
+  // Les trois teintes d'étiquette de la maquette, une par outil.
+  const accentStyle = {
+    emerald: { background: "#EAF6D8", color: "#4E6B14" },
+    sky: { background: "#E4EFFA", color: "#1D4E7A" },
+    amber: { background: "#FAF0DC", color: "#7A5A14" },
   }[accent];
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-white shadow-sm">
-      <CardContent className="p-5 sm:p-6">
-        <div className="mb-5 flex items-start gap-3">
-          <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-lg border", accentClass)}>
-            <Icon className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-lg font-black tracking-tight">{title}</h2>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-4">{children}</div>
-      </CardContent>
-    </Card>
+    <div
+      className="flex h-full flex-col gap-4 rounded-[var(--r-xl)] p-7"
+      style={{
+        background: "var(--b-paper)",
+        border: "1px solid var(--b-line)",
+      }}
+    >
+      <div>
+        <span
+          className="inline-flex items-center gap-2 rounded-[var(--r-xs)] px-3 py-2 text-[12px] font-bold uppercase tracking-[.06em]"
+          style={accentStyle}
+        >
+          <Icon className="size-3.5" />
+          {title}
+        </span>
+        <p className="mt-3 text-[14px]" style={{ color: "var(--b-muted)" }}>
+          {description}
+        </p>
+      </div>
+      <div className="flex flex-1 flex-col gap-4">{children}</div>
+    </div>
   );
 }
 
@@ -376,10 +411,10 @@ function SegmentedControl({
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
+              "rounded-[var(--r-full)] border px-4 py-2.5 text-[13.5px] font-semibold transition-colors",
               value === option.value
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background text-muted-foreground hover:text-foreground"
+                ? "border-[var(--b-ink)] bg-[var(--b-ink)] text-[var(--b-on-dark)]"
+                : "border-[var(--b-line)] bg-white text-[var(--b-muted)] hover:border-[var(--b-ink)]",
             )}
           >
             {option.label}
@@ -414,66 +449,142 @@ function Output({ value }: { value: string }) {
 
 export function OutilsClient() {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b border-border bg-muted/30 pt-24">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 lg:grid-cols-[1fr_360px] lg:items-end">
-          <div>
-            <Badge className="mb-5 border-primary/20 bg-primary/10 text-primary hover:bg-primary/10">
-              <Sparkles className="mr-1 size-3.5" />
-              Outils gratuits pour vendre plus vite
-            </Badge>
-            <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight sm:text-5xl">
-              Transforme tes idées, tes produits et tes DM en ventes.
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Génère des descriptions, des messages WhatsApp et des prix avec
-              marge. Quand le produit est prêt, ajoute-le dans une boutique Link
-              et partage ton lien.
-            </p>
+    <div
+      className="relative min-h-screen font-[family-name:var(--font-brand)]"
+      style={{ background: "var(--b-canvas)", color: "var(--b-ink)" }}
+    >
+      <BrandBackdrop />
+
+      <div className="relative z-10 mx-auto max-w-[1100px] px-5 sm:px-8 lg:px-12">
+        <nav className="flex items-center justify-between gap-6 py-5.5">
+          <Wordmark />
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/login"
+              className="px-3.5 py-2.5 text-[15px] font-medium no-underline transition-colors hover:text-[var(--b-muted)]"
+              style={{ color: "var(--b-ink)" }}
+            >
+              Se connecter
+            </Link>
+            <Link
+              href="/register"
+              className="whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors hover:bg-[var(--b-ink-hover)]"
+              style={{ background: "var(--b-ink)", color: "var(--b-on-dark)" }}
+            >
+              Créer ma boutique
+            </Link>
           </div>
-          <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-            <p className="text-sm font-bold">Prochaine étape</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Ces outils t&apos;aident à préparer la vente. Bio-Lien t&apos;aide à
-              encaisser et suivre les commandes.
-            </p>
-            <Button className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90 border-0" asChild>
-              <Link href="/register">
+        </nav>
+
+        <main>
+          <section className="grid items-end gap-7 py-10 lg:grid-cols-[1fr_360px] lg:gap-12">
+            <div>
+              <span
+                className="inline-flex items-center gap-2 rounded-[var(--r-full)] px-4 py-2 text-[13.5px] font-medium"
+                style={{
+                  background: "var(--b-paper)",
+                  border: "1px solid var(--b-line)",
+                }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: "var(--b-green-bright)" }}
+                  aria-hidden
+                />
+                Outils gratuits pour vendre plus vite
+              </span>
+              <h1
+                className="mt-5.5 max-w-[18ch] text-[clamp(34px,4.4vw,54px)] font-bold leading-[1.06] tracking-[-0.03em]"
+                style={{ textWrap: "balance" }}
+              >
+                Transforme tes idées, tes produits et tes DM en ventes.
+              </h1>
+              <p
+                className="mt-4.5 max-w-[52ch] text-[16.5px] leading-[1.6]"
+                style={{ color: "var(--b-muted)" }}
+              >
+                Génère des descriptions, des messages WhatsApp et des prix avec
+                marge. Quand le produit est prêt, ajoute-le dans ta boutique
+                Bio-Lien et partage ton lien.
+              </p>
+            </div>
+
+            <div
+              className="max-w-[360px] rounded-[var(--r-xl)] p-6"
+              style={{
+                background: "var(--b-paper)",
+                border: "1px solid var(--b-line)",
+                boxShadow: "var(--sh-2)",
+              }}
+            >
+              <p className="text-[14.5px] font-bold">Prochaine étape</p>
+              <p
+                className="mt-2 text-[14px] leading-[1.6]"
+                style={{ color: "var(--b-muted)" }}
+              >
+                Ces outils t&apos;aident à préparer la vente. Bio-Lien t&apos;aide
+                à encaisser et suivre les commandes.
+              </p>
+              <Link
+                href="/register"
+                className="mt-4 flex items-center justify-center gap-2 rounded-[var(--r-full)] py-3.5 text-[14.5px] font-bold no-underline transition-colors hover:bg-[var(--b-lime-deep)]"
+                style={{ background: "var(--b-lime)", color: "var(--b-ink)" }}
+              >
                 Créer ma boutique
                 <ArrowRight className="size-4" />
               </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+            </div>
+          </section>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-4 py-8 lg:grid-cols-2">
-        <DescriptionGenerator />
-        <WhatsAppGenerator />
-        <div className="lg:col-span-2">
-          <MarginCalculator />
-        </div>
-      </section>
+          <section className="grid gap-4.5 pb-4 lg:grid-cols-2">
+            <DescriptionGenerator />
+            <WhatsAppGenerator />
+            <div className="lg:col-span-2">
+              <MarginCalculator />
+            </div>
+          </section>
 
-      <section className="mx-auto max-w-6xl px-4 pb-14">
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-foreground p-6 text-background sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-semibold text-background/70">
-              <Check className="size-4" />
-              Prêt à vendre au lieu de juste répondre aux messages ?
-            </p>
-            <h2 className="mt-2 text-2xl font-black">
-              Mets tes produits dans une boutique partageable.
-            </h2>
-          </div>
-          <Button className="bg-background text-foreground hover:bg-background/90" asChild>
-            <Link href="/register">
-              Lancer Bio-Lien
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        </div>
-      </section>
-    </main>
+          <section className="py-6 pb-14">
+            <div
+              className="flex flex-col gap-5 rounded-[var(--r-2xl)] p-7 sm:flex-row sm:items-center sm:justify-between sm:p-11"
+              style={{ background: "var(--b-ink)", color: "var(--b-on-dark)" }}
+            >
+              <div>
+                <p
+                  className="text-[14px] font-semibold"
+                  style={{ color: "var(--b-on-dark-muted)" }}
+                >
+                  Prêt à vendre au lieu de juste répondre aux messages ?
+                </p>
+                <h2
+                  className="mt-2 text-[clamp(22px,2.6vw,30px)] font-bold tracking-[-0.02em]"
+                  style={{ color: "var(--b-lime)" }}
+                >
+                  Mets tes produits dans une boutique partageable.
+                </h2>
+              </div>
+              <Link
+                href="/register"
+                className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--r-full)] px-6.5 py-3.5 text-[15px] font-bold no-underline transition-colors hover:bg-[var(--b-lime)]"
+                style={{ background: "var(--b-on-dark)", color: "var(--b-ink)" }}
+              >
+                Lancer Bio-Lien
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          </section>
+        </main>
+
+        <footer
+          className="flex flex-wrap items-center justify-between gap-x-7 gap-y-3 pb-10 text-[13.5px]"
+          style={{ color: "var(--b-faint)" }}
+        >
+          <Wordmark className="text-[15px]" href={null} />
+          <span>
+            Outils gratuits — générations limitées à 30 par jour et par personne
+          </span>
+        </footer>
+      </div>
+    </div>
   );
 }

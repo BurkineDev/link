@@ -6,7 +6,7 @@ import {
   Playfair_Display,
   JetBrains_Mono,
   DM_Serif_Display,
-  Bricolage_Grotesque,
+  Space_Grotesk,
 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
@@ -19,16 +19,16 @@ const geistSans = Geist({
 });
 
 /**
- * Police de la marque, telle que définie dans le design.
+ * Police de la marque, telle que définie dans les maquettes.
  *
  * Chargée ici pour que la variable existe sur tout le document, mais elle
- * n'est appliquée qu'aux surfaces de marque : le tableau de bord et les
- * boutiques des vendeurs gardent leurs propres polices.
+ * n'est appliquée qu'aux surfaces de marque : les boutiques des vendeurs
+ * gardent la police que chaque vendeur a choisie.
  */
-const bricolage = Bricolage_Grotesque({
+const spaceGrotesk = Space_Grotesk({
   variable: "--font-brand",
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "600", "700", "800"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -150,7 +150,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

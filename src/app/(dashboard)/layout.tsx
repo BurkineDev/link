@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar, BottomNav } from "@/components/dashboard/sidebar";
-import { Logo } from "@/components/shared/logo";
+import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
 import {
   Avatar,
   AvatarFallback,
@@ -70,19 +70,23 @@ export default async function DashboardLayout({
     .slice(0, 2);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div
+      className="relative flex h-screen overflow-hidden font-[family-name:var(--font-brand)]"
+      style={{ background: "var(--b-canvas)", color: "var(--b-ink)" }}
+    >
+      <BrandBackdrop />
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      <div className="relative z-10 hidden md:flex">
         <Sidebar shopSlug={shop?.slug} shopName={shop?.name} />
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        {/* Top header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/75 backdrop-blur-xl px-4 md:px-5 gap-4">
-          {/* Mobile: logo */}
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Top header — transparent : le fond lilas traverse. */}
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 px-4 md:px-5">
+          {/* Mobile: logotype */}
           <div className="flex items-center gap-3 md:hidden">
-            <Logo size="sm" href="/dashboard" />
+            <Wordmark className="text-[19px]" href="/dashboard" />
           </div>
 
           {/* Desktop: shop status pill */}
@@ -101,8 +105,8 @@ export default async function DashboardLayout({
                 className={[
                   "rounded-full px-2 py-0.5 text-[10px] font-semibold",
                   shop.is_published
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    : "bg-amber-50 text-amber-700 border border-amber-200",
+                    ? "bg-[var(--b-lime)] text-[var(--b-ink)]"
+                    : "bg-[var(--b-wash)] text-[var(--b-muted)] border border-[var(--b-line)]",
                 ].join(" ")}
               >
                 {shop.is_published ? "En ligne" : "Hors ligne"}
@@ -117,7 +121,7 @@ export default async function DashboardLayout({
                 href={`/${shop.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 sm:flex"
+                className="hidden items-center gap-1.5 rounded-[var(--r-full)] border border-[var(--b-line)] bg-white px-4 py-2 text-xs font-semibold text-foreground transition-colors duration-200 hover:border-[var(--b-ink)] sm:flex"
               >
                 <ExternalLinkIcon className="size-3.5" />
                 Voir ma boutique

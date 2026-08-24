@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { StatsCard } from "@/components/dashboard/stats-card";
 import { OrderStatusBadge } from "@/components/dashboard/order-status-badge";
 import { BoostCard } from "@/components/dashboard/boost-card";
 import {
@@ -13,9 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  BanknoteIcon,
   ShoppingBagIcon,
-  PackageIcon,
   EyeIcon,
   PlusIcon,
   Share2Icon,
@@ -47,6 +44,63 @@ function formatDate(iso: string): string {
 
 function shortId(id: string): string {
   return `#${id.slice(0, 8).toUpperCase()}`;
+}
+
+/** Tuile de chiffre, dans les trois tons de la maquette. */
+function Tile({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  note: string;
+  tone: "lime" | "paper" | "ink";
+}) {
+  const skin = {
+    lime: {
+      box: { background: "var(--b-lime)" },
+      label: "var(--b-olive)",
+      note: "var(--b-olive)",
+      value: "var(--b-ink)",
+    },
+    paper: {
+      box: {
+        background: "var(--b-paper)",
+        border: "1px solid var(--b-line)",
+      },
+      label: "var(--b-faint)",
+      note: "var(--b-faint)",
+      value: "var(--b-ink)",
+    },
+    ink: {
+      box: { background: "var(--b-ink)" },
+      label: "var(--b-lime)",
+      note: "var(--b-on-dark-faint)",
+      value: "var(--b-on-dark)",
+    },
+  }[tone];
+
+  return (
+    <div className="rounded-[var(--r-lg)] p-5" style={skin.box}>
+      <div
+        className="text-[12.5px] font-bold uppercase tracking-[0.06em]"
+        style={{ color: skin.label }}
+      >
+        {label}
+      </div>
+      <div
+        className="mt-2 text-[26px] font-bold tracking-[-0.02em]"
+        style={{ color: skin.value }}
+      >
+        {value}
+      </div>
+      <div className="mt-1 text-[12.5px]" style={{ color: skin.note }}>
+        {note}
+      </div>
+    </div>
+  );
 }
 
 export default async function DashboardPage() {
@@ -89,9 +143,10 @@ export default async function DashboardPage() {
   let ordersCount = 0;
   let productsCount = 0;
   let recentOrders: OrderRow[] = [];
+  let viewsCount = 0;
 
   if (shop?.id) {
-    const [ordersStatsResult, productsResult, recentOrdersResult] =
+    const [ordersStatsResult, productsResult, recentOrdersResult, viewsResult] =
       await Promise.all([
         supabase
           .from("orders")
@@ -107,6 +162,13 @@ export default async function DashboardPage() {
           .eq("shop_id", shop.id)
           .order("created_at", { ascending: false })
           .limit(5),
+        // La table est alimentée par track_shop_page_view à chaque ouverture
+        // de la page publique. La carte affichait « bientôt disponible »
+        // alors que le chiffre existait déjà.
+        supabase
+          .from("shop_page_views")
+          .select("id", { count: "exact", head: true })
+          .eq("shop_id", shop.id),
       ]);
 
     const ordersStats = ordersStatsResult.data ?? [];
@@ -116,6 +178,7 @@ export default async function DashboardPage() {
       .reduce((sum, o) => sum + (o.total_amount ?? 0), 0);
     productsCount = productsResult.count ?? 0;
     recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
+    viewsCount = viewsResult.count ?? 0;
   }
 
   const currency = shop?.currency ?? "XOF";
@@ -125,15 +188,16 @@ export default async function DashboardPage() {
       {/* Page header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground/60 capitalize">
+          <p
+            className="text-[12px] font-bold uppercase capitalize tracking-[0.12em]"
+            style={{ color: "var(--b-faint)" }}
+          >
             {todayLabel}
           </p>
-          <h1 className="mt-1 text-[26px] font-black leading-tight tracking-tight">
-            Bonjour,{" "}
-            <span className="text-primary">{displayName}</span>{" "}
-            <span className="not-gradient">👋</span>
+          <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em]">
+            Bonjour, {displayName}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1.5 text-sm" style={{ color: "var(--b-muted)" }}>
             Voici un aperçu de ta boutique aujourd&apos;hui.
           </p>
         </div>
@@ -142,10 +206,10 @@ export default async function DashboardPage() {
             href={`/${shop.slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="group hidden shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground hover:shadow-md transition-all duration-200 sm:flex"
+            className="group hidden shrink-0 items-center gap-2 rounded-[var(--r-full)] border border-[var(--b-line)] bg-white px-5 py-2.5 text-sm font-semibold transition-colors duration-200 hover:border-[var(--b-ink)] sm:flex"
           >
-            <EyeIcon className="size-4 text-primary" />
-            Voir ma boutique
+            <EyeIcon className="size-4" />
+            Voir ma page
             <ArrowRightIcon className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
           </a>
         )}
@@ -175,35 +239,32 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatsCard
+      {/* Les quatre tuiles de la maquette : le revenu en citron, l'essentiel
+          en blanc, les visites en encre. */}
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        <Tile
           label="Revenu total"
           value={formatCurrency(totalRevenue, currency)}
-          icon={BanknoteIcon}
-          trendLabel={ordersCount === 0 ? "Aucune vente pour l'instant" : undefined}
-          iconClassName="bg-primary text-primary-foreground"
+          note={ordersCount === 0 ? "aucune vente pour l'instant" : "payé"}
+          tone="lime"
         />
-        <StatsCard
+        <Tile
           label="Commandes"
           value={ordersCount}
-          icon={ShoppingBagIcon}
-          trendLabel={ordersCount === 0 ? "Aucune commande" : undefined}
-          iconClassName="bg-[var(--success)] text-[var(--success-foreground)]"
+          note={ordersCount === 0 ? "aucune commande" : "au total"}
+          tone="paper"
         />
-        <StatsCard
+        <Tile
           label="Produits"
           value={productsCount}
-          icon={PackageIcon}
-          trendLabel={productsCount === 0 ? "Ajoute ton premier produit" : undefined}
-          iconClassName="bg-foreground text-background"
+          note={productsCount === 0 ? "ajoute ton premier produit" : "en ligne"}
+          tone="paper"
         />
-        <StatsCard
-          label="Visites boutique"
-          value={0}
-          icon={EyeIcon}
-          trendLabel="Bientôt disponible"
-          iconClassName="bg-muted text-muted-foreground"
+        <Tile
+          label="Visites"
+          value={viewsCount}
+          note="sur ta page"
+          tone="ink"
         />
       </div>
 

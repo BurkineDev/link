@@ -140,12 +140,15 @@ export function RegisterForm({
   invite,
   next,
   prefilledEmail = null,
+  prefilledUsername = null,
 }: {
   invite: RegisterInvite | null;
   /** Destination interne déjà validée, ou null. */
   next: string | null;
   /** E-mail déjà saisi sur l'accueil, à ne pas redemander. */
   prefilledEmail?: string | null;
+  /** Pseudo réservé sur l'accueil, déjà validé contre le format en base. */
+  prefilledUsername?: string | null;
 }) {
   // Après confirmation de l'e-mail, l'utilisateur passe par l'onboarding — il
   // lui faut une boutique avant de pouvoir s'abonner. `next` est encodé dans
@@ -172,6 +175,7 @@ export function RegisterForm({
     defaultValues: {
       agreed_to_terms: false,
       ...(prefilledEmail ? { email: prefilledEmail } : {}),
+      ...(prefilledUsername ? { username: prefilledUsername } : {}),
     },
   });
 
