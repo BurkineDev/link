@@ -11,7 +11,12 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  searchParams: Promise<{ de?: string; next?: string; email?: string }>;
+  searchParams: Promise<{
+    de?: string;
+    next?: string;
+    email?: string;
+    username?: string;
+  }>;
 }
 
 /**
@@ -32,7 +37,7 @@ interface Props {
  * sur la page d'inscription normale — jamais d'erreur.
  */
 export default async function RegisterPage({ searchParams }: Props) {
-  const { de, next, email } = await searchParams;
+  const { de, next, email, username } = await searchParams;
 
   let invite: RegisterInvite | null = null;
 
@@ -54,11 +59,20 @@ export default async function RegisterPage({ searchParams }: Props) {
       ? email
       : null;
 
+  // Même chose pour le pseudo réservé depuis l'accueil : la contrainte de la
+  // base est `^[a-z0-9_-]{3,30}$`, on ne pré-remplit que ce qui la respecte
+  // déjà — un pseudo refusé d'entrée vaut moins que pas de pseudo du tout.
+  const prefilledUsername =
+    typeof username === "string" && /^[a-z0-9_-]{3,30}$/.test(username)
+      ? username
+      : null;
+
   return (
     <RegisterForm
       invite={invite}
       next={safeNextPath(next)}
       prefilledEmail={prefilledEmail}
+      prefilledUsername={prefilledUsername}
     />
   );
 }

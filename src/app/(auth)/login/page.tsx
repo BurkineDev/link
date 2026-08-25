@@ -144,7 +144,7 @@ export default function LoginPage() {
       return;
     }
 
-    toast.success("Connexion réussie ! Bienvenue 👋");
+    toast.success("Connexion réussie. Bon retour !");
     router.refresh();
     router.push("/dashboard");
   }
@@ -170,41 +170,23 @@ export default function LoginPage() {
   const isLoading = isSubmitting || isGoogleLoading;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-[family-name:var(--font-brand)]">
       {/* Email confirmation banner */}
       <Suspense>
         <RegistrationBanner />
       </Suspense>
 
-      {/* Header */}
-      <div className="space-y-1.5">
-        <h1 className="text-2xl font-black text-foreground">Bon retour 👋</h1>
-        <p className="text-sm text-muted-foreground">
-          Connectez-vous pour accéder à votre boutique.
+      {/* Header — libellés de la maquette « Connexion ». */}
+      <div className="space-y-2">
+        <h1
+          className="text-[26px] font-bold tracking-[-0.025em]"
+          style={{ color: "var(--b-ink)" }}
+        >
+          Bon retour
+        </h1>
+        <p className="text-[14.5px]" style={{ color: "var(--b-muted)" }}>
+          Connectez-vous pour gérer votre page et vos ventes.
         </p>
-      </div>
-
-      {/* Google OAuth */}
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full h-11 gap-3 font-medium"
-        onClick={handleGoogleSignIn}
-        disabled={isLoading}
-      >
-        {isGoogleLoading ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <GoogleIcon className="size-4" />
-        )}
-        Connexion avec Google
-      </Button>
-
-      {/* Divider */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-border" />
-        <span className="text-xs text-muted-foreground px-1">ou par email</span>
-        <div className="flex-1 h-px bg-border" />
       </div>
 
       {/* Email / password form */}
@@ -220,7 +202,10 @@ export default function LoginPage() {
             autoComplete="email"
             placeholder="vous@exemple.com"
             inputMode="email"
-            className={cn("h-11 text-base", errors.email && "border-destructive")}
+            className={cn(
+              "h-12 rounded-[var(--r-sm)] border-[var(--b-line)] bg-[var(--b-wash)] text-base",
+              errors.email && "border-destructive",
+            )}
             aria-invalid={!!errors.email}
             disabled={isLoading}
             {...register("email")}
@@ -240,7 +225,8 @@ export default function LoginPage() {
             </Label>
             <Link
               href="/forgot-password"
-              className="text-xs text-primary hover:underline underline-offset-4 font-medium"
+              className="text-xs font-medium underline-offset-4 hover:underline"
+              style={{ color: "var(--b-muted)" }}
               tabIndex={-1}
             >
               Mot de passe oublié ?
@@ -252,7 +238,10 @@ export default function LoginPage() {
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               placeholder="••••••••"
-              className={cn("h-11 text-base pr-10", errors.password && "border-destructive")}
+              className={cn(
+                "h-12 rounded-[var(--r-sm)] border-[var(--b-line)] bg-[var(--b-wash)] pr-10 text-base",
+                errors.password && "border-destructive",
+              )}
               aria-invalid={!!errors.password}
               disabled={isLoading}
               {...register("password")}
@@ -277,7 +266,7 @@ export default function LoginPage() {
         {/* Submit */}
         <Button
           type="submit"
-          className="w-full h-11 font-semibold gap-2 mt-2"
+          className="mt-2 h-13 w-full gap-2 rounded-[var(--r-full)] bg-[var(--b-lime)] text-[15.5px] font-bold text-[var(--b-ink)] hover:bg-[var(--b-lime-deep)]"
           disabled={isLoading}
         >
           {isSubmitting ? (
@@ -289,14 +278,33 @@ export default function LoginPage() {
         </Button>
       </form>
 
+      {/* Google OAuth — le second bouton de la maquette. Elle proposait un
+          « lien magique » : le produit ne l'implémente pas, et un bouton qui
+          ne fait rien coûte plus cher qu'un bouton absent. */}
+      <Button
+        type="button"
+        variant="outline"
+        className="h-12 w-full gap-3 rounded-[var(--r-full)] border-[var(--b-line)] bg-[var(--b-wash)] font-semibold hover:border-[var(--b-ink)] hover:bg-[var(--b-wash)]"
+        onClick={handleGoogleSignIn}
+        disabled={isLoading}
+      >
+        {isGoogleLoading ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <GoogleIcon className="size-4" />
+        )}
+        Continuer avec Google
+      </Button>
+
       {/* Register link */}
-      <p className="text-center text-sm text-muted-foreground">
-        Pas encore de compte ?{" "}
+      <p className="text-center text-sm" style={{ color: "var(--b-muted)" }}>
+        Pas encore de page ?{" "}
         <Link
           href="/register"
-          className="text-primary font-semibold hover:underline underline-offset-4"
+          className="font-bold underline-offset-4 hover:underline"
+          style={{ color: "var(--b-ink)" }}
         >
-          Créer un compte gratuit
+          Créer ma page — gratuit
         </Link>
       </p>
     </div>

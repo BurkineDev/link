@@ -7,64 +7,63 @@
 /* ---------------------------------------------------------------------------
    Jetons de marque
    ---------------------------------------------------------------------------
-   Le système de design de la page d'accueil, tel que fourni.
+   Repris des maquettes Bio-Lien (Landing v3, Connexion, Tableau de bord,
+   Outils, Page bio). Les valeurs sont celles des maquettes, au hexa près :
+   c'est le seul moyen que les cinq écrans se ressemblent vraiment.
 
    Volontairement séparés des jetons sémantiques de l'application
-   (`--primary`, `--background`…) : ceux-là habillent aussi le tableau de bord
-   et, surtout, les boutiques publiques, où chaque vendeur superpose son propre
-   thème. Les écraser repeindrait la boutique de tout le monde sans que
-   personne l'ait demandé.
-
-   Ces variables-ci ne s'appliquent qu'aux surfaces de marque.
+   (`--primary`, `--background`…) : ceux-là habillent aussi les boutiques
+   publiques, où chaque vendeur superpose son propre thème. Les écraser
+   repeindrait la boutique de tout le monde sans que personne l'ait demandé.
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Fonds */
-  --brand-cream: #faf6ec;
-  --brand-cream-deep: #f1ede4;
-  --brand-cream-soft: #f8efd7;
-  --brand-paper: #fffaf0;
+  /* Encre & texte */
+  --b-ink: #151020;
+  --b-ink-2: #201b2a;
+  --b-ink-hover: #2b2536;
+  --b-muted: #5c5670;
+  --b-faint: #8e89a3;
+  --b-on-dark: #f5f2fc;
+  --b-on-dark-muted: #b5b0c6;
+  --b-on-dark-faint: #8f8aa5;
 
-  /* Encre */
-  --brand-ink: #171717;
+  /* Accent — le citron vert des maquettes */
+  --b-lime: #d9f55c;
+  --b-lime-deep: #cbeb43;
+  --b-olive: #3a3f2e;
+  --b-green: #7ca51e;
+  --b-green-bright: #a4d62a;
 
-  /* Accents */
-  --brand-yellow: #ffda46;
-  --brand-yellow-soft: #ffed9d;
-  --brand-clay: #dc552f;
-  --brand-forest: #153c32;
-  --brand-violet: #5b36e8;
-  --brand-violet-soft: #f3ecff;
+  /* Surfaces & traits */
+  --b-paper: #ffffff;
+  --b-wash: #f5f2fc;
+  --b-line: #ded7ef;
+  --b-line-soft: #efeaf9;
+  --b-line-dark: #3b3550;
 
-  /* Teintes des templates */
-  --brand-lilac: #c8b9ff;
-  --brand-lime: #d8f83d;
-  --brand-peach: #f5d6c6;
-  --brand-orange: #ff5d35;
-
-  /* Ombres dures — la signature du système : aucun flou. */
-  --brand-shadow-sm: 3px 3px 0 var(--brand-ink);
-  --brand-shadow: 4px 4px 0 var(--brand-ink);
-  --brand-shadow-accent: 6px 6px 0 var(--brand-yellow);
-
-  /* --- Système « lien en bio » : orange sur blanc ---------------------
-     Second système de marque, apporté par le design du héros. Il coexiste
-     avec le système crème/jaune plutôt que de l'écraser : les deux servent
-     des sections différentes de la même page, et fusionner les deux
-     palettes donnerait une troisième chose que personne n'a dessinée. */
-  --hero-orange: #f2621a;
-  --hero-orange-deep: #e2540f;
-  --hero-orange-soft: #fff1e6;
-  --hero-navy: #14181f;
-  --hero-slate: #4a5565;
-  --hero-peach: #fff6ef;
-  --hero-line: #ececec;
+  /* Le fond lilas, identique sur les cinq écrans */
+  --b-canvas: linear-gradient(
+    180deg,
+    #f3effb 0%,
+    #e6dff6 45%,
+    #ddd3f2 100%
+  );
 
   /* Rayons */
-  --brand-radius-pill: 999px;
-  --brand-radius-card: 32px;
-  --brand-radius-hero: 48px;
-  --brand-radius-chip: 16px;
+  --r-xs: 12px;
+  --r-sm: 14px;
+  --r-md: 18px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+  --r-full: 999px;
+
+  /* Ombres — toutes teintées de violet, comme dans les maquettes */
+  --sh-1: 0 6px 18px -12px rgb(96 70 180 / 35%);
+  --sh-2: 0 16px 32px -20px rgb(96 70 180 / 30%);
+  --sh-3: 0 24px 48px -24px rgb(96 70 180 / 30%);
+  --sh-4: 0 40px 80px -30px rgb(96 70 180 / 35%);
 }
 
 @theme inline {
@@ -114,58 +113,61 @@
 }
 
 /*
- * LinkBoutik brand palette — flat, professional
- *   • Primary  → jaune solaire (CTA, brand accent)
- *   • Success  → vert moyen   (badges, success states, secondary accents)
- *   • Foreground → noir       (text, sidebar, hero surfaces)
- *   • Background → blanc      (page surfaces)
+ * Palette sémantique de l'application (tableau de bord, formulaires, shadcn).
  *
- * No gradients. Every accent is solid.
+ * Alignée sur les maquettes : encre #151020, accent citron vert #D9F55C,
+ * traits lilas #DED7EF. C'est ce qui fait que le tableau de bord ressemble
+ * enfin à la page d'accueil.
+ *
+ * Sans risque pour les boutiques : chaque boutique publique est peinte par la
+ * palette que son vendeur a choisie (`bio-themes.ts`, `primaryActionColor`),
+ * pas par ces jetons — vérifié call site par call site avant de les toucher.
  */
 :root {
   --background: oklch(1 0 0);                       /* blanc pur */
-  --foreground: oklch(0.14 0 0);                    /* noir profond */
+  --foreground: oklch(0.19 0.032 300);              /* encre #151020 */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.14 0 0);
+  --card-foreground: oklch(0.19 0.032 300);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.14 0 0);
+  --popover-foreground: oklch(0.19 0.032 300);
 
-  --primary: oklch(0.85 0.17 95);                   /* jaune solaire */
-  --primary-foreground: oklch(0.14 0 0);            /* noir sur jaune */
+  --primary: oklch(0.92 0.176 117);                 /* citron vert #D9F55C */
+  --primary-foreground: oklch(0.19 0.032 300);      /* encre sur citron */
 
-  --secondary: oklch(0.96 0 0);                     /* gris très clair */
-  --secondary-foreground: oklch(0.14 0 0);
+  --secondary: oklch(0.963 0.011 300);              /* lavande #F5F2FC */
+  --secondary-foreground: oklch(0.19 0.032 300);
 
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.14 0 0);
+  --muted: oklch(0.963 0.011 300);
+  --muted-foreground: oklch(0.46 0.032 295);        /* #5C5670 */
+  --accent: oklch(0.963 0.011 300);
+  --accent-foreground: oklch(0.19 0.032 300);
 
-  --success: oklch(0.62 0.18 145);                  /* vert moyen */
+  --success: oklch(0.62 0.153 130);                 /* vert #7CA51E */
   --success-foreground: oklch(0.99 0 0);
 
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0 0);
-  --input: oklch(0.92 0 0);
-  --ring: oklch(0.85 0.17 95);                      /* focus jaune */
+  --border: oklch(0.888 0.028 300);                 /* lilas #DED7EF */
+  --input: oklch(0.888 0.028 300);
+  --ring: oklch(0.19 0.032 300);                    /* focus encre */
 
-  --chart-1: oklch(0.85 0.17 95);                   /* jaune */
-  --chart-2: oklch(0.62 0.18 145);                  /* vert moyen */
-  --chart-3: oklch(0.14 0 0);                       /* noir */
-  --chart-4: oklch(0.75 0.10 95);                   /* jaune doux */
-  --chart-5: oklch(0.45 0 0);                       /* gris foncé */
+  --chart-1: oklch(0.92 0.176 117);                 /* citron */
+  --chart-2: oklch(0.62 0.153 130);                 /* vert */
+  --chart-3: oklch(0.19 0.032 300);                 /* encre */
+  --chart-4: oklch(0.72 0.13 300);                  /* violet */
+  --chart-5: oklch(0.46 0.032 295);                 /* ardoise */
 
-  --radius: 0.75rem;
+  --radius: 0.875rem;
 
-  /* Sidebar — flat black with yellow & green accents */
-  --sidebar: oklch(0.14 0 0);                       /* noir */
-  --sidebar-foreground: oklch(0.96 0 0);
-  --sidebar-primary: oklch(0.85 0.17 95);           /* jaune actif */
-  --sidebar-primary-foreground: oklch(0.14 0 0);
-  --sidebar-accent: oklch(1 0 0 / 8%);
-  --sidebar-accent-foreground: oklch(0.96 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.85 0.17 95);
+  /* Barre latérale — la maquette la pose à même le fond lilas, sans
+     panneau : c'est le contenu qui est en cartes blanches, pas le menu. */
+  --sidebar: transparent;
+  --sidebar-foreground: oklch(0.19 0.032 300);
+  --sidebar-primary: oklch(0.19 0.032 300);         /* onglet actif : encre */
+  --sidebar-primary-foreground: oklch(0.963 0.011 300);
+  --sidebar-accent: oklch(1 0 0 / 60%);
+  --sidebar-accent-foreground: oklch(0.19 0.032 300);
+  --sidebar-border: oklch(0.888 0.028 300);
+  --sidebar-ring: oklch(0.19 0.032 300);
 }
 
 .dark {
@@ -219,10 +221,59 @@
   }
 }
 
-/* Flottement léger des vignettes du héros. Coupé net quand le visiteur a
-   demandé moins d'animations — un mouvement permanent en arrière-plan est
-   exactement ce que ce réglage existe pour supprimer. */
-@keyframes floaty {
+/* ---------------------------------------------------------------------------
+   Décor de marque
+   ---------------------------------------------------------------------------
+   Les maquettes posent le même décor derrière chaque écran : des sphères
+   éclairées en haut à gauche, une trame de points, et une houle en bas de la
+   page d'accueil. Fixe, derrière le contenu, jamais cliquable.
+
+   La dérive et l'ondulation sont ajoutées ici : les maquettes sont statiques,
+   mais un décor qui respire lentement fait la différence entre « une image »
+   et « une page ». Tout se coupe net si le visiteur a demandé moins
+   d'animations — nos pages s'ouvrent depuis le navigateur intégré de TikTok,
+   sur des téléphones d'entrée de gamme.
+--------------------------------------------------------------------------- */
+
+@keyframes brand-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(4%, -6%, 0) scale(1.06);
+  }
+  66% {
+    transform: translate3d(-3%, 5%, 0) scale(0.96);
+  }
+}
+
+/* Le contour qui ondule : c'est lui qui fait « liquide » plutôt que
+   « bulle ». Amplitude faible — une sphère doit rester une sphère. */
+@keyframes brand-morph {
+  0%,
+  100% {
+    border-radius: 48% 52% 53% 47% / 50% 46% 54% 50%;
+  }
+  33% {
+    border-radius: 54% 46% 45% 55% / 53% 55% 45% 47%;
+  }
+  66% {
+    border-radius: 45% 55% 55% 45% / 47% 50% 50% 53%;
+  }
+}
+
+@keyframes brand-sheen {
+  0% {
+    transform: translateX(-130%) skewX(-18deg);
+  }
+  45%,
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+  }
+}
+
+@keyframes bio-float {
   0%,
   100% {
     transform: translateY(-5px);
@@ -232,9 +283,64 @@
   }
 }
 
+@layer utilities {
+  /* Sphère de décor. Le dégradé radial décentré fait la lumière ; l'ombre
+     portée violette la décolle du fond. */
+  .brand-orb {
+    position: absolute;
+    border-radius: 50%;
+    animation:
+      brand-drift 26s ease-in-out infinite,
+      brand-morph 20s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .brand-dots {
+    position: absolute;
+    background-image: radial-gradient(#b9a6e8 2.5px, transparent 2.5px);
+    background-size: 22px 22px;
+  }
+
+  /* Carte translucide : sur ce fond lilas, un blanc à 65 % laisse deviner le
+     décor qui bouge derrière. C'est là que le verre se voit. */
+  .brand-glass {
+    background: rgb(255 255 255 / 68%);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid var(--b-line);
+  }
+
+  .brand-sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .brand-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 38%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 18%),
+      transparent
+    );
+    pointer-events: none;
+    animation: brand-sheen 11s ease-in-out infinite;
+  }
+
+  .animate-bio-float {
+    animation: bio-float 6s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [style*="floaty"] {
-    animation: none !important;
+  .brand-orb,
+  .brand-sheen::after,
+  .animate-bio-float {
+    animation: none;
   }
 }
 
@@ -298,32 +404,5 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: oklch(0.85 0 0) transparent;
-  }
-}
-
-/* ---------------------------------------------------------------------------
- * Floating product illustration
- * ---------------------------------------------------------------------------
- * Replaces a framer-motion loop. The public bio page is opened from a TikTok
- * or Instagram in-app browser on 3G, so it must not pay ~50 KB of animation
- * runtime for a decorative 6-second float. Honours reduced-motion.
- */
-@keyframes bio-float {
-  0%,
-  100% {
-    transform: translateY(-4px);
-  }
-  50% {
-    transform: translateY(4px);
-  }
-}
-
-.animate-bio-float {
-  animation: bio-float 6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-bio-float {
-    animation: none;
   }
 }

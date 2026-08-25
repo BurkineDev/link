@@ -140,12 +140,15 @@ export function RegisterForm({
   invite,
   next,
   prefilledEmail = null,
+  prefilledUsername = null,
 }: {
   invite: RegisterInvite | null;
   /** Destination interne déjà validée, ou null. */
   next: string | null;
   /** E-mail déjà saisi sur l'accueil, à ne pas redemander. */
   prefilledEmail?: string | null;
+  /** Pseudo réservé sur l'accueil, déjà validé contre le format en base. */
+  prefilledUsername?: string | null;
 }) {
   // Après confirmation de l'e-mail, l'utilisateur passe par l'onboarding — il
   // lui faut une boutique avant de pouvoir s'abonner. `next` est encodé dans
@@ -172,6 +175,7 @@ export function RegisterForm({
     defaultValues: {
       agreed_to_terms: false,
       ...(prefilledEmail ? { email: prefilledEmail } : {}),
+      ...(prefilledUsername ? { username: prefilledUsername } : {}),
     },
   });
 
@@ -200,22 +204,24 @@ export function RegisterForm({
       setUsernameStatus("checking");
       try {
         const supabase = createClient();
-        // Check the profiles table for existing username
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("username", trimmed)
-          .maybeSingle();
+        // Passe par `username_available` plutôt que de lire `profiles` :
+        // la table n'est plus en lecture publique, et de toute façon une
+        // page d'inscription n'a besoin que d'un oui ou d'un non. Lire la
+        // table donnait au passage la liste de tous les inscrits.
+        const { data, error } = await supabase.rpc("username_available", {
+          p_username: trimmed,
+        });
 
         if (cancelled) return;
 
         if (error) {
-          // If the profiles table doesn't exist yet, treat as available
+          // Le doute ne doit pas bloquer l'inscription : la contrainte
+          // d'unicité en base reste le juge de paix.
           setUsernameStatus("available");
           return;
         }
 
-        setUsernameStatus(data ? "taken" : "available");
+        setUsernameStatus(data === false ? "taken" : "available");
       } catch {
         if (!cancelled) setUsernameStatus("idle");
       }

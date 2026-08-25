@@ -3,7 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Logo } from "@/components/shared/logo";
+import { Wordmark } from "@/components/brand/brand-shell";
 import {
   LayoutDashboardIcon,
   PackageIcon,
@@ -71,12 +71,8 @@ function NavIcon({
   const { pending } = useLinkStatus();
   return (
     <span
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
-        active
-          ? "bg-primary text-primary-foreground"
-          : "bg-white/[0.06] text-white/70",
-      )}
+      className="flex size-5 shrink-0 items-center justify-center transition-colors duration-150"
+      style={{ color: active ? "var(--b-lime)" : "var(--b-faint)" }}
     >
       {pending ? (
         <svg
@@ -116,17 +112,20 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
       : pathname.startsWith(href);
 
   return (
-    <aside className="relative flex h-full w-[228px] shrink-0 flex-col overflow-hidden bg-sidebar">
-      {/* Logo */}
-      <div className="flex h-14 shrink-0 items-center px-4 border-b border-white/[0.08] text-white">
-        <Logo size="sm" href="/dashboard" />
+    // Maquette « Tableau de bord » : le menu est posé à même le fond lilas,
+    // sans panneau sombre. C'est le contenu qui est en cartes blanches.
+    <aside className="relative flex h-full w-[232px] shrink-0 flex-col overflow-hidden">
+      <div className="flex h-14 shrink-0 items-center px-4">
+        <Wordmark className="text-[20px]" href="/dashboard" />
       </div>
 
-      {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-2.5 py-4">
+      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3.5 py-4">
         {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="space-y-0.5">
-            <p className="mb-2 px-3 text-[9px] font-bold uppercase tracking-[0.14em] text-white/30 select-none">
+          <div key={group.label} className="space-y-1">
+            <p
+              className="mb-2 select-none px-3 text-[9px] font-bold uppercase tracking-[0.14em]"
+              style={{ color: "var(--b-faint)" }}
+            >
               {group.label}
             </p>
             {group.items.map((item) => {
@@ -137,17 +136,18 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm tracking-[-0.01em] transition-colors duration-150",
+                    "group relative flex items-center gap-3 rounded-[var(--r-xs)] px-3.5 py-2.5 text-[14.5px] font-semibold tracking-[-0.01em] transition-colors duration-150",
+                    !active && "hover:bg-white/60",
+                  )}
+                  style={
                     active
-                      ? "bg-white/[0.08] font-semibold text-white"
-                      : "font-medium text-white/55 hover:bg-white/[0.04] hover:text-white",
-                  )}
+                      ? {
+                          background: "var(--b-ink)",
+                          color: "var(--b-on-dark)",
+                        }
+                      : { color: "var(--b-ink)" }
+                  }
                 >
-                  {/* Left accent bar — flat yellow */}
-                  {active && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
-                  )}
-
                   <NavIcon icon={Icon} active={active} />
                   <span>{item.label}</span>
                 </Link>
@@ -157,18 +157,16 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Bottom section */}
-      <div className="shrink-0 px-2.5 pb-4 pt-3 space-y-0.5 border-t border-white/[0.08]">
+      <div className="shrink-0 space-y-1 px-3.5 pb-4 pt-3">
         {shopSlug && (
           <a
             href={`/${shopSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium text-white/55 hover:bg-white/[0.04] hover:text-white transition-colors duration-150"
+            className="group flex items-center gap-3 rounded-[var(--r-xs)] px-3.5 py-2.5 text-[14px] font-semibold transition-colors duration-150 hover:bg-white/60"
+            style={{ color: "var(--b-muted)" }}
           >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]">
-              <ExternalLinkIcon className="size-[15px] text-white/80" />
-            </span>
+            <ExternalLinkIcon className="size-[15px] shrink-0" />
             <span className="truncate tracking-[-0.01em]">
               {shopName ? `Voir ${shopName}` : "Voir ma boutique"}
             </span>
@@ -176,11 +174,10 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
         )}
         <button
           onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium text-white/45 hover:bg-red-500/10 hover:text-red-400 transition-colors duration-150"
+          className="flex w-full items-center gap-3 rounded-[var(--r-xs)] px-3.5 py-2.5 text-[14px] font-semibold transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600"
+          style={{ color: "var(--b-faint)" }}
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]">
-            <LogOutIcon className="size-[15px]" />
-          </span>
+          <LogOutIcon className="size-[15px] shrink-0" />
           <span>Déconnexion</span>
         </button>
       </div>

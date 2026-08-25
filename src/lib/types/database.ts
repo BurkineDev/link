@@ -642,6 +642,10 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      username_available: {
+        Args: { p_username: string };
+        Returns: boolean;
+      };
       reserve_stock: {
         Args: { items: Json };
         Returns: Json;
