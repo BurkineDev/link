@@ -132,7 +132,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.19 0.032 300);
 
-  --primary: #C6FF00;                                /* vert citron principal (planche 2026-09) */
+  --primary: #D9F55C;                                /* le citron des boutons, identique à --b-lime */
   --primary-foreground: #0B0F0A;                     /* noir profond sur citron */
 
   --secondary: oklch(0.963 0.011 300);              /* lavande #F5F2FC */
@@ -178,7 +178,7 @@
   --card-foreground: oklch(0.98 0 0);
   --popover: oklch(0.14 0 0);
   --popover-foreground: oklch(0.98 0 0);
-  --primary: #A3E600;                                /* vert vif, lisible sur fond sombre */
+  --primary: #D9F55C;                                /* même citron en sombre */
   --primary-foreground: #0B0F0A;
   --secondary: oklch(0.18 0 0);
   --secondary-foreground: oklch(0.98 0 0);
@@ -422,4 +422,11 @@ input[type="submit"] {
     scrollbar-width: thin;
     scrollbar-color: oklch(0.85 0 0) transparent;
   }
+}
+
+/* Le « -Lien » du logotype : remplissage citron cerné d'encre, le contour
+   est peint sous le remplissage pour ne pas grignoter les lettres. */
+.logo-outline {
+  -webkit-text-stroke: 0.045em var(--b-ink);
+  paint-order: stroke fill;
 }

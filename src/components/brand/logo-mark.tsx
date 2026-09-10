@@ -1,6 +1,6 @@
 /**
- * Le pictogramme Bio-Lien : deux maillons entrelacés, dégradé vert soutenu →
- * citron, d'après la planche de marque de septembre 2026.
+ * Le pictogramme Bio-Lien : deux maillons entrelacés, dans le citron des boutons
+ * (`--b-lime`), d'après la planche de marque de septembre 2026.
  *
  * Dessiné en SVG pour rester net du favicon 16 px au héros de l'accueil.
  * `tone="brand"` applique le dégradé ; `tone="mono"` prend la couleur du texte
@@ -11,7 +11,15 @@
 const A = { x: 9.58, y: 28.92, cx: 24.58, cy: 39.42 };
 const B = { x: 24.42, y: 14.08, cx: 39.42, cy: 24.58 };
 
-function Link({ l, stroke }: { l: typeof A; stroke: string }) {
+function Link({
+  l,
+  stroke,
+  width = 8,
+}: {
+  l: typeof A;
+  stroke: string;
+  width?: number;
+}) {
   return (
     <rect
       x={l.x}
@@ -21,8 +29,18 @@ function Link({ l, stroke }: { l: typeof A; stroke: string }) {
       rx="10.5"
       transform={`rotate(-45 ${l.cx} ${l.cy})`}
       stroke={stroke}
-      strokeWidth="8"
+      strokeWidth={width}
     />
+  );
+}
+
+/** Un maillon citron cerné d'un liseré encre, pour rester lisible sur fond clair. */
+function OutlinedLink({ l, stroke, outline }: { l: typeof A; stroke: string; outline: boolean }) {
+  return (
+    <>
+      {outline && <Link l={l} stroke="var(--b-ink, #151020)" width={10.4} />}
+      <Link l={l} stroke={stroke} />
+    </>
   );
 }
 
@@ -60,9 +78,10 @@ export function LogoMark({
             y2="6"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0" stopColor="#5FBF00" />
-            <stop offset="0.5" stopColor="#9BDE00" />
-            <stop offset="1" stopColor="#C6FF00" />
+            {/* Même citron que les boutons (--b-lime), assombri vers le bas pour le relief. */}
+            <stop offset="0" stopColor="var(--b-green-bright, #a4d62a)" />
+            <stop offset="0.45" stopColor="var(--b-lime-deep, #cbeb43)" />
+            <stop offset="1" stopColor="var(--b-lime, #d9f55c)" />
           </linearGradient>
         )}
         {/* Aux deux croisements opposés, le maillon B repasse devant A. */}
@@ -71,10 +90,10 @@ export function LogoMark({
           <circle cx="35.18" cy="43.66" r="6.4" />
         </clipPath>
       </defs>
-      <Link l={B} stroke={stroke} />
-      <Link l={A} stroke={stroke} />
+      <OutlinedLink l={B} stroke={stroke} outline={tone === "brand"} />
+      <OutlinedLink l={A} stroke={stroke} outline={tone === "brand"} />
       <g clipPath="url(#biolien-mark-over)">
-        <Link l={B} stroke={stroke} />
+        <OutlinedLink l={B} stroke={stroke} outline={tone === "brand"} />
       </g>
     </svg>
   );

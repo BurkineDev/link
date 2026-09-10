@@ -16,7 +16,7 @@ const sizes = {
   lg: "text-4xl",
 };
 
-/** Le logotype Bio-Lien : maillon, « Bio » en encre, « -Lien » en vert. */
+/** Le logotype Bio-Lien : maillon, « Bio » en encre, « -Lien » dans le citron des boutons. */
 export function Logo({ className, size = "md", href = "/" }: LogoProps) {
   return (
     <Link
@@ -30,7 +30,7 @@ export function Logo({ className, size = "md", href = "/" }: LogoProps) {
       <LogoMark className="size-[1.25em] shrink-0" />
       {/* « Bio » hérite de la couleur du parent : lisible sur clair comme sur sombre. */}
       <span>
-        Bio<span className="text-[#69D100]">-Lien</span>
+        Bio<span className="logo-outline text-[var(--b-lime)]">-Lien</span>
       </span>
     </Link>
   );

@@ -24,7 +24,7 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     background_color: "#F6F9F4",
     // Peint la barre système au vert citron de la marque une fois installée.
-    theme_color: "#C6FF00",
+    theme_color: "#D9F55C",
     categories: ["shopping", "business"],
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
