@@ -122,7 +122,7 @@ export function Wordmark({
 }) {
   const inner = (
     <span
-      className={`inline-flex items-center gap-[0.3em] font-logo font-extrabold tracking-[-0.03em] ${className}`}
+      className={`inline-flex items-center gap-[0.3em] whitespace-nowrap font-logo font-extrabold tracking-[-0.03em] ${className}`}
       style={{ color: dark ? "var(--b-on-dark)" : "var(--b-ink)" }}
     >
       <LogoMark className="size-[1.25em] shrink-0" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BIO_THEME_IDS } from "@/lib/bio-themes";
@@ -153,18 +154,20 @@ const NAV = [
   { label: "FAQ", href: "#faq" },
 ];
 
-function Nav() {
+function Nav({ dark = false }: { dark?: boolean }) {
+  const text = dark ? "var(--b-on-dark)" : "var(--b-ink)";
+  const hover = dark ? "hover:text-[var(--b-lime)]" : "hover:text-[var(--b-muted)]";
   return (
-    <nav className="flex items-center justify-between gap-6 py-5.5">
-      <Wordmark />
+    <nav className="flex items-center justify-between gap-3 py-5.5 sm:gap-6">
+      <Wordmark dark={dark} />
 
       <div className="hidden gap-7 text-[15px] font-medium md:flex">
         {NAV.map((item) => (
           <a
             key={item.href}
             href={item.href}
-            className="no-underline transition-colors hover:text-[var(--b-muted)]"
-            style={{ color: "var(--b-ink)" }}
+            className={`no-underline transition-colors ${hover}`}
+            style={{ color: text }}
           >
             {item.label}
           </a>
@@ -174,15 +177,19 @@ function Nav() {
       <div className="flex items-center gap-2.5">
         <Link
           href="/login"
-          className="px-3.5 py-2.5 text-[15px] font-medium no-underline transition-colors hover:text-[var(--b-muted)]"
-          style={{ color: "var(--b-ink)" }}
+          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover}`}
+          style={{ color: text }}
         >
           Se connecter
         </Link>
         <Link
           href="/register"
-          className="whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors hover:bg-[var(--b-ink-hover)]"
-          style={{ background: "var(--b-ink)", color: "var(--b-on-dark)" }}
+          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
+          style={
+            dark
+              ? { background: "var(--b-lime)", color: "var(--b-ink)" }
+              : { background: "var(--b-ink)", color: "var(--b-on-dark)" }
+          }
         >
           S&apos;inscrire
         </Link>
@@ -195,42 +202,91 @@ function Nav() {
 // Héros
 // ---------------------------------------------------------------------------
 
+/** Miniature floue de la couverture, affichée le temps que la photo arrive. */
+const HERO_BLUR = "data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAAAQBACdASoUAAsAPu1iqU2ppaQiMAgBMB2JYgCdL1yB7/344H5oPl+y4AD+29Tvh8VQtuLjjSodhWibDS6VKoxgL8ZbF873FpAhdObN6WytEAAA";
+
+/**
+ * Le héros se pose sur la photo de couverture de la marque : la créatrice à
+ * droite, et à gauche un voile vert sombre qui porte le titre, l'accroche et
+ * le champ de réservation. Sur mobile, la photo passe derrière le texte avec
+ * un voile plus dense : elle reste une ambiance, jamais un obstacle à la lecture.
+ */
 function Hero() {
   return (
-    <section className="pb-10 pt-16 text-center sm:pt-18">
-      <span
-        className="inline-flex items-center gap-2 rounded-[var(--r-full)] px-4 py-2 text-[13.5px] font-medium"
-        style={{ background: "var(--b-paper)", border: "1px solid var(--b-line)" }}
-      >
-        <span
-          className="size-2 rounded-full"
-          style={{ background: "var(--b-green-bright)" }}
-          aria-hidden
-        />
-        Orange Money, Wave, MTN, M-Pesa — et la carte
-      </span>
+    <section className="relative isolate overflow-hidden" style={{ background: "#07130A" }}>
+      <Image
+        src="/brand/hero.webp"
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        placeholder="blur"
+        blurDataURL={HERO_BLUR}
+        className="object-cover object-[70%_center] md:object-[center_center]"
+      />
+      {/* Voile : dense sous le texte, léger sur la créatrice. */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(7,19,10,0.92) 0%, rgba(7,19,10,0.78) 40%, rgba(7,19,10,0.35) 62%, rgba(7,19,10,0.05) 100%)",
+        }}
+      />
+      {/* Sur mobile, tout le texte passe sur la photo : voile uniforme en plus. */}
+      <div aria-hidden className="absolute inset-0 md:hidden" style={{ background: "rgba(7,19,10,0.45)" }} />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-36"
+        style={{ background: "linear-gradient(0deg, rgba(7,19,10,0.9), transparent)" }}
+      />
 
-      <h1
-        className="mx-auto mt-7 max-w-[15ch] text-[clamp(44px,6.4vw,84px)] font-bold leading-[1.02] tracking-[-0.035em]"
-        style={{ color: "var(--b-ink)", textWrap: "balance" }}
-      >
-        Un lien en bio, toute une boutique.
-      </h1>
+      <div className="relative mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
+        <Nav dark />
 
-      <p
-        className="mx-auto mt-6 max-w-[52ch] text-[18px] leading-[1.6]"
-        style={{ color: "var(--b-muted)" }}
-      >
-        Tes liens, ton catalogue et tes paiements Mobile Money sur une page à
-        ton nom. Colle-la dans ta bio TikTok, Instagram ou WhatsApp — et vends
-        pendant que tu crées.
-      </p>
+        <div className="max-w-[640px] pb-20 pt-12 text-center sm:pt-18 md:pb-28 md:text-left">
+          <span
+            className="inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--r-full)] px-4 py-2 text-[12.5px] font-medium sm:text-[13.5px]"
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              color: "var(--b-on-dark)",
+            }}
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ background: "var(--b-lime)" }}
+              aria-hidden
+            />
+            Orange Money, Wave, MTN, M-Pesa — et la carte
+          </span>
 
-      <ClaimField />
+          <h1
+            className="mt-7 text-[clamp(42px,6vw,80px)] font-bold leading-[1.02] tracking-[-0.035em]"
+            style={{ color: "var(--b-on-dark)", textWrap: "balance" }}
+          >
+            Un lien en bio,{" "}
+            <span style={{ color: "var(--b-lime)" }}>toute une boutique.</span>
+          </h1>
 
-      <p className="mt-4 text-[13.5px]" style={{ color: "var(--b-faint)" }}>
-        Gratuit pour toujours · sans carte bancaire · en ligne en 3 minutes
-      </p>
+          <p
+            className="mx-auto mt-6 max-w-[50ch] text-[18px] leading-[1.6] md:mx-0"
+            style={{ color: "var(--b-on-dark-muted)" }}
+          >
+            Tes liens, ton catalogue et tes paiements Mobile Money sur une page
+            à ton nom. Colle-la dans ta bio TikTok, Instagram ou WhatsApp — et
+            vends pendant que tu crées.
+          </p>
+
+          <div className="md:[&>form]:mx-0 md:[&>form]:justify-start">
+            <ClaimField dark />
+          </div>
+
+          <p className="mt-4 text-[13.5px]" style={{ color: "var(--b-on-dark-faint)" }}>
+            Gratuit pour toujours · sans carte bancaire · en ligne en 3 minutes
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
@@ -253,7 +309,7 @@ const OPERATORS = [
 
 function Operators() {
   return (
-    <section aria-labelledby="ops" className="pb-18 text-center">
+    <section aria-labelledby="ops" className="pb-18 pt-16 text-center">
       <p
         id="ops"
         className="mb-5 text-[13px] font-semibold uppercase tracking-[.1em]"
@@ -867,18 +923,21 @@ export default function LandingPage() {
 
       <BrandBackdrop variant="full" />
 
-      <div className="relative z-10 mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
-        <Nav />
+      <div className="relative z-10">
         <main>
           <Hero />
-          <Operators />
+          <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
+            <Operators />
           <Features />
           <ShareEverywhere />
           <Pricing />
           <Faq />
-          <FinalCta />
+            <FinalCta />
+          </div>
         </main>
-        <Footer />
+        <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
+          <Footer />
+        </div>
       </div>
     </div>
   );
