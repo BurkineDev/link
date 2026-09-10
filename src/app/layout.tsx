@@ -4,6 +4,7 @@ import {
   Geist_Mono,
   Inter,
   Poppins,
+  Caveat,
   Playfair_Display,
   JetBrains_Mono,
   DM_Serif_Display,
@@ -38,6 +39,14 @@ const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
   weight: ["800"],
+  display: "swap",
+});
+
+// Police manuscrite des accroches de l'accueil (« Plus qu'un lien, une histoire »).
+const caveat = Caveat({
+  variable: "--font-hand",
+  subsets: ["latin"],
+  weight: ["600", "700"],
   display: "swap",
 });
 
@@ -159,7 +168,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${poppins.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${poppins.variable} ${caveat.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

@@ -33,6 +33,12 @@
   --b-lime-deep: #cbeb43;
   --b-olive: #3a3f2e;
   --b-green: #69D100;
+
+  /* Violet de la maquette d'accueil (titres accentués, tuiles d'icônes, bandeau final) */
+  --b-violet: #6D3BE0;
+  --b-violet-deep: #4C1D95;
+  --b-violet-soft: #EDE7FF;
+  --b-violet-mid: #C4B5FD;
   --b-green-bright: #a4d62a;
 
   /* Surfaces & traits */
@@ -68,6 +74,7 @@
 
 @theme inline {
   --font-logo: var(--font-poppins), "Poppins", var(--font-sans), sans-serif;
+  --font-hand: var(--font-hand), "Caveat", cursive;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);

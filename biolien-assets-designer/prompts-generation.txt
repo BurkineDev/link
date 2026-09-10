@@ -1,0 +1,39 @@
+Référence commune : maquette Bio-Lien fournie. Recréer un seul asset par génération, sans textes de mise en page, garder la palette et le style. Demande de transparence réelle ; si le résultat comporte un damier peint, remplacer ce fond par blanc ou lavande clair.
+
+Mockup principal : recréer le duo téléphone avant avec profil de créatrice et téléphone arrière violet avec chaîne citron, sans cartes environnantes.
+
+personnages/homme-telephone
+Recreate ONLY the smiling Black man in black hoodie, short textured hair and black glasses using gold phone in lower left. Waist-up complete silhouette hands visible. Remove all lettering, green studio background replaced by genuine alpha transparency.
+
+personnages/creatrice-hero
+Recreate ONLY the smiling Black woman in lime and black African headwrap, black top, gold hoop earrings using a gold smartphone from hero. Waist-up full silhouette hands included. No camera, no cards or lettering. Genuine alpha transparent background.
+
+telephones/votre-univers-telephone
+Recreate ONLY the black tilted smartphone from bottom-right Votre univers section, complete device restored, screen showing curly haired Black woman wearing sunglasses and white Bio-Lien profile UI. No slogan, no backdrop, no plant. Genuine alpha transparent background.
+
+ambiances/hero-studio-sans-texte
+Recreate the hero photographic studio scene: smiling Black woman lime black headwrap black clothes holding smartphone, camera in foreground right, ring light and green plants in dark green studio. Landscape image. Remove ALL webpage text, logos, buttons, floating cards. High quality photographic editorial.
+
+ambiances/votre-univers-sans-texte
+Recreate bottom right Votre univers scene: layered curved lavender paper panels, tilted black phone with female sunglasses creator profile, wooden tabletop and potted plant on right. Remove all slogans and lettering outside phone. Wide standalone landscape composition, matching original.
+
+createurs/portrait-artiste
+Standalone portrait of the smiling Black female artist with natural short afro and mustard yellow top in the FIRST creator card near bottom. Portrait photograph, matching reference person. No text or card UI. Plain warm studio background.
+
+createurs/portrait-chef
+Standalone portrait of smiling Black male chef in white chef hat and white jacket in SECOND creator card. Portrait photograph matching reference. No text or card UI. Warm kitchen bokeh.
+
+createurs/portrait-tech
+Standalone portrait of smiling Black male tech creator with short afro black glasses dark shirt in THIRD creator card. Match reference. No text or card UI. Warm studio background.
+
+createurs/portrait-mode
+Standalone portrait of Black woman fashion creator curly hair wearing sunglasses and beige top in FOURTH creator card. Match reference. No text or card UI. Warm beige studio background.
+
+cartes/carte-personnalisation
+Isolate recreate the personalization floating white rounded card from middle right, purple circular palette/brush icon, row of lime purple pink orange black color swatches. REMOVE ALL text, leave blank space for HTML title. No background or surrounding phones. Actual transparency no checkerboard.
+
+cartes/carte-mobile-money
+Isolate recreate the floating white rounded Mobile Money card from middle right. Lime round wallet/payment icon, row of four small colored generic payment badges orange blue yellow green, no invented branded logos, NO text or lettering. Blank area for title. Actual transparency no checkerboard.
+
+cartes/carte-statistiques
+Isolate recreate hero floating audience card, rounded translucent white panel, four ascending lime green bars and upward arrow, REMOVE audience label and percentage, leave blank upper left for HTML. No other elements. Actual transparency no checkerboard.
