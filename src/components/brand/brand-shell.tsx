@@ -8,6 +8,7 @@
  */
 
 import Link from "next/link";
+import { LogoMark } from "@/components/brand/logo-mark";
 
 /** Une sphère de décor : lumière en haut à gauche, ombre portée violette. */
 export function Orb({
@@ -105,7 +106,11 @@ export function BrandBackdrop({
   );
 }
 
-/** `bio-lien` suivi du point vert. Le point est la marque, pas une décoration. */
+/**
+ * Le logotype : le maillon suivi de « Bio-Lien », « Bio » en encre et
+ * « -Lien » en vert, comme sur la planche de marque. `dark` passe « Bio » en
+ * clair pour les fonds sombres ; le vert reste le même.
+ */
 export function Wordmark({
   className = "text-[22px]",
   href = "/",
@@ -117,10 +122,13 @@ export function Wordmark({
 }) {
   const inner = (
     <span
-      className={`font-extrabold tracking-[-0.02em] ${className}`}
+      className={`inline-flex items-center gap-[0.3em] font-logo font-extrabold tracking-[-0.03em] ${className}`}
       style={{ color: dark ? "var(--b-on-dark)" : "var(--b-ink)" }}
     >
-      bio-lien<span style={{ color: "var(--b-green)" }}>.</span>
+      <LogoMark className="size-[1.25em] shrink-0" />
+      <span>
+        Bio<span style={{ color: "var(--b-green)" }}>-Lien</span>
+      </span>
     </span>
   );
 

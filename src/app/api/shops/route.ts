@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         currency: parsed.data.currency,
         templateId: parsed.data.template_id ?? null,
         isPublished: false,
-        themeColor: "#FF6B35",
+        themeColor: "#69D100",
       },
     });
 

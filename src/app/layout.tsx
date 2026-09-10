@@ -3,6 +3,7 @@ import {
   Geist,
   Geist_Mono,
   Inter,
+  Poppins,
   Playfair_Display,
   JetBrains_Mono,
   DM_Serif_Display,
@@ -29,6 +30,14 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-brand",
   subsets: ["latin", "latin-ext"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+// Police du mot-symbole uniquement (planche de marque : Poppins).
+const poppins = Poppins({
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["800"],
   display: "swap",
 });
 
@@ -150,7 +159,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${poppins.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

@@ -28,7 +28,7 @@ export default async function Icon({ params }: Props) {
 
   // Repli sur la marque : une boutique inconnue, non publiée, ou une base
   // injoignable ne doit pas laisser l'onglet sans icône.
-  const fallback = { background: "#F1CB1C", color: "#111111", letter: "B" };
+  const fallback = { background: "#C6FF00", color: "#0B0F0A", letter: "B" };
   let look = fallback;
 
   if (/^[a-z0-9_-]{3,50}$/.test(username)) {

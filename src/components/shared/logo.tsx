@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogoMark } from "@/components/brand/logo-mark";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
@@ -15,17 +16,21 @@ const sizes = {
   lg: "text-4xl",
 };
 
+/** Le logotype Bio-Lien : maillon, « Bio » en encre, « -Lien » en vert. */
 export function Logo({ className, size = "md", href = "/" }: LogoProps) {
   return (
     <Link
       href={href}
-      className={cn("inline-flex items-center gap-1.5 font-black", sizes[size], className)}
+      className={cn(
+        "inline-flex items-center gap-[0.3em] font-logo font-extrabold tracking-[-0.03em]",
+        sizes[size],
+        className,
+      )}
     >
-      {/* Inherits color from parent — works on both light and dark surfaces. */}
-      <span>Bio</span>
-      <span className="text-primary">-Lien</span>
-      <span className="bg-primary text-primary-foreground rounded-sm px-1 text-[0.6em] font-bold leading-none py-0.5">
-        AF
+      <LogoMark className="size-[1.25em] shrink-0" />
+      {/* « Bio » hérite de la couleur du parent : lisible sur clair comme sur sombre. */}
+      <span>
+        Bio<span className="text-[#69D100]">-Lien</span>
       </span>
     </Link>
   );
