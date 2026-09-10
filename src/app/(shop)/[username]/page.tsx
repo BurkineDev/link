@@ -1,13 +1,20 @@
 /**
  * /{username} — Public shop homepage.
  *
- * Server Component: fetches shop + products + categories from Supabase,
+ * Server Component: fetches shop + products + categories via Prisma,
  * sets metadata, then delegates rendering to <ShopPage> (client component).
  */
 
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import {
+  serializeCategory,
+  serializePageBlock,
+  serializeProduct,
+  serializeShop,
+  serializeShopLink,
+} from "@/lib/db/serialize";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
 import { resolveBioTheme } from "@/lib/bio-themes";
 import { JsonLd, storeJsonLd } from "@/lib/seo/json-ld";
@@ -20,7 +27,7 @@ interface Props {
 }
 
 /**
- * Revalidate shop pages every 60 seconds. Cuts Supabase load by 60x for
+ * Revalidate shop pages every 60 seconds. Cuts database load by 60x for
  * popular shops while keeping the catalog reasonably fresh. The dashboard
  * still shows real-time data because it uses authenticated queries that
  * bypass this cache.
@@ -33,16 +40,11 @@ export const revalidate = 60;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username } = await params;
-  const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("shops")
-    .select("name, description, banner_url, theme_color")
-    .eq("slug", username)
-    .eq("is_published", true)
-    .single();
-
-  const shop = data as Pick<ShopRow, "name" | "description" | "banner_url" | "theme_color"> | null;
+  const shop = await prisma.shop.findFirst({
+    where: { slug: username, isPublished: true },
+    select: { name: true, description: true, bannerUrl: true, themeColor: true },
+  });
 
   // Une boutique dépubliée ou renommée ne doit pas laisser une page vide
   // dans l'index des moteurs.
@@ -60,14 +62,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: `/${username}`,
       title: shop.name,
       description: shop.description ?? `Découvrez la boutique ${shop.name} sur Bio-Lien.`,
-      ...(shop.banner_url && {
-        images: [{ url: shop.banner_url, width: 1200, height: 630, alt: shop.name }],
+      ...(shop.bannerUrl && {
+        images: [{ url: shop.bannerUrl, width: 1200, height: 630, alt: shop.name }],
       }),
     },
     twitter: {
       card: "summary_large_image",
       title: shop.name,
-      ...(shop.banner_url && { images: [shop.banner_url] }),
+      ...(shop.bannerUrl && { images: [shop.bannerUrl] }),
     },
   };
 }
@@ -82,22 +84,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  */
 export async function generateViewport({ params }: Props): Promise<Viewport> {
   const { username } = await params;
-  const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("shops")
-    .select("bio_theme, theme_color, accent_color")
-    .eq("slug", username)
-    .eq("is_published", true)
-    .single();
-
-  const shop = data as Pick<
-    ShopRow,
-    "bio_theme" | "theme_color" | "accent_color"
-  > | null;
+  const shop = await prisma.shop.findFirst({
+    where: { slug: username, isPublished: true },
+    select: { bioTheme: true, themeColor: true, accentColor: true },
+  });
 
   if (!shop) return {};
-  return { themeColor: resolveBioTheme(shop).backgroundSolid };
+  return {
+    themeColor: resolveBioTheme({
+      bio_theme: shop.bioTheme,
+      theme_color: shop.themeColor,
+      accent_color: shop.accentColor,
+    } as Pick<ShopRow, "bio_theme" | "theme_color" | "accent_color">).backgroundSolid,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,50 +106,39 @@ export async function generateViewport({ params }: Props): Promise<Viewport> {
 
 export default async function Page({ params }: Props) {
   const { username } = await params;
-  const supabase = await createClient();
 
-  const { data: shopData } = await supabase
-    .from("shops")
-    .select("*")
-    .eq("slug", username)
-    .single();
+  const shopRow = await prisma.shop.findUnique({ where: { slug: username } });
 
-  const shop = shopData as ShopRow | null;
-
-  if (!shop || !shop.is_published) {
+  if (!shopRow || !shopRow.isPublished) {
     notFound();
   }
 
-  const [productsResult, categoriesResult, linksResult, blocksResult] =
-    await Promise.all([
-      supabase
-        .from("products")
-        .select("*")
-        .eq("shop_id", shop.id)
-        .eq("is_published", true)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("categories")
-        .select("*")
-        .eq("shop_id", shop.id)
-        .order("position", { ascending: true }),
-      supabase
-        .from("shop_links")
-        .select("id, label, url, icon, thumbnail_url, position")
-        .eq("shop_id", shop.id)
-        .eq("is_active", true)
-        .order("position", { ascending: true }),
-      supabase
-        .from("page_blocks")
-        .select("id, type, position, title, config, style, visible")
-        .eq("shop_id", shop.id)
-        .order("position", { ascending: true }),
-    ]);
+  const [productRows, categoryRows, linkRows, blockRows] = await Promise.all([
+    prisma.product.findMany({
+      where: { shopId: shopRow.id, isPublished: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.category.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { position: "asc" },
+    }),
+    prisma.shopLink.findMany({
+      where: { shopId: shopRow.id, isActive: true },
+      orderBy: { position: "asc" },
+    }),
+    prisma.pageBlock.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { position: "asc" },
+    }),
+  ]);
 
-  const products = (productsResult.data ?? []) as ProductRow[];
-  const categories = (categoriesResult.data ?? []) as CategoryRow[];
-  const links = (linksResult.data ?? []) as LegacyLink[];
-  const rows = (blocksResult.data ?? []) as PageBlockRow[];
+  // Les composants d'affichage attendent encore la forme Supabase
+  // (snake_case) ; les sérialiseurs la reproduisent à l'identique.
+  const shop = serializeShop(shopRow) as unknown as ShopRow;
+  const products = productRows.map(serializeProduct) as unknown as ProductRow[];
+  const categories = categoryRows.map(serializeCategory) as CategoryRow[];
+  const links = linkRows.map(serializeShopLink) as LegacyLink[];
+  const rows = blockRows.map(serializePageBlock) as unknown as PageBlockRow[];
 
   // La composition est résolue ici, côté serveur : la page publique ne connaît
   // que des blocs. Une boutique qui n'en a pas encore en reçoit une synthèse

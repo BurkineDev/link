@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import {
   PLAN_CURRENCY,
@@ -26,10 +26,7 @@ const bodySchema = z.object({
  * returns a Checkout Session URL for the requested subscription tier.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -48,12 +45,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const admin = getAdminClient();
-  const { data: subscription } = await admin
-    .from("creator_subscriptions")
-    .select("stripe_customer_id, stripe_subscription_id, status, plan")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const subscription = await prisma.creatorSubscription.findUnique({
+    where: { userId: user.id },
+    select: { stripeCustomerId: true, status: true, plan: true },
+  });
 
   // Block re-subscribing to the exact same active plan.
   if (
@@ -78,17 +73,21 @@ export async function POST(request: NextRequest) {
   }
 
   // Reuse the customer if one already exists for this user.
-  let customerId = subscription?.stripe_customer_id ?? null;
+  let customerId = subscription?.stripeCustomerId ?? null;
   if (!customerId) {
     const customer = await stripe.customers.create({
       email: user.email ?? undefined,
       metadata: { userId: user.id },
     });
     customerId = customer.id;
-    await admin
-      .from("creator_subscriptions")
-      .update({ stripe_customer_id: customerId })
-      .eq("user_id", user.id);
+    // La ligne est créée si elle n'existe pas encore (plan gratuit par
+    // défaut) : le webhook retrouve l'utilisateur par ce customer id quand
+    // les métadonnées Stripe manquent.
+    await prisma.creatorSubscription.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, stripeCustomerId: customerId },
+      update: { stripeCustomerId: customerId },
+    });
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

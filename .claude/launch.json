@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "dev-migration",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/aristidesawadogo/Downloads/link-main 2", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

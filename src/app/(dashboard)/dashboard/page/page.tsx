@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializePageBlock, serializeShop, serializeShopLink } from "@/lib/db/serialize";
 import { PageBuilder } from "./page-builder";
 import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
 import type { PageBlockRow, ShopRow } from "@/lib/types/database";
@@ -15,44 +17,30 @@ export const metadata = { title: "Ma page" };
  * Rien n'est écrit en base tant qu'il n'a pas décidé.
  */
 export default async function MyPageRoute() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shopData } = await supabase
-    .from("shops")
-    .select("*")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const shopRow = await prisma.shop.findFirst({ where: { ownerId: user.id } });
+  if (!shopRow) redirect("/dashboard/onboarding");
 
-  const shop = shopData as ShopRow | null;
-  if (!shop) redirect("/dashboard/onboarding");
-
-  const [blocksResult, linksResult, productsResult] = await Promise.all([
-    supabase
-      .from("page_blocks")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .order("position", { ascending: true }),
-    supabase
-      .from("shop_links")
-      .select("id, label, url, icon, thumbnail_url, position")
-      .eq("shop_id", shop.id)
-      .eq("is_active", true)
-      .order("position", { ascending: true }),
-    supabase
-      .from("products")
-      .select("id")
-      .eq("shop_id", shop.id)
-      .eq("is_published", true)
-      .limit(1),
+  const [blockRows, linkRows, anyProduct] = await Promise.all([
+    prisma.pageBlock.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { position: "asc" },
+    }),
+    prisma.shopLink.findMany({
+      where: { shopId: shopRow.id, isActive: true },
+      orderBy: { position: "asc" },
+    }),
+    prisma.product.findFirst({
+      where: { shopId: shopRow.id, isPublished: true },
+      select: { id: true },
+    }),
   ]);
 
-  const rows = (blocksResult.data ?? []) as PageBlockRow[];
-  const links = (linksResult.data ?? []) as LegacyLink[];
-  const hasProducts = (productsResult.data ?? []).length > 0;
+  const shop = serializeShop(shopRow) as unknown as ShopRow;
+  const rows = blockRows.map(serializePageBlock) as unknown as PageBlockRow[];
+  const links = linkRows.map(serializeShopLink) as LegacyLink[];
+  const hasProducts = anyProduct !== null;
 
   const { blocks, source } = resolveBioPageBlocks({
     rows: rows.map((r) => ({

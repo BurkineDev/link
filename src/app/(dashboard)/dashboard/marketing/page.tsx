@@ -1,5 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import {
+  serializePromoCode,
+  serializeShop,
+  serializeShopLink,
+} from "@/lib/db/serialize";
 import { MarketingClient } from "./marketing-client";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
 
@@ -8,41 +14,32 @@ export const metadata = {
 };
 
 export default async function MarketingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
+  const shopRow = await prisma.shop.findFirst({ where: { ownerId: user.id } });
 
-  if (!shop) redirect("/dashboard");
+  if (!shopRow) redirect("/dashboard");
 
-  const [linksResult, codesResult] = await Promise.all([
-    supabase
-      .from("shop_links")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .order("position", { ascending: true }),
-    supabase
-      .from("promo_codes")
-      .select("*")
-      .eq("shop_id", shop.id)
-      .order("created_at", { ascending: false }),
+  const [linkRows, codeRows] = await Promise.all([
+    prisma.shopLink.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { position: "asc" },
+    }),
+    prisma.promoCode.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
+  const shop = serializeShop(shopRow) as unknown as ShopRow;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const publicShopUrl = `${appUrl.replace(/\/$/, "")}/${shop.slug}`;
 
   return (
     <MarketingClient
-      shop={shop as ShopRow}
-      links={(linksResult.data ?? []) as ShopLinkRow[]}
-      codes={(codesResult.data ?? []) as PromoCodeRow[]}
+      shop={shop}
+      links={linkRows.map(serializeShopLink) as unknown as ShopLinkRow[]}
+      codes={codeRows.map(serializePromoCode) as unknown as PromoCodeRow[]}
       publicShopUrl={publicShopUrl}
     />
   );

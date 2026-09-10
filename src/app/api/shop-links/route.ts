@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeShopLink } from "@/lib/db/serialize";
 
 const linkSchema = z.object({
   shop_id: z.string().uuid(),
@@ -32,45 +34,43 @@ const linkSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
+/** Le vendeur ne peut lire et écrire que sur sa propre boutique. */
+async function ownsShop(shopId: string, userId: string): Promise<boolean> {
+  const shop = await prisma.shop.findFirst({
+    where: { id: shopId, ownerId: userId },
+    select: { id: true },
+  });
+  return shop !== null;
+}
+
 // GET /api/shop-links?shopId=xxx — list links for a shop (owner only).
 export async function GET(request: NextRequest) {
   const shopId = request.nextUrl.searchParams.get("shopId");
   if (!shopId) return NextResponse.json({ error: "shopId requis" }, { status: 400 });
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", shopId)
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!shop) return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+  try {
+    if (!(await ownsShop(shopId, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  const { data: links, error } = await supabase
-    .from("shop_links")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("position", { ascending: true })
-    .order("created_at", { ascending: true });
+    const links = await prisma.shopLink.findMany({
+      where: { shopId },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    });
 
-  if (error) {
+    return NextResponse.json({ links: links.map(serializeShopLink) });
+  } catch (error) {
     console.error("[api/shop-links GET] db error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ links });
 }
 
 // POST /api/shop-links — create a link.
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   let body: unknown;
@@ -88,15 +88,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
-    .from("shop_links")
-    .insert(parsed.data)
-    .select()
-    .single();
+  try {
+    // L'ancienne version s'en remettait à la RLS pour refuser une insertion
+    // sur la boutique d'un autre ; sans RLS, le contrôle est explicite.
+    if (!(await ownsShop(parsed.data.shop_id, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  if (error) {
+    const link = await prisma.shopLink.create({
+      data: {
+        shopId: parsed.data.shop_id,
+        label: parsed.data.label,
+        url: parsed.data.url,
+        icon: parsed.data.icon,
+        thumbnailUrl: parsed.data.thumbnail_url ?? null,
+        position: parsed.data.position,
+        isActive: parsed.data.is_active,
+      },
+    });
+
+    return NextResponse.json({ link: serializeShopLink(link) }, { status: 201 });
+  } catch (error) {
     console.error("[api/shop-links POST] insert error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ link: data }, { status: 201 });
 }

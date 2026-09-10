@@ -38,7 +38,6 @@ import {
   Share2,
   Sparkles,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import {
   downloadGeneratedImage,
   shareGeneratedImage,
@@ -350,21 +349,22 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
 
   const save = async () => {
     setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("shops")
-      .update({
+    const res = await fetch(`/api/shops/${shop.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         tiktok_pixel_id: tiktok.trim() || null,
         meta_pixel_id: meta.trim() || null,
         whatsapp_number: whatsapp.trim() || null,
-      })
-      .eq("id", shop.id);
+      }),
+    });
     setSaving(false);
-    if (error) {
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
       toast.error(
-        error.code === "23514"
+        res.status === 422
           ? "Format invalide. Vérifie les champs."
-          : error.message,
+          : body.error ?? "Impossible d'enregistrer.",
       );
       return;
     }

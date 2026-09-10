@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { ProfileClient } from "./profile-client";
 
 export const metadata = {
@@ -7,24 +7,44 @@ export const metadata = {
 };
 
 export default async function ProfilePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
 
-  if (!user) redirect("/login");
+  const [profileRow, subRow] = await Promise.all([
+    prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { id: true, username: true, fullName: true, avatarUrl: true, bio: true },
+    }),
+    prisma.creatorSubscription.findUnique({
+      where: { userId: user.id },
+      select: {
+        plan: true,
+        status: true,
+        provider: true,
+        currentPeriodEnd: true,
+        cancelAtPeriodEnd: true,
+      },
+    }),
+  ]);
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username, full_name, avatar_url, bio")
-    .eq("id", user.id)
-    .single();
-
-  const { data: subscription } = await supabase
-    .from("creator_subscriptions")
-    .select("plan, status, provider, current_period_end, cancel_at_period_end")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Le composant client lit la forme Supabase (snake_case).
+  const profile = profileRow
+    ? {
+        id: profileRow.id,
+        username: profileRow.username,
+        full_name: profileRow.fullName,
+        avatar_url: profileRow.avatarUrl,
+        bio: profileRow.bio,
+      }
+    : null;
+  const subscription = subRow
+    ? {
+        plan: subRow.plan,
+        status: subRow.status,
+        provider: subRow.provider,
+        current_period_end: subRow.currentPeriodEnd?.toISOString() ?? null,
+        cancel_at_period_end: subRow.cancelAtPeriodEnd,
+      }
+    : null;
 
   return (
     <ProfileClient

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   Card,
   CardContent,
@@ -98,31 +99,44 @@ function aggregate(orders: OrderSlice[], fallback: Currency): CustomerAggregate[
 }
 
 export default async function CustomersPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, name, currency")
-    .eq("owner_id", user.id)
-    .single();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, name: true, currency: true },
+  });
   if (!shop) redirect("/dashboard");
 
   const currency = shop.currency as Currency;
 
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, buyer_name, buyer_email, buyer_phone, total_amount, currency, payment_status, created_at",
-    )
-    .eq("shop_id", shop.id)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const rows = await prisma.order.findMany({
+    where: { shopId: shop.id },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: {
+      id: true,
+      buyerName: true,
+      buyerEmail: true,
+      buyerPhone: true,
+      totalAmount: true,
+      currency: true,
+      paymentStatus: true,
+      createdAt: true,
+    },
+  });
 
-  const customers = aggregate((data ?? []) as OrderSlice[], currency);
+  const data = rows.map((row) => ({
+    id: row.id,
+    buyer_name: row.buyerName,
+    buyer_email: row.buyerEmail,
+    buyer_phone: row.buyerPhone,
+    total_amount: Number(row.totalAmount),
+    currency: row.currency,
+    payment_status: row.paymentStatus,
+    created_at: row.createdAt.toISOString(),
+  }));
+
+  const customers = aggregate(data as OrderSlice[], currency);
   const repeat = customers.filter((c) => c.orderCount > 1).length;
   const revenue = customers.reduce((sum, c) => sum + c.totalSpent, 0);
 

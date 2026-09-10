@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { buildShopObjectKey, getR2PublicUrl, putR2Object } from "@/lib/storage/r2";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-// POST /api/upload — upload image to Supabase Storage
+/**
+ * POST /api/upload — dépose une image sur R2 et renvoie son URL publique.
+ *
+ * Champs du formulaire : `file` (obligatoire), `folder` (identifiant de la
+ * boutique ; par défaut celui de l'utilisateur). Une boutique fournie doit
+ * appartenir à l'appelant — sinon n'importe qui rangerait ses fichiers dans
+ * le dossier d'un autre vendeur.
+ */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -16,8 +23,8 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
-  const bucket = (formData.get("bucket") as string) ?? "shop-assets";
-  const folder = (formData.get("folder") as string) ?? user.id;
+  const folderInput = formData.get("folder");
+  const folder = typeof folderInput === "string" && folderInput ? folderInput : user.id;
 
   if (!file) {
     return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
@@ -37,25 +44,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const { data, error } = await getAdminClient().storage
-    .from(bucket)
-    .upload(filename, file, {
-      contentType: file.type,
-      cacheControl: "3600",
-      upsert: false,
+  if (folder !== user.id) {
+    const owned = await prisma.shop.findFirst({
+      where: { id: folder, ownerId: user.id },
+      select: { id: true },
     });
+    if (!owned) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
+  }
 
-  if (error) {
+  const key = buildShopObjectKey(folder, file.name);
+
+  try {
+    await putR2Object({
+      key,
+      body: new Uint8Array(await file.arrayBuffer()),
+      contentType: file.type,
+    });
+  } catch (error) {
     console.error("[api/upload] storage error", error);
     return NextResponse.json({ error: "Échec de l'upload" }, { status: 500 });
   }
 
-  const { data: { publicUrl } } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path);
-
-  return NextResponse.json({ url: publicUrl, path: data.path }, { status: 201 });
+  return NextResponse.json({ url: getR2PublicUrl(key), path: key }, { status: 201 });
 }

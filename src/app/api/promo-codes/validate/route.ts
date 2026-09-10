@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
 
 /**
  * POST /api/promo-codes/validate
  *
  * Buyer-facing endpoint — checks if a promo code is valid for a given shop
  * + order subtotal. Does NOT increment uses_count (that happens atomically
- * during /api/checkout via redeem_promo_code). Uses the admin client to
- * read the promo_codes row (owner-only RLS) — buyers aren't authenticated.
+ * during /api/checkout via `redeemPromoCode`). Public : l'acheteur n'est pas
+ * authentifié, et la réponse ne révèle rien d'autre que la remise.
  */
 
 const schema = z.object({
@@ -31,53 +31,61 @@ export async function POST(request: NextRequest) {
   }
 
   const { shopId, code, orderTotal } = parsed.data;
-  const admin = getAdminClient();
 
-  const { data: promo } = await admin
-    .from("promo_codes")
-    .select("id, code, discount_type, discount_value, min_order_amount, max_uses, uses_count, expires_at, is_active")
-    .eq("shop_id", shopId)
-    .eq("code", code.toUpperCase())
-    .maybeSingle();
+  const promo = await prisma.promoCode.findUnique({
+    where: { shopId_code: { shopId, code: code.toUpperCase() } },
+    select: {
+      discountType: true,
+      discountValue: true,
+      minOrderAmount: true,
+      maxUses: true,
+      usesCount: true,
+      expiresAt: true,
+      isActive: true,
+    },
+  });
 
   if (!promo) {
     return NextResponse.json({ ok: false, error: "Code promo introuvable." }, { status: 404 });
   }
 
-  if (!promo.is_active) {
+  if (!promo.isActive) {
     return NextResponse.json({ ok: false, error: "Ce code n'est plus actif." }, { status: 400 });
   }
 
-  if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+  if (promo.expiresAt && promo.expiresAt < new Date()) {
     return NextResponse.json({ ok: false, error: "Ce code est expiré." }, { status: 400 });
   }
 
-  if (promo.max_uses != null && promo.uses_count >= promo.max_uses) {
+  if (promo.maxUses != null && promo.usesCount >= promo.maxUses) {
     return NextResponse.json(
       { ok: false, error: "Ce code a atteint sa limite d'utilisations." },
       { status: 400 },
     );
   }
 
-  if (promo.min_order_amount != null && orderTotal < promo.min_order_amount) {
+  const minOrderAmount =
+    promo.minOrderAmount === null ? null : Number(promo.minOrderAmount);
+  if (minOrderAmount != null && orderTotal < minOrderAmount) {
     return NextResponse.json(
       {
         ok: false,
-        error: `Le montant minimum pour ce code est ${promo.min_order_amount}.`,
+        error: `Le montant minimum pour ce code est ${minOrderAmount}.`,
       },
       { status: 400 },
     );
   }
 
+  const discountValue = Number(promo.discountValue);
   const discount =
-    promo.discount_type === "percent"
-      ? Math.round((orderTotal * Number(promo.discount_value)) / 100)
-      : Math.min(Number(promo.discount_value), orderTotal);
+    promo.discountType === "percent"
+      ? Math.round((orderTotal * discountValue) / 100)
+      : Math.min(discountValue, orderTotal);
 
   return NextResponse.json({
     ok: true,
     discount,
-    discount_type: promo.discount_type,
-    discount_value: Number(promo.discount_value),
+    discount_type: promo.discountType,
+    discount_value: discountValue,
   });
 }

@@ -1,8 +1,8 @@
 import { ImageResponse } from "next/og";
-import { createClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma";
 import { isBioThemeId, resolveBioTheme } from "@/lib/bio-themes";
 import { formatPrice } from "@/lib/utils/format";
-import type { Database, ProductImage } from "@/lib/types/database";
+import type { ProductImage, ProductRow, ShopRow } from "@/lib/types/database";
 
 /**
  * GET /api/story/{slug}/{productSlug} — a ready-to-post story image
@@ -14,7 +14,8 @@ import type { Database, ProductImage } from "@/lib/types/database";
  * published product only, 404 otherwise.
  */
 
-export const runtime = "edge";
+// Runtime Node.js : Prisma ne tourne pas sur le runtime edge, et next/og
+// rend aussi bien sur Node.
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -33,30 +34,57 @@ export async function GET(request: Request, ctx: Ctx) {
 
   const themeOverride = new URL(request.url).searchParams.get("theme");
 
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
+  const shopRow = await prisma.shop.findFirst({
+    where: { slug, isPublished: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      bioTheme: true,
+      themeColor: true,
+      accentColor: true,
+      currency: true,
+    },
+  });
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, name, slug, bio_theme, theme_color, accent_color, currency")
-    .eq("slug", slug)
-    .eq("is_published", true)
-    .single();
+  if (!shopRow) return new Response("Not found", { status: 404 });
 
-  if (!shop) return new Response("Not found", { status: 404 });
+  const productRow = await prisma.product.findFirst({
+    where: { shopId: shopRow.id, slug: productSlug, isPublished: true },
+    select: {
+      name: true,
+      slug: true,
+      price: true,
+      comparePrice: true,
+      currency: true,
+      images: true,
+    },
+  });
 
-  const { data: product } = await supabase
-    .from("products")
-    .select("name, slug, price, compare_price, currency, images")
-    .eq("shop_id", shop.id)
-    .eq("slug", productSlug)
-    .eq("is_published", true)
-    .single();
+  if (!productRow) return new Response("Not found", { status: 404 });
 
-  if (!product) return new Response("Not found", { status: 404 });
+  // Le rendu lit la forme Supabase (snake_case).
+  const shop = {
+    id: shopRow.id,
+    name: shopRow.name,
+    slug: shopRow.slug,
+    bio_theme: shopRow.bioTheme,
+    theme_color: shopRow.themeColor,
+    accent_color: shopRow.accentColor,
+    currency: shopRow.currency,
+  } as Pick<
+    ShopRow,
+    "id" | "name" | "slug" | "bio_theme" | "theme_color" | "accent_color" | "currency"
+  >;
+  const product = {
+    name: productRow.name,
+    slug: productRow.slug,
+    price: Number(productRow.price),
+    compare_price:
+      productRow.comparePrice === null ? null : Number(productRow.comparePrice),
+    currency: productRow.currency,
+    images: productRow.images as unknown as ProductRow["images"],
+  } as Pick<ProductRow, "name" | "slug" | "price" | "compare_price" | "currency" | "images">;
 
   const palette = resolveBioTheme(
     isBioThemeId(themeOverride) ? { ...shop, bio_theme: themeOverride } : shop,

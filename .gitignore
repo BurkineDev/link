@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+biolink-secrets.env
 
 # vercel
 .vercel
@@ -40,3 +41,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Export Infisical local — jamais versionné
+dev.env
+
+# Client Prisma (régénéré par postinstall)
+prisma/generated
+# Sauvegardes locales d env
+.env.local.bak-*
+prod.env

@@ -8,6 +8,16 @@ const nextConfig: NextConfig = {
         hostname: "*.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
+      // Cloudflare R2 : sous-domaine public r2.dev, ou domaine personnalisé
+      // (mettre à jour R2_PUBLIC_URL et cette liste ensemble).
+      {
+        protocol: "https",
+        hostname: "*.r2.dev",
+      },
+      {
+        protocol: "https",
+        hostname: "assets.bio-lien.com",
+      },
       {
         protocol: "https",
         hostname: "avatars.githubusercontent.com",

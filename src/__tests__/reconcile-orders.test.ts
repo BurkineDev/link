@@ -8,6 +8,12 @@
 
 // ---------------------------------------------------------------------------
 // État mutable lu par les mocks
+//
+// Les fixtures restent en snake_case et les assertions décrivent l'effet
+// attendu en termes d'écritures (`_updates`, `_released`). La réconciliation
+// passe désormais par `settlePaidOrder` / `cancelUnpaidOrder`, qui font ces
+// écritures sous verrou et sous condition « pending » : les mocks traduisent
+// chaque appel dans la forme que les assertions vérifient.
 // ---------------------------------------------------------------------------
 
 interface Update {
@@ -28,68 +34,51 @@ const ORDER_ID = "11111111-1111-4111-8111-111111111111";
 const PRODUCT_ID = "22222222-2222-4222-8222-222222222222";
 const REF = "MTX-TEST123456";
 
-function makeUpdateChain(table: string, values: Record<string, unknown>) {
-  const filters: Record<string, unknown> = {};
-  const chain = {
-    eq(col: string, val: unknown) {
-      filters[col] = val;
-      return chain;
-    },
-    select() {
-      _updates.push({ table, values, filters });
-      return Promise.resolve({ data: [{ id: ORDER_ID }], error: null });
-    },
-    then(resolve: (v: { error: null }) => unknown) {
-      _updates.push({ table, values, filters });
-      return Promise.resolve({ error: null }).then(resolve);
-    },
-  };
-  return chain;
-}
+const toRow = (o: Record<string, unknown>) => ({
+  id: o.id,
+  totalAmount: o.total_amount,
+  currency: o.currency,
+  paymentRef: o.payment_ref,
+  createdAt: new Date(o.created_at as string),
+});
 
-/**
- * PostgREST rend un builder qui reste chaînable *et* attendable : `.limit()`
- * ne clôt pas la requête, on peut encore poser un `.eq()` derrière. Le mock
- * doit se comporter pareil, sinon il teste une API qui n'existe pas.
- */
-function makeSelectChain() {
-  const chain = {
-    eq(col: string, val: unknown) {
-      _selectFilters[col] = val;
-      return chain;
-    },
-    not() {
-      return chain;
-    },
-    lt(col: string, val: unknown) {
-      _selectFilters[col] = val;
-      return chain;
-    },
-    order() {
-      return chain;
-    },
-    limit() {
-      return chain;
-    },
-    then(resolve: (v: { data: unknown; error: null }) => unknown) {
-      return Promise.resolve({ data: _orders, error: null }).then(resolve);
-    },
-  };
-  return chain;
-}
-
-const mockAdmin = {
-  from: (table: string) => ({
-    select: () => makeSelectChain(),
-    update: (values: Record<string, unknown>) => makeUpdateChain(table, values),
-  }),
-  rpc: (fn: string, args: { items: unknown[] }) => {
-    if (fn === "release_stock") _released.push(...args.items);
-    return Promise.resolve({ data: null, error: null });
+const mockPrisma = {
+  order: {
+    findMany: jest.fn(async (args: { where?: { shopId?: string } }) => {
+      if (args?.where?.shopId) _selectFilters.shop_id = args.where.shopId;
+      return _orders.map(toRow);
+    }),
   },
 };
+jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
-jest.mock("@/lib/supabase/admin", () => ({ getAdminClient: () => mockAdmin }));
+jest.mock("@/lib/db/orders", () => ({
+  settlePaidOrder: jest.fn(async (orderId: string) => {
+    _updates.push({
+      table: "orders",
+      values: { payment_status: "paid", status: "confirmed" },
+      filters: { id: orderId, payment_status: "pending" },
+    });
+    return { settled: true };
+  }),
+  cancelUnpaidOrder: jest.fn(async (orderId: string) => {
+    const source = _orders.find((o) => o.id === orderId);
+    const items = (source?.items as Array<Record<string, unknown>> | undefined) ?? [];
+    _released.push(
+      ...items.map((it) => ({
+        product_id: it.product_id,
+        variant_id: it.variant_id ?? null,
+        quantity: it.quantity,
+      })),
+    );
+    _updates.push({
+      table: "orders",
+      values: { payment_status: "failed", status: "cancelled" },
+      filters: { id: orderId, payment_status: "pending" },
+    });
+    return { cancelled: true };
+  }),
+}));
 
 jest.mock("@/lib/geniuspay", () => ({
   isGeniusPayConfigured: () => true,

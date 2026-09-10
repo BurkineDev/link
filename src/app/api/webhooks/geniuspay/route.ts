@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
+import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import { applyBoostPayment, applySubscriptionPayment } from "@/lib/db/subscriptions";
 import {
   mapStatusToPaymentStatus,
   verifyWebhookSignature,
   type GeniusPayStatus,
 } from "@/lib/geniuspay";
-import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
-import type { OrderItem } from "@/lib/types/database";
+import { notifyPaidOrder } from "@/lib/order-notifications";
 
 export const runtime = "nodejs";
 
@@ -91,15 +92,19 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 200 });
   }
 
-  const supabase = getAdminClient();
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .select("id, total_amount, currency, payment_status, items")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  if (orderError) {
-    console.error("[geniuspay-webhook] DB read error:", orderError);
+  let order: {
+    id: string;
+    totalAmount: unknown;
+    currency: string;
+    paymentStatus: string;
+  } | null;
+  try {
+    order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, totalAmount: true, currency: true, paymentStatus: true },
+    });
+  } catch (error) {
+    console.error("[geniuspay-webhook] DB read error:", error);
     return new NextResponse(null, { status: 500 });
   }
 
@@ -112,7 +117,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Idempotent — once we've already settled the order, ack and stop.
-  if (order.payment_status === "paid" || order.payment_status === "refunded") {
+  if (
+    order.paymentStatus === "paid" ||
+    order.paymentStatus === "refunded" ||
+    order.paymentStatus === "failed"
+  ) {
     return new NextResponse(null, { status: 200 });
   }
 
@@ -122,7 +131,7 @@ export async function POST(request: NextRequest) {
   if (nextPaymentStatus === "paid") {
     // Sanity check on amount + currency.
     const amountOk =
-      typeof data.amount === "number" && data.amount >= order.total_amount;
+      typeof data.amount === "number" && data.amount >= Number(order.totalAmount);
     const currencyOk =
       !data.currency ||
       data.currency.toUpperCase() === order.currency.toUpperCase();
@@ -135,24 +144,18 @@ export async function POST(request: NextRequest) {
       return new NextResponse(null, { status: 200 });
     }
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        payment_status: "paid",
-        status: "confirmed",
-        payment_ref: data.reference,
-        payment_provider: "geniuspay",
-      })
-      .eq("id", order.id);
-
-    if (error) {
+    try {
+      const settlement = await settlePaidOrder(order.id, data.reference!, "geniuspay");
+      if (settlement.settled) {
+        notifyPaidOrder(order.id).catch((err) =>
+          console.warn("[geniuspay-webhook] order notification failed", err),
+        );
+      }
+    } catch (error) {
+      // 500 : Genius Pay réessaiera, et le règlement est idempotent.
       console.error("[geniuspay-webhook] update error:", error);
       return new NextResponse(null, { status: 500 });
     }
-
-    notifySellerOfPaidOrder(order.id).catch((err) =>
-      console.warn("[geniuspay-webhook] notify seller failed", err),
-    );
 
     console.info(
       `[geniuspay-webhook] order ${order.id} confirmed via Genius Pay (${data.reference})`,
@@ -161,33 +164,9 @@ export async function POST(request: NextRequest) {
   }
 
   if (nextPaymentStatus === "failed") {
-    // Release the stock we reserved at order creation.
-    const items = order.items as OrderItem[];
-    if (items?.length) {
-      const releasePayload = items.map((it) => ({
-        product_id: it.product_id,
-        variant_id: it.variant_id ?? null,
-        quantity: it.quantity,
-      }));
-      const { error: releaseError } = await supabase.rpc("release_stock", {
-        items: releasePayload,
-      });
-      if (releaseError) {
-        console.error("[geniuspay-webhook] release_stock error:", releaseError);
-      }
-    }
-
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        payment_status: "failed",
-        status: "cancelled",
-        payment_ref: data.reference,
-        payment_provider: "geniuspay",
-      })
-      .eq("id", order.id);
-
-    if (error) {
+    try {
+      await cancelUnpaidOrder(order.id, data.reference ?? null, "geniuspay");
+    } catch (error) {
       console.error("[geniuspay-webhook] update error:", error);
       return new NextResponse(null, { status: 500 });
     }
@@ -199,13 +178,10 @@ export async function POST(request: NextRequest) {
   }
 
   // pending / processing → just record the reference + provider.
-  await supabase
-    .from("orders")
-    .update({
-      payment_ref: data.reference,
-      payment_provider: "geniuspay",
-    })
-    .eq("id", order.id);
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { paymentRef: data.reference, paymentProvider: "geniuspay" },
+  });
 
   return new NextResponse(null, { status: 200 });
 }
@@ -217,10 +193,10 @@ export async function POST(request: NextRequest) {
 /**
  * Crédite (ou non) la période achetée.
  *
- * Tout le travail est fait par `apply_subscription_payment`, en base : c'est
- * la seule façon d'être à la fois atomique et idempotent quand Genius Pay
- * livre deux fois le même événement, ce qu'un prestataire de paiement fait
- * régulièrement et légitimement.
+ * Tout le travail est fait par `applySubscriptionPayment`, sous verrou :
+ * c'est la seule façon d'être à la fois atomique et idempotent quand Genius
+ * Pay livre deux fois le même événement, ce qu'un prestataire de paiement
+ * fait régulièrement et légitimement.
  *
  * Un échec, une annulation ou une expiration ne fait que marquer la ligne :
  * il n'y a rien à rendre, puisque rien n'a été crédité tant que le paiement
@@ -231,16 +207,15 @@ async function handleSubscriptionEvent(data: WebhookData) {
   if (!reference) return new NextResponse(null, { status: 200 });
 
   const status = mapStatusToPaymentStatus(data.status ?? "pending");
-  const supabase = getAdminClient();
 
   if (status !== "paid") {
     if (status === "failed") {
-      const { error } = await supabase
-        .from("subscription_payments")
-        .update({ status })
-        .eq("reference", reference)
-        .eq("status", "pending");
-      if (error) {
+      try {
+        await prisma.subscriptionPayment.updateMany({
+          where: { reference, status: "pending" },
+          data: { status },
+        });
+      } catch (error) {
         console.error("[geniuspay-webhook] subscription status update", error);
         return new NextResponse(null, { status: 500 });
       }
@@ -248,45 +223,41 @@ async function handleSubscriptionEvent(data: WebhookData) {
     return new NextResponse(null, { status: 200 });
   }
 
-  const { data: applied, error } = await supabase.rpc(
-    "apply_subscription_payment",
-    { p_reference: reference },
-  );
-
-  if (error) {
+  try {
+    const applied = await applySubscriptionPayment(reference);
+    console.info("[geniuspay-webhook] subscription", reference, applied);
+  } catch (error) {
     // 500 : Genius Pay réessaiera, et l'opération est idempotente — une
     // nouvelle tentative ne peut pas créditer deux périodes.
     console.error("[geniuspay-webhook] apply_subscription_payment", error);
     return new NextResponse(null, { status: 500 });
   }
 
-  console.info("[geniuspay-webhook] subscription", reference, applied);
   return new NextResponse(null, { status: 200 });
 }
 
 /**
  * Active (ou non) le boost acheté.
  *
- * Même contrat que les abonnements : c'est `apply_boost_payment` qui décide,
- * en base et en une transaction, parce que Genius Pay peut livrer deux fois
- * le même événement. La fonction prolonge un boost encore en cours plutôt que
- * de l'écraser — les heures restantes ont été payées.
+ * Même contrat que les abonnements : c'est `applyBoostPayment` qui décide,
+ * en une transaction, parce que Genius Pay peut livrer deux fois le même
+ * événement. La fonction prolonge un boost encore en cours plutôt que de
+ * l'écraser — les heures restantes ont été payées.
  */
 async function handleBoostEvent(data: WebhookData) {
   const reference = data.reference;
   if (!reference) return new NextResponse(null, { status: 200 });
 
   const status = mapStatusToPaymentStatus(data.status ?? "pending");
-  const supabase = getAdminClient();
 
   if (status !== "paid") {
     if (status === "failed") {
-      const { error } = await supabase
-        .from("boost_purchases")
-        .update({ status: "failed" })
-        .eq("reference", reference)
-        .eq("status", "pending");
-      if (error) {
+      try {
+        await prisma.boostPurchase.updateMany({
+          where: { reference, status: "pending" },
+          data: { status: "failed" },
+        });
+      } catch (error) {
         console.error("[geniuspay-webhook] boost status update", error);
         return new NextResponse(null, { status: 500 });
       }
@@ -294,15 +265,13 @@ async function handleBoostEvent(data: WebhookData) {
     return new NextResponse(null, { status: 200 });
   }
 
-  const { data: applied, error } = await supabase.rpc("apply_boost_payment", {
-    p_reference: reference,
-  });
-
-  if (error) {
+  try {
+    const applied = await applyBoostPayment(reference);
+    console.info("[geniuspay-webhook] boost", reference, applied);
+  } catch (error) {
     console.error("[geniuspay-webhook] apply_boost_payment", error);
     return new NextResponse(null, { status: 500 });
   }
 
-  console.info("[geniuspay-webhook] boost", reference, applied);
   return new NextResponse(null, { status: 200 });
 }

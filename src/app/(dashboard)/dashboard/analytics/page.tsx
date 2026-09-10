@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   Card,
   CardHeader,
@@ -305,18 +306,12 @@ function toClickableRow(row: ClickableBlockRow): ClickableRow[] {
 // ---- Page ----
 
 export default async function AnalyticsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
 
-  if (!user) redirect("/login");
-
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, currency")
-    .eq("owner_id", user.id)
-    .single();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, currency: true },
+  });
 
   if (!shop) redirect("/dashboard");
 
@@ -326,31 +321,56 @@ export default async function AnalyticsPage() {
   const cutoffDay = dayKey(days30[0]);
 
   // Orders + bio-page analytics, fetched together
-  const [ordersResult, viewsResult, linksResult, blocksResult] =
-    await Promise.all([
-      supabase
-        .from("orders")
-        .select("id, total_amount, status, items, created_at")
-        .eq("shop_id", shop.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("shop_page_views")
-        .select("day, views")
-        .eq("shop_id", shop.id)
-        .gte("day", cutoffDay)
-        .order("day", { ascending: true }),
-      supabase
-        .from("shop_links")
-        .select("label, click_count, is_active")
-        .eq("shop_id", shop.id)
-        .order("click_count", { ascending: false }),
-      supabase
-        .from("page_blocks")
-        .select("type, title, config, visible, click_count")
-        .eq("shop_id", shop.id)
-        .order("click_count", { ascending: false }),
-    ]);
-  const allOrders = ordersResult.data;
+  const [orderRows, viewRows, linkQueryRows, blockQueryRows] = await Promise.all([
+    prisma.order.findMany({
+      where: { shopId: shop.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, totalAmount: true, status: true, items: true, createdAt: true },
+    }),
+    prisma.shopPageView.findMany({
+      where: { shopId: shop.id, day: { gte: new Date(cutoffDay) } },
+      orderBy: { day: "asc" },
+      select: { day: true, views: true },
+    }),
+    prisma.shopLink.findMany({
+      where: { shopId: shop.id },
+      orderBy: { clickCount: "desc" },
+      select: { label: true, clickCount: true, isActive: true },
+    }),
+    prisma.pageBlock.findMany({
+      where: { shopId: shop.id },
+      orderBy: { clickCount: "desc" },
+      select: { type: true, title: true, config: true, visible: true, clickCount: true },
+    }),
+  ]);
+
+  // Le reste de la page lit la forme Supabase (snake_case).
+  const allOrders = orderRows.map((o) => ({
+    id: o.id,
+    total_amount: Number(o.totalAmount),
+    status: o.status,
+    items: o.items as unknown as OrderRow["items"],
+    created_at: o.createdAt.toISOString(),
+  }));
+  const viewsResult = {
+    data: viewRows.map((v) => ({ day: v.day.toISOString().slice(0, 10), views: v.views })),
+  };
+  const linksResult = {
+    data: linkQueryRows.map((l) => ({
+      label: l.label,
+      click_count: l.clickCount,
+      is_active: l.isActive,
+    })),
+  };
+  const blocksResult = {
+    data: blockQueryRows.map((b) => ({
+      type: b.type,
+      title: b.title,
+      config: b.config,
+      visible: b.visible,
+      click_count: b.clickCount,
+    })),
+  };
 
   const orders = (allOrders ?? []) as Pick<
     OrderRow,

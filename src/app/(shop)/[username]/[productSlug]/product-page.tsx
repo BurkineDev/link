@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { VariantSelector } from "@/components/shop/variant-selector";
 import { BioProductCard } from "@/components/shop/bio-product-card";
 import { BioShareSheet } from "@/components/shop/bio-share-sheet";
@@ -342,7 +343,7 @@ export function ProductPage({
 
             {/* CTAs */}
             {isWhatsAppMode ? (
-              <a
+              <SmartAppLink
                 href={isOutOfStock ? undefined : whatsAppUrl}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -356,7 +357,7 @@ export function ProductPage({
               >
                 <MessageCircle className="size-5" />
                 {isOutOfStock ? "Épuisé" : "Commander sur WhatsApp"}
-              </a>
+              </SmartAppLink>
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button

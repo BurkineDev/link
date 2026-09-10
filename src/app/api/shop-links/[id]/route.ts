@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeShopLink } from "@/lib/db/serialize";
 
 const updateSchema = z.object({
   label: z.string().trim().min(1).max(60).optional(),
@@ -23,35 +25,20 @@ type Ctx = { params: Promise<{ id: string }> };
 
 /**
  * Confirms the link exists and belongs to a shop owned by `userId`.
- * Defence-in-depth alongside the RLS owner policies on shop_links.
+ * Sans RLS, c'est le seul contrôle d'accès : il doit rester avant toute
+ * écriture.
  */
-async function assertLinkOwnership(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  linkId: string,
-  userId: string,
-): Promise<boolean> {
-  const { data: link } = await supabase
-    .from("shop_links")
-    .select("shop_id")
-    .eq("id", linkId)
-    .maybeSingle();
-  if (!link) return false;
-
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", link.shop_id)
-    .eq("owner_id", userId)
-    .maybeSingle();
-  return !!shop;
+async function ownsLink(linkId: string, userId: string): Promise<boolean> {
+  const link = await prisma.shopLink.findFirst({
+    where: { id: linkId, shop: { ownerId: userId } },
+    select: { id: true },
+  });
+  return link !== null;
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   let body: unknown;
@@ -66,41 +53,45 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Données invalides" }, { status: 422 });
   }
 
-  if (!(await assertLinkOwnership(supabase, id, user.id))) {
-    return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
-  }
+  try {
+    if (!(await ownsLink(id, user.id))) {
+      return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
+    }
 
-  const { data, error } = await supabase
-    .from("shop_links")
-    .update(parsed.data)
-    .eq("id", id)
-    .select()
-    .maybeSingle();
+    const { label, url, icon, thumbnail_url, position, is_active } = parsed.data;
+    const link = await prisma.shopLink.update({
+      where: { id },
+      data: {
+        ...(label !== undefined ? { label } : {}),
+        ...(url !== undefined ? { url } : {}),
+        ...(icon !== undefined ? { icon } : {}),
+        ...(thumbnail_url !== undefined ? { thumbnailUrl: thumbnail_url } : {}),
+        ...(position !== undefined ? { position } : {}),
+        ...(is_active !== undefined ? { isActive: is_active } : {}),
+      },
+    });
 
-  if (error) {
+    return NextResponse.json({ link: serializeShopLink(link) });
+  } catch (error) {
     console.error("[api/shop-links PATCH] update error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  if (!data) return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
-  return NextResponse.json({ link: data });
 }
 
 export async function DELETE(_request: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  if (!(await assertLinkOwnership(supabase, id, user.id))) {
-    return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
-  }
+  try {
+    if (!(await ownsLink(id, user.id))) {
+      return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
+    }
 
-  const { error } = await supabase.from("shop_links").delete().eq("id", id);
-  if (error) {
+    await prisma.shopLink.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
     console.error("[api/shop-links DELETE] db error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
 }

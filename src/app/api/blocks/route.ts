@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializePageBlock } from "@/lib/db/serialize";
+import { reorderPageBlocks } from "@/lib/db/tracking";
 import {
   BLOCK_TYPES,
   blockStyleSchema,
   parseBlockConfig,
   type BlockType,
 } from "@/lib/blocks/types";
+import type { Prisma } from "../../../../prisma/generated/client/client";
 
 /**
  * Blocs d'une BioPage — création et réordonnancement.
  *
- * Toutes les écritures passent par le client utilisateur, jamais par le client
- * admin : la RLS de `page_blocks` (propriétaire de la boutique uniquement) est
- * la barrière d'autorisation. La vérification d'appartenance ci-dessous est
- * une défense en profondeur qui produit un 404 explicite plutôt qu'un échec
- * RLS silencieux.
+ * Sans RLS, la vérification d'appartenance ci-dessous n'est plus une défense
+ * en profondeur : c'est l'autorisation. Elle précède chaque écriture.
  */
 
 const createSchema = z.object({
@@ -33,18 +34,22 @@ const reorderSchema = z.object({
 });
 
 /** Le vendeur ne peut écrire que sur sa propre boutique. */
-async function assertShopOwnership(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  shopId: string,
-  userId: string,
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", shopId)
-    .eq("owner_id", userId)
-    .maybeSingle();
-  return !!data;
+async function ownsShop(shopId: string, userId: string): Promise<boolean> {
+  const shop = await prisma.shop.findFirst({
+    where: { id: shopId, ownerId: userId },
+    select: { id: true },
+  });
+  return shop !== null;
+}
+
+/** Nouveau bloc en fin de page : évite de renuméroter les blocs existants. */
+async function nextPosition(shopId: string): Promise<number> {
+  const last = await prisma.pageBlock.findFirst({
+    where: { shopId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+  return (last?.position ?? -1) + 1;
 }
 
 // GET /api/blocks?shopId=… — liste complète, blocs masqués inclus (éditeur).
@@ -54,35 +59,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "shopId invalide" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  if (!(await assertShopOwnership(supabase, shopId, user.id))) {
-    return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
-  }
+  try {
+    if (!(await ownsShop(shopId, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  const { data, error } = await supabase
-    .from("page_blocks")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("position", { ascending: true });
-
-  if (error) {
+    const blocks = await prisma.pageBlock.findMany({
+      where: { shopId },
+      orderBy: { position: "asc" },
+    });
+    return NextResponse.json({ blocks: blocks.map(serializePageBlock) });
+  } catch (error) {
     console.error("[api/blocks GET]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ blocks: data });
 }
 
 // POST /api/blocks — ajoute un bloc à la fin de la page.
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   let body: unknown;
@@ -102,62 +100,48 @@ export async function POST(request: NextRequest) {
 
   const { shop_id, type, title, config, style, visible } = parsed.data;
 
-  if (!(await assertShopOwnership(supabase, shop_id, user.id))) {
-    return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
-  }
+  try {
+    if (!(await ownsShop(shop_id, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  // La config est validée contre le schéma du type : c'est ici qu'une URL
-  // javascript: ou un champ manquant est rejeté, avant d'atteindre la base.
-  const parsedConfig = parseBlockConfig(type as BlockType, config);
-  if (parsedConfig === null) {
-    return NextResponse.json(
-      { error: "Configuration de bloc invalide pour ce type." },
-      { status: 422 },
-    );
-  }
+    // La config est validée contre le schéma du type : c'est ici qu'une URL
+    // javascript: ou un champ manquant est rejeté, avant d'atteindre la base.
+    const parsedConfig = parseBlockConfig(type as BlockType, config);
+    if (parsedConfig === null) {
+      return NextResponse.json(
+        { error: "Configuration de bloc invalide pour ce type." },
+        { status: 422 },
+      );
+    }
 
-  const parsedStyle = blockStyleSchema.safeParse(style ?? {});
-  if (!parsedStyle.success) {
-    return NextResponse.json({ error: "Style invalide" }, { status: 422 });
-  }
+    const parsedStyle = blockStyleSchema.safeParse(style ?? {});
+    if (!parsedStyle.success) {
+      return NextResponse.json({ error: "Style invalide" }, { status: 422 });
+    }
 
-  // Nouveau bloc en fin de page : c'est ce que le vendeur attend après avoir
-  // cliqué « Ajouter », et ça évite de renuméroter les blocs existants.
-  const { data: last } = await supabase
-    .from("page_blocks")
-    .select("position")
-    .eq("shop_id", shop_id)
-    .order("position", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    const block = await prisma.pageBlock.create({
+      data: {
+        shopId: shop_id,
+        type,
+        title: title ?? null,
+        config: parsedConfig as Prisma.InputJsonValue,
+        style: parsedStyle.data as Prisma.InputJsonValue,
+        visible,
+        position: await nextPosition(shop_id),
+      },
+    });
 
-  const { data, error } = await supabase
-    .from("page_blocks")
-    .insert({
-      shop_id,
-      type,
-      title: title ?? null,
-      config: parsedConfig as never,
-      style: parsedStyle.data as never,
-      visible,
-      position: (last?.position ?? -1) + 1,
-    })
-    .select()
-    .single();
-
-  if (error) {
+    return NextResponse.json({ block: serializePageBlock(block) }, { status: 201 });
+  } catch (error) {
     console.error("[api/blocks POST]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ block: data }, { status: 201 });
 }
 
 // PATCH /api/blocks — réordonne toute la page en une transaction.
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   let body: unknown;
@@ -172,18 +156,15 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Données invalides" }, { status: 422 });
   }
 
-  if (!(await assertShopOwnership(supabase, parsed.data.shop_id, user.id))) {
-    return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
-  }
+  try {
+    if (!(await ownsShop(parsed.data.shop_id, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  const { error } = await supabase.rpc("reorder_page_blocks", {
-    p_shop_id: parsed.data.shop_id,
-    p_block_ids: parsed.data.block_ids,
-  });
-
-  if (error) {
+    await reorderPageBlocks(parsed.data.shop_id, parsed.data.block_ids);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
     console.error("[api/blocks PATCH]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
 }

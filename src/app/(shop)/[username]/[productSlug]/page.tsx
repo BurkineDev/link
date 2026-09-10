@@ -7,7 +7,9 @@
 
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { serializeProduct, serializeShop, serializeVariant } from "@/lib/db/serialize";
+import type { ProductRow, ProductVariantRow, ShopRow } from "@/lib/types/database";
 import { resolveBioTheme } from "@/lib/bio-themes";
 import {
   JsonLd,
@@ -29,27 +31,27 @@ export const revalidate = 60;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username, productSlug } = await params;
-  const supabase = await createClient();
-
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, name, theme_color")
-    .eq("slug", username)
-    .eq("is_published", true)
-    .single();
+  const shop = await prisma.shop.findFirst({
+    where: { slug: username, isPublished: true },
+    select: { id: true, name: true, themeColor: true },
+  });
 
   // Une boutique dépubliée ne doit pas laisser une page vide dans l'index.
   if (!shop) return { title: "Produit introuvable", robots: { index: false } };
 
-  const { data: product } = await supabase
-    .from("products")
-    .select("name, description, images, price, currency")
-    .eq("shop_id", shop.id)
-    .eq("slug", productSlug)
-    .eq("is_published", true)
-    .single();
+  const productRow = await prisma.product.findFirst({
+    where: { shopId: shop.id, slug: productSlug, isPublished: true },
+    select: { name: true, description: true, images: true, price: true, currency: true },
+  });
 
-  if (!product) return { title: "Produit introuvable", robots: { index: false } };
+  if (!productRow) return { title: "Produit introuvable", robots: { index: false } };
+
+  // Le reste lit la forme Supabase.
+  const product = {
+    ...productRow,
+    price: Number(productRow.price),
+    images: productRow.images as ProductRow["images"] | null,
+  };
 
   const primaryImage = product.images?.[0];
 
@@ -87,61 +89,52 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  */
 export async function generateViewport({ params }: Props): Promise<Viewport> {
   const { username } = await params;
-  const supabase = await createClient();
+  const row = await prisma.shop.findFirst({
+    where: { slug: username, isPublished: true },
+    select: { bioTheme: true, themeColor: true, accentColor: true },
+  });
 
-  const { data } = await supabase
-    .from("shops")
-    .select("bio_theme, theme_color, accent_color")
-    .eq("slug", username)
-    .eq("is_published", true)
-    .single();
-
-  if (!data) return {};
+  if (!row) return {};
+  const data = {
+    bio_theme: row.bioTheme,
+    theme_color: row.themeColor,
+    accent_color: row.accentColor,
+  } as Pick<ShopRow, "bio_theme" | "theme_color" | "accent_color">;
   return { themeColor: resolveBioTheme(data).backgroundSolid };
 }
 
 export default async function Page({ params }: Props) {
   const { username, productSlug } = await params;
-  const supabase = await createClient();
-
   // Fetch shop
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("*")
-    .eq("slug", username)
-    .single();
-
-  if (!shop || !shop.is_published) notFound();
+  const shopRow = await prisma.shop.findUnique({ where: { slug: username } });
+  if (!shopRow || !shopRow.isPublished) notFound();
 
   // Fetch product
-  const { data: product } = await supabase
-    .from("products")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .eq("slug", productSlug)
-    .eq("is_published", true)
-    .single();
+  const productRow = await prisma.product.findFirst({
+    where: { shopId: shopRow.id, slug: productSlug, isPublished: true },
+  });
+  if (!productRow) notFound();
 
-  if (!product) notFound();
+  // Fetch variants (if product has them) + related products together
+  const [variantRows, relatedRows] = await Promise.all([
+    productRow.hasVariants
+      ? prisma.productVariant.findMany({
+          where: { productId: productRow.id },
+          orderBy: { id: "asc" },
+        })
+      : Promise.resolve([]),
+    prisma.product.findMany({
+      where: { shopId: shopRow.id, isPublished: true, id: { not: productRow.id } },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+  ]);
 
-  // Fetch variants (if product has them)
-  const { data: variants } = product.has_variants
-    ? await supabase
-        .from("product_variants")
-        .select("*")
-        .eq("product_id", product.id)
-        .order("id")
-    : { data: [] };
-
-  // Fetch related products (other published products from same shop)
-  const { data: related } = await supabase
-    .from("products")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .eq("is_published", true)
-    .neq("id", product.id)
-    .limit(4)
-    .order("created_at", { ascending: false });
+  // Les composants d'affichage lisent la forme Supabase (snake_case).
+  const shop = serializeShop(shopRow) as unknown as ShopRow;
+  const product = serializeProduct(productRow) as unknown as ProductRow;
+  const variants = variantRows.map(serializeVariant) as unknown as ProductVariantRow[];
+  const related = relatedRows.map(serializeProduct) as unknown as ProductRow[];
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const shopUrl = `${appUrl}/${shop.slug}`;
@@ -160,8 +153,8 @@ export default async function Page({ params }: Props) {
       <ProductPage
         shop={shop}
         product={product}
-        variants={variants ?? []}
-        related={related ?? []}
+        variants={variants}
+        related={related}
         pageUrl={pageUrl}
         shopUrl={shopUrl}
       />

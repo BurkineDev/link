@@ -4,7 +4,6 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { Row } from "@/lib/types/database";
 import { CURRENCY_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -361,9 +360,8 @@ export function ProductsClient({ products: initialProducts, shopSlug, currency }
   ];
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) {
+    const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+    if (!res.ok) {
       toast.error("Impossible de supprimer ce produit.");
       return;
     }
@@ -373,13 +371,13 @@ export function ProductsClient({ products: initialProducts, shopSlug, currency }
   };
 
   const handleTogglePublish = async (id: string, publish: boolean) => {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("products")
-      .update({ is_published: publish, updated_at: new Date().toISOString() })
-      .eq("id", id);
+    const res = await fetch(`/api/products/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_published: publish }),
+    });
 
-    if (error) {
+    if (!res.ok) {
       toast.error("Impossible de modifier le statut.");
       return;
     }

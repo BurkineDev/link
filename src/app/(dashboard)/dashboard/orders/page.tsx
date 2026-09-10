@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeOrder } from "@/lib/db/serialize";
 import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
 import { OrdersClient } from "./orders-client";
 import type { OrderRow } from "@/lib/types/database";
@@ -12,24 +14,17 @@ interface OrdersPageProps {
 }
 
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
   const { status: statusParam, page: pageParam } = await searchParams;
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10));
   const from = (currentPage - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
 
   // Fetch shop
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, currency")
-    .eq("owner_id", user.id)
-    .single();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, currency: true },
+  });
 
   if (!shop) {
     redirect("/dashboard");
@@ -50,14 +45,6 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     new Promise((resolve) => setTimeout(resolve, 5_000)),
   ]).catch((err) => console.error("[orders] reconcile failed", err));
 
-  // Build query
-  let query = supabase
-    .from("orders")
-    .select("*", { count: "exact" })
-    .eq("shop_id", shop.id)
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
   const validStatuses: OrderStatus[] = [
     "pending",
     "confirmed",
@@ -73,18 +60,27 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
       ? (statusParam as OrderStatus)
       : null;
 
-  if (activeStatus) {
-    query = query.eq("status", activeStatus);
-  }
+  const where = {
+    shopId: shop.id,
+    ...(activeStatus ? { status: activeStatus } : {}),
+  };
+  const [rows, count] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: from,
+      take: PAGE_SIZE,
+    }),
+    prisma.order.count({ where }),
+  ]);
+  const orders = rows.map(serializeOrder) as unknown as OrderRow[];
 
-  const { data: orders, count } = await query;
-
-  const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
+  const totalPages = Math.ceil(count / PAGE_SIZE);
 
   return (
     <OrdersClient
-      orders={(orders ?? []) as OrderRow[]}
-      totalCount={count ?? 0}
+      orders={orders}
+      totalCount={count}
       totalPages={totalPages}
       currentPage={currentPage}
       activeStatus={activeStatus}

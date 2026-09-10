@@ -221,6 +221,22 @@
   }
 }
 
+/*
+ * Les BioPages sont surtout ouvertes dans les WebView d'Instagram, TikTok et
+ * LinkedIn. Comme dans got_the_ref, ce geste supprime l'ancien délai de
+ * double-tap et garantit qu'un appui bref devient bien un clic sur le lien.
+ */
+button,
+a,
+label,
+select,
+summary,
+[role="button"],
+input[type="button"],
+input[type="submit"] {
+  touch-action: manipulation;
+}
+
 /* ---------------------------------------------------------------------------
    Décor de marque
    ---------------------------------------------------------------------------

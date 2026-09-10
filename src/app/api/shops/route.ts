@@ -1,35 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeShop } from "@/lib/db/serialize";
 import { createShopSchema } from "@/lib/validations/shop";
-import type { ShopInsert } from "@/lib/types/database";
+import { Prisma } from "../../../../prisma/generated/client/client";
 
 // GET /api/shops — get authenticated user's shop(s)
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
 
-  const { data: shops, error } = await supabase
-    .from("shops")
-    .select("*, templates(*)")
-    .eq("owner_id", user.id)
-    .order("created_at", { ascending: false });
+  try {
+    const rows = await prisma.shop.findMany({
+      where: { ownerId: user.id },
+      include: { template: true },
+      orderBy: { createdAt: "desc" },
+    });
 
-  if (error) {
+    // `templates(*)` côté PostgREST : le gabarit joint sous cette clé.
+    const shops = rows.map(({ template, ...shop }) => ({
+      ...serializeShop(shop),
+      templates: template,
+    }));
+
+    return NextResponse.json({ shops });
+  } catch (error) {
     console.error("[api/shops GET] db error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-
-  return NextResponse.json({ shops });
 }
 
 // POST /api/shops — create a new shop
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -50,35 +56,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const shopData: ShopInsert = {
-    owner_id: user.id,
-    name: parsed.data.name,
-    slug: parsed.data.slug,
-    description: parsed.data.description ?? null,
-    currency: parsed.data.currency,
-    template_id: parsed.data.template_id ?? null,
-    is_published: false,
-    theme_color: "#FF6B35",
-    logo_url: null,
-    banner_url: null,
-    contact_email: null,
-    contact_phone: null,
-    social_links: null,
-  };
+  try {
+    const shop = await prisma.shop.create({
+      data: {
+        ownerId: user.id,
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        description: parsed.data.description ?? null,
+        currency: parsed.data.currency,
+        templateId: parsed.data.template_id ?? null,
+        isPublished: false,
+        themeColor: "#FF6B35",
+      },
+    });
 
-  const { data: shop, error } = await supabase
-    .from("shops")
-    .insert(shopData)
-    .select()
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
+    return NextResponse.json({ shop: serializeShop(shop) }, { status: 201 });
+  } catch (error) {
+    // P2002 = contrainte unique (slug), l'équivalent du 23505 de PostgREST.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
       return NextResponse.json({ error: "Ce slug est déjà utilisé" }, { status: 409 });
     }
     console.error("[api/shops POST] insert error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-
-  return NextResponse.json({ shop }, { status: 201 });
 }

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, Mail, Send, CheckCircle2 } from "lucide-react";
 
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/validations/auth";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,16 +27,16 @@ export default function ForgotPasswordPage() {
   });
 
   async function onSubmit(data: ForgotPasswordInput) {
-    const supabase = createClient();
-
-    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/api/auth/callback?next=/reset-password`,
+    // Better Auth envoie le lien puis renvoie vers /reset-password?token=…
+    const { error } = await authClient.requestPasswordReset({
+      email: data.email,
+      redirectTo: "/reset-password",
     });
 
     if (error) {
       // Don't reveal if the email exists (security best practice)
       // But do handle genuine errors
-      if (!error.message.includes("rate limit")) {
+      if (error.status !== 429 && !/rate limit/i.test(error.message ?? "")) {
         toast.error("Une erreur est survenue. Veuillez réessayer.");
         return;
       }

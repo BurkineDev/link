@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mocking DB, verifyWebhookSignature, and notifySellerOfPaidOrder
+//
+// La fixture de commande reste en snake_case ; `toOrder` la traduit en ligne
+// Prisma. Les appels à `settlePaidOrder` / `cancelUnpaidOrder` et la mise à
+// jour de la commande sont capturés sous leur ancienne forme (`p_*`,
+// `payment_ref`) pour que les assertions existantes restent valables.
 // ---------------------------------------------------------------------------
 
 let _order: Record<string, unknown> | null = null;
@@ -11,39 +16,49 @@ let _updateError: unknown = null;
 let _rpcResult: unknown = null;
 let _rpcError: unknown = null;
 
-const mockAdminClient = {
-  from: (table: string) => {
-    if (table === "orders") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: () =>
-              _orderError
-                ? Promise.resolve({ data: null, error: _orderError })
-                : Promise.resolve({ data: _order, error: null }),
-          }),
-        }),
-        update: (payload: unknown) => ({
-          eq: () => {
-            _updateResult = payload;
-            return Promise.resolve({ error: _updateError });
-          },
-        }),
-      };
-    }
-    return {};
-  },
-  rpc: (fn: string, payload: unknown) => {
-    if (fn === "release_stock") {
-      _rpcResult = payload;
-      return Promise.resolve({ error: _rpcError });
-    }
-    return Promise.resolve({ error: null });
-  },
-};
+const toOrder = (o: Record<string, unknown>) => ({
+  id: o.id,
+  totalAmount: o.total_amount,
+  currency: o.currency,
+  paymentStatus: o.payment_status,
+});
 
-jest.mock("@/lib/supabase/admin", () => ({
-  getAdminClient: () => mockAdminClient,
+const mockPrisma = {
+  order: {
+    findUnique: jest.fn(async () => {
+      if (_orderError) throw _orderError;
+      return _order ? toOrder(_order) : null;
+    }),
+    update: jest.fn(async (args: { data: { paymentRef?: unknown; paymentProvider?: unknown } }) => {
+      _updateResult = {
+        payment_ref: args.data.paymentRef,
+        payment_provider: args.data.paymentProvider,
+      };
+      if (_updateError) throw _updateError;
+      return {};
+    }),
+  },
+  subscriptionPayment: { updateMany: jest.fn(async () => ({ count: 0 })) },
+  boostPurchase: { updateMany: jest.fn(async () => ({ count: 0 })) },
+};
+jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+
+jest.mock("@/lib/db/orders", () => ({
+  settlePaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
+    if (_rpcError) throw _rpcError;
+    _rpcResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
+    return { settled: true };
+  }),
+  cancelUnpaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
+    if (_rpcError) throw _rpcError;
+    _rpcResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
+    return { cancelled: true };
+  }),
+}));
+
+jest.mock("@/lib/db/subscriptions", () => ({
+  applySubscriptionPayment: jest.fn(async () => ({ applied: true })),
+  applyBoostPayment: jest.fn(async () => ({ applied: true })),
 }));
 
 let _verifyResult = true;
@@ -57,7 +72,7 @@ jest.mock("@/lib/geniuspay", () => {
 
 const mockNotifySellerOfPaidOrder = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/lib/order-notifications", () => ({
-  notifySellerOfPaidOrder: mockNotifySellerOfPaidOrder,
+  notifyPaidOrder: mockNotifySellerOfPaidOrder,
 }));
 
 import { POST } from "@/app/api/webhooks/geniuspay/route";
@@ -168,11 +183,11 @@ describe("POST /api/webhooks/geniuspay", () => {
   test("updates order and notifies seller on successful payment", async () => {
     const res = await POST(makeRequest(validPayload()));
     expect(res.status).toBe(200);
-    expect(_updateResult).toEqual({
-      payment_status: "paid",
-      status: "confirmed",
-      payment_ref: REF_GP,
-      payment_provider: "geniuspay",
+    expect(_updateResult).toBeNull();
+    expect(_rpcResult).toEqual({
+      p_order_id: ORDER_ID,
+      p_payment_ref: REF_GP,
+      p_payment_provider: "geniuspay",
     });
     expect(mockNotifySellerOfPaidOrder).toHaveBeenCalledWith(ORDER_ID);
   });
@@ -201,16 +216,11 @@ describe("POST /api/webhooks/geniuspay", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(_updateResult).toEqual({
-      payment_status: "failed",
-      status: "cancelled",
-      payment_ref: REF_GP,
-      payment_provider: "geniuspay",
-    });
+    expect(_updateResult).toBeNull();
     expect(_rpcResult).toEqual({
-      items: [
-        { product_id: "p-001", variant_id: "v-001", quantity: 2 },
-      ],
+      p_order_id: ORDER_ID,
+      p_payment_ref: REF_GP,
+      p_payment_provider: "geniuspay",
     });
   });
 

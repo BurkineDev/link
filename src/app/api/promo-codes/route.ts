@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializePromoCode } from "@/lib/db/serialize";
+import { Prisma } from "../../../../prisma/generated/client/client";
 
 const createSchema = z.object({
   shop_id: z.string().uuid(),
@@ -18,44 +21,41 @@ const createSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
+async function ownsShop(shopId: string, userId: string): Promise<boolean> {
+  const shop = await prisma.shop.findFirst({
+    where: { id: shopId, ownerId: userId },
+    select: { id: true },
+  });
+  return shop !== null;
+}
+
 // GET /api/promo-codes?shopId=xxx
 export async function GET(request: NextRequest) {
   const shopId = request.nextUrl.searchParams.get("shopId");
   if (!shopId) return NextResponse.json({ error: "shopId requis" }, { status: 400 });
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", shopId)
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!shop) return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+  try {
+    if (!(await ownsShop(shopId, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  const { data: codes, error } = await supabase
-    .from("promo_codes")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
+    const codes = await prisma.promoCode.findMany({
+      where: { shopId },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json({ codes: codes.map(serializePromoCode) });
+  } catch (error) {
     console.error("[api/promo-codes GET] db error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ codes });
 }
 
 // POST /api/promo-codes
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   let body: unknown;
@@ -83,21 +83,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
-    .from("promo_codes")
-    .insert({
-      ...parsed.data,
-      code: parsed.data.code.toUpperCase(),
-    })
-    .select()
-    .single();
+  try {
+    // Sans RLS, l'appartenance de la boutique se vérifie explicitement.
+    if (!(await ownsShop(parsed.data.shop_id, user.id))) {
+      return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
 
-  if (error) {
-    if (error.code === "23505") {
+    const promo = await prisma.promoCode.create({
+      data: {
+        shopId: parsed.data.shop_id,
+        code: parsed.data.code.toUpperCase(),
+        discountType: parsed.data.discount_type,
+        discountValue: parsed.data.discount_value,
+        minOrderAmount: parsed.data.min_order_amount ?? null,
+        maxUses: parsed.data.max_uses ?? null,
+        expiresAt: parsed.data.expires_at ? new Date(parsed.data.expires_at) : null,
+        isActive: parsed.data.is_active,
+      },
+    });
+
+    return NextResponse.json({ code: serializePromoCode(promo) }, { status: 201 });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
       return NextResponse.json({ error: "Ce code existe déjà." }, { status: 409 });
     }
     console.error("[api/promo-codes POST] insert error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-  return NextResponse.json({ code: data }, { status: 201 });
 }

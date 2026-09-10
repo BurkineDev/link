@@ -10,7 +10,6 @@ import {
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import {
   createProductSchema,
   type CreateProductInput,
@@ -123,24 +122,37 @@ const FIELD_STEP = Object.entries(STEP_FIELDS).reduce<
 const PRODUCT_DRAFT_KEY = "linkboutik:product-draft";
 
 /** Violation de contrainte d'unicité côté Postgres. */
-const PG_UNIQUE_VIOLATION = "23505";
-
 /**
- * Lit une erreur Supabase.
- *
- * `throw error` propage l'objet renvoyé par le client, qui n'est pas une
- * instance d'`Error` : le `err instanceof Error` d'origine tombait donc
- * toujours à côté et le vendeur ne lisait que « Une erreur est survenue ».
+ * Erreur renvoyée par l'API produits, avec son statut HTTP : 409 signale une
+ * adresse déjà prise, que le formulaire sait résoudre lui-même.
  */
-function readDbError(err: unknown): { code?: string; message?: string } {
-  if (err && typeof err === "object") {
-    const e = err as { code?: unknown; message?: unknown };
-    return {
-      code: typeof e.code === "string" ? e.code : undefined,
-      message: typeof e.message === "string" ? e.message : undefined,
-    };
+class ProductApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
   }
-  return {};
+}
+
+async function callProductsApi(
+  url: string,
+  method: "POST" | "PATCH",
+  payload: unknown,
+): Promise<{ id: string }> {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    product?: { id: string };
+  };
+  if (!res.ok) {
+    throw new ProductApiError(res.status, body.error ?? "Une erreur est survenue");
+  }
+  if (!body.product?.id) {
+    throw new ProductApiError(500, "Réponse inattendue du serveur");
+  }
+  return body.product;
 }
 
 /**
@@ -554,59 +566,29 @@ export function ProductForm({
   const save = useCallback(
     async (data: CreateProductInput, publish: boolean) => {
       setIsSubmitting(true);
-      const supabase = createClient();
-
       try {
+        const fields = {
+          name: data.name,
+          slug: data.slug,
+          description: data.description ?? null,
+          price: data.price,
+          compare_price: data.compare_price ?? null,
+          currency: data.currency,
+          images: data.images,
+          category_id: data.category_id ?? null,
+          is_published: publish,
+          is_digital: data.is_digital,
+          stock_quantity: data.stock_quantity ?? null,
+          has_variants: data.has_variants,
+          metadata: data.metadata ?? undefined,
+          variants:
+            data.has_variants && data.variants?.length ? data.variants : undefined,
+        };
+
         if (isEdit && productId) {
-          const { error } = await supabase
-            .from("products")
-            .update({
-              name: data.name,
-              slug: data.slug,
-              description: data.description ?? null,
-              price: data.price,
-              compare_price: data.compare_price ?? null,
-              currency: data.currency,
-              images: data.images,
-              category_id: data.category_id ?? null,
-              is_published: publish,
-              is_digital: data.is_digital,
-              stock_quantity: data.stock_quantity ?? null,
-              has_variants: data.has_variants,
-              metadata: data.metadata ?? null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", productId);
-
-          if (error) throw error;
-
-          // Upsert variants
-          if (data.has_variants && data.variants?.length) {
-            for (const variant of data.variants) {
-              if (variant.id) {
-                await supabase
-                  .from("product_variants")
-                  .update({
-                    name: variant.name,
-                    options: variant.options,
-                    price: variant.price,
-                    stock_quantity: variant.stock_quantity ?? null,
-                    sku: variant.sku ?? null,
-                  })
-                  .eq("id", variant.id);
-              } else {
-                await supabase.from("product_variants").insert({
-                  product_id: productId,
-                  name: variant.name,
-                  options: variant.options ?? [],
-                  price: variant.price,
-                  compare_price: null,
-                  stock_quantity: variant.stock_quantity ?? null,
-                  sku: variant.sku ?? null,
-                });
-              }
-            }
-          }
+          // Le serveur met à jour le produit et ses variantes (existantes par
+          // id, nouvelles sinon) dans une seule transaction.
+          await callProductsApi(`/api/products/${productId}`, "PATCH", fields);
 
           toast.success("Produit mis à jour avec succès");
           router.push("/dashboard/products");
@@ -616,59 +598,31 @@ export function ProductForm({
           // prise, on suffixe et on réessaie : le vendeur voulait ajouter un
           // produit, pas arbitrer un conflit d'URL.
           let slug = data.slug;
-          let product: { id: string } | null = null;
-          let error: unknown = null;
+          let created: { id: string } | null = null;
 
           for (let attempt = 0; attempt < 5; attempt++) {
-            const result = await supabase
-              .from("products")
-              .insert({
+            try {
+              created = await callProductsApi("/api/products", "POST", {
+                ...fields,
                 shop_id: shopId,
-                name: data.name,
                 slug,
-                description: data.description ?? null,
-                price: data.price,
-                compare_price: data.compare_price ?? null,
-                currency: data.currency,
-                images: data.images,
-                category_id: data.category_id ?? null,
-                is_published: publish,
-                is_digital: data.is_digital,
-                stock_quantity: data.stock_quantity ?? null,
-                has_variants: data.has_variants,
-                metadata: data.metadata ?? null,
-              })
-              .select("id")
-              .single();
-
-            product = result.data;
-            error = result.error;
-
-            if (!error && product) break;
-            if (readDbError(error).code !== PG_UNIQUE_VIOLATION) break;
-
-            slug = withSuffix(data.slug, attempt + 2);
+              });
+              break;
+            } catch (err) {
+              if (!(err instanceof ProductApiError) || err.status !== 409) throw err;
+              slug = withSuffix(data.slug, attempt + 2);
+            }
           }
 
-          if (error || !product) throw error;
+          if (!created) {
+            throw new ProductApiError(
+              409,
+              "Un produit porte déjà cette adresse. Modifie-la à l'étape 1.",
+            );
+          }
           if (slug !== data.slug) {
             setValue("slug", slug);
             toast.info(`Adresse ajustée en « ${slug} » : l'autre était prise.`);
-          }
-
-          // Insert variants
-          if (data.has_variants && data.variants?.length) {
-            await supabase.from("product_variants").insert(
-              data.variants.map((v) => ({
-                product_id: product.id,
-                name: v.name,
-                options: v.options ?? [],
-                price: v.price,
-                compare_price: null,
-                stock_quantity: v.stock_quantity ?? null,
-                sku: v.sku ?? null,
-              }))
-            );
           }
 
           toast.success(
@@ -678,12 +632,12 @@ export function ProductForm({
           router.refresh();
         }
       } catch (err) {
-        const { code, message } = readDbError(err);
         const msg =
-          code === PG_UNIQUE_VIOLATION
+          err instanceof ProductApiError && err.status === 409
             ? "Un produit porte déjà cette adresse. Modifie-la à l'étape 1."
-            : (err instanceof Error ? err.message : message) ??
-              "Une erreur est survenue";
+            : err instanceof Error
+              ? err.message
+              : "Une erreur est survenue";
         toast.error(msg);
       } finally {
         setIsSubmitting(false);

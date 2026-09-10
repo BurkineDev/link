@@ -80,6 +80,8 @@ export function BlockEditorDialog({
   const [saving, setSaving] = useState(false);
 
   const meta = BLOCK_TYPE_META[type];
+  const detectedLink =
+    type === "LINK" ? detectLink(String(config.url ?? "")) : null;
   const set = (key: string, value: unknown) =>
     setConfig((cur) => ({ ...cur, [key]: value }));
 
@@ -108,7 +110,14 @@ export function BlockEditorDialog({
     // Valider ici avec le schéma partagé évite un aller-retour réseau pour
     // une faute de frappe, et donne un message avant l'envoi.
     const schema = BLOCK_CONFIG_SCHEMAS[type];
-    const result = schema.safeParse(config);
+    const configToValidate =
+      type === "LINK"
+        ? {
+            ...config,
+            url: detectLink(String(config.url ?? "")).url,
+          }
+        : config;
+    const result = schema.safeParse(configToValidate);
     if (!result.success) {
       setError(
         result.error.issues[0]?.message ?? "Vérifie les champs du bloc.",
@@ -138,7 +147,11 @@ export function BlockEditorDialog({
               {/* L'adresse d'abord : c'est elle qui remplit le reste. */}
               <Field
                 label="Colle ton lien"
-                hint="Instagram, TikTok, YouTube, WhatsApp… la plateforme est reconnue toute seule."
+                hint={
+                  detectedLink?.recognized
+                    ? `${detectedLink.label} reconnu — ouverture directe dans l'app activée.`
+                    : "Instagram, TikTok, YouTube, WhatsApp… la plateforme est reconnue toute seule."
+                }
               >
                 <Input
                   value={String(config.url ?? "")}

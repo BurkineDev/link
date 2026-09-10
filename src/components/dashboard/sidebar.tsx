@@ -18,7 +18,7 @@ import {
   MoreHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/auth-client";
 
 type NavItemDef = {
   label: string;
@@ -101,8 +101,7 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
   const router = useRouter();
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOut();
     router.push("/login");
   }
 

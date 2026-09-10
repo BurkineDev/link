@@ -21,6 +21,7 @@ describe("detectLink", () => {
       const d = detectLink(url);
       expect([url, d.icon, d.label]).toEqual([url, icon, label]);
       expect(d.recognized).toBe(true);
+      expect(d.platformId).not.toBeNull();
     }
   });
 
@@ -40,6 +41,21 @@ describe("detectLink", () => {
     expect(detectLink("https://vm.tiktok.com/ZMabc123/").label).toBe("TikTok");
   });
 
+  test("reconnaît des apps au-delà des réseaux historiques", () => {
+    const cases: [string, string][] = [
+      ["https://open.spotify.com/track/abc", "Spotify"],
+      ["https://music.apple.com/fr/album/test/123", "Apple Music"],
+      ["https://discord.gg/abc", "Discord"],
+      ["https://maps.app.goo.gl/abc", "Google Maps"],
+      ["https://calendly.com/amy/30min", "Calendly"],
+      ["https://www.etsy.com/listing/123/test", "Etsy"],
+    ];
+
+    for (const [url, label] of cases) {
+      expect(detectLink(url)).toMatchObject({ label, recognized: true });
+    }
+  });
+
   test("mailto: et tel:", () => {
     expect(detectLink("mailto:vendeur@example.com").icon).toBe("email");
     expect(detectLink("tel:+22665170778").icon).toBe("phone");
@@ -50,6 +66,7 @@ describe("detectLink", () => {
     expect(d.icon).toBe("website");
     expect(d.label).toBe("maboutique.ci");
     expect(d.recognized).toBe(false);
+    expect(d.platformId).toBeNull();
   });
 
   test("un domaine qui imite une plateforme n'est pas reconnu", () => {

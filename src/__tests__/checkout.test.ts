@@ -6,106 +6,109 @@
 import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
-// Mutable state read by the persistent mock — updated per test via setup()
+// Mutable state read by the persistent mocks — updated per test via setup()
+//
+// Les fixtures restent en snake_case (forme historique des tests) ; les
+// convertisseurs ci-dessous les traduisent en lignes Prisma (camelCase),
+// pour que les cas de test n'aient pas à changer.
 // ---------------------------------------------------------------------------
 
 let _shop: Record<string, unknown> | null = null;
 let _products: Record<string, unknown>[] = [];
+let _variants: Record<string, unknown>[] = [];
 let _orderError: unknown = null;
 let _reserveResult: { ok: boolean; reason?: string; product_name?: string; available?: number } = { ok: true };
+let _redeemResult: { ok: boolean; discount?: number; reason?: string } = { ok: true, discount: 0 };
 
-const mockCreateClient = jest.fn().mockImplementation(async () => ({
-  from: (table: string) => {
-    if (table === "shops") {
-      return {
-        select: () => ({
-          eq: () => ({
-            single: () => Promise.resolve({ data: _shop, error: _shop ? null : "not found" }),
-          }),
-        }),
-      };
-    }
-    if (table === "products") {
-      return {
-        select: () => ({
-          in: () => Promise.resolve({ data: _products, error: null }),
-        }),
-      };
-    }
-    if (table === "orders") {
-      return {
-        insert: () => ({
-          select: () => ({
-            single: () =>
-              _orderError
-                ? Promise.resolve({ data: null, error: _orderError })
-                : Promise.resolve({ data: { id: ORDER_ID }, error: null }),
-          }),
-        }),
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-      };
-    }
-    return {};
-  },
-  rpc: (fn: string) => {
-    if (fn === "reserve_stock") {
-      return Promise.resolve({ data: _reserveResult, error: null });
-    }
-    return Promise.resolve({ data: null, error: null });
-  },
-}));
+const toShop = (s: Record<string, unknown>) => ({
+  id: s.id,
+  name: s.name,
+  slug: s.slug,
+  currency: s.currency,
+  isPublished: s.is_published,
+  ownerId: s.owner_id,
+  shippingEnabled: s.shipping_enabled,
+});
 
-jest.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
+const toProduct = (p: Record<string, unknown>) => ({
+  id: p.id,
+  shopId: p.shop_id,
+  name: p.name,
+  price: p.price,
+  currency: p.currency,
+  images: p.images,
+  isPublished: p.is_published,
+  isDigital: p.is_digital,
+  hasVariants: p.has_variants,
+});
 
-// Admin client (subscription past_due check + stock RPCs since the 006
-// security hardening migration revoked EXECUTE from public roles).
-const mockAdminClient = {
-  // La commande s'écrit avec la clé service : `orders` autorise l'insertion
-  // publique mais réserve la lecture au propriétaire, et PostgREST traduit
-  // `.insert().select()` en `INSERT ... RETURNING`, que Postgres refuse alors.
-  from: (table: string) => {
-    if (table === "orders") {
-      return {
-        insert: () => ({
-          select: () => ({
-            single: () =>
-              _orderError
-                ? Promise.resolve({ data: null, error: _orderError })
-                : Promise.resolve({ data: { id: ORDER_ID }, error: null }),
-          }),
-        }),
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-      };
-    }
-    return {
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve({ data: null, error: null }),
-        }),
-      }),
-    };
+const toVariant = (v: Record<string, unknown>) => ({
+  id: v.id,
+  productId: v.product_id,
+  name: v.name,
+  price: v.price,
+  sku: v.sku,
+});
+
+const mockPrisma = {
+  shop: {
+    findUnique: jest.fn(async () => (_shop ? toShop(_shop) : null)),
   },
-  rpc: (fn: string) => {
-    if (fn === "reserve_stock") {
-      return Promise.resolve({ data: _reserveResult, error: null });
-    }
-    return Promise.resolve({ data: null, error: null });
+  creatorSubscription: {
+    findUnique: jest.fn(async () => null),
+  },
+  product: {
+    findMany: jest.fn(async () => _products.map(toProduct)),
+  },
+  productVariant: {
+    findMany: jest.fn(async () => _variants.map(toVariant)),
+  },
+  shippingZone: {
+    findMany: jest.fn(async () => []),
+  },
+  order: {
+    create: jest.fn(async () => {
+      if (_orderError) throw _orderError;
+      return { id: ORDER_ID };
+    }),
+    update: jest.fn(async () => ({})),
   },
 };
-jest.mock("@/lib/supabase/admin", () => ({
-  getAdminClient: () => mockAdminClient,
+jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+
+// Les fonctions Postgres portées en TypeScript : on ne teste ici que la
+// route, pas leur logique (elle a ses propres tests).
+jest.mock("@/lib/db/stock", () => ({
+  reserveStock: jest.fn(async () => _reserveResult),
+  releaseStock: jest.fn(async () => undefined),
+}));
+jest.mock("@/lib/db/promo", () => ({
+  redeemPromoCode: jest.fn(async () => _redeemResult),
+  releasePromoRedemption: jest.fn(async () => undefined),
+}));
+jest.mock("@/lib/db/orders", () => ({
+  settlePaidOrder: jest.fn(async () => ({ settled: true })),
+  cancelUnpaidOrder: jest.fn(async () => ({ cancelled: true })),
 }));
 
 const mockCreateSession = jest.fn();
+const mockCreateCoupon = jest.fn();
 jest.mock("@/lib/stripe", () => ({
   getStripe: () => {
     if (!process.env.STRIPE_SECRET_KEY) {
       throw new Error("Missing STRIPE_SECRET_KEY environment variable.");
     }
-    return { checkout: { sessions: { create: mockCreateSession } } };
+    return {
+      checkout: { sessions: { create: mockCreateSession } },
+      coupons: { create: mockCreateCoupon },
+    };
   },
   toStripeAmount: (amount: number, currency: string) =>
     ["XAF", "XOF"].includes(currency.toUpperCase()) ? Math.round(amount) : Math.round(amount * 100),
+}));
+
+jest.mock("@/lib/order-notifications", () => ({
+  notifyPaidOrder: jest.fn().mockResolvedValue(undefined),
 }));
 
 import { POST } from "@/app/api/checkout/route";
@@ -118,6 +121,7 @@ import { POST } from "@/app/api/checkout/route";
 const SHOP_ID    = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PRODUCT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ORDER_ID   = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const VARIANT_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const BASE_SHOP = {
   id: SHOP_ID,
@@ -126,16 +130,27 @@ const BASE_SHOP = {
   currency: "XOF",
   is_published: true,
   owner_id: "user-001",
+  shipping_enabled: false,
 };
 
 const BASE_PRODUCT = {
   id: PRODUCT_ID,
+  shop_id: SHOP_ID,
   name: "Tissu wax",
   price: 5000,
   currency: "XOF",
   images: [{ url: "https://cdn.example.com/img.jpg" }],
   is_published: true,
   is_digital: false,
+  has_variants: false,
+};
+
+const BASE_VARIANT = {
+  id: VARIANT_ID,
+  product_id: PRODUCT_ID,
+  name: "Bleu / XL",
+  price: 7_500,
+  sku: "WAX-BL-XL",
 };
 
 // ---------------------------------------------------------------------------
@@ -145,13 +160,17 @@ const BASE_PRODUCT = {
 function setup(opts: {
   shop?: typeof BASE_SHOP | null;
   products?: typeof BASE_PRODUCT[];
+  variants?: typeof BASE_VARIANT[];
   orderError?: unknown;
   reserveResult?: { ok: boolean; reason?: string; product_name?: string; available?: number };
+  redeemResult?: { ok: boolean; discount?: number; reason?: string };
 } = {}) {
   _shop = opts.shop !== undefined ? (opts.shop as Record<string, unknown> | null) : (BASE_SHOP as Record<string, unknown>);
   _products = (opts.products !== undefined ? opts.products : [BASE_PRODUCT]) as Record<string, unknown>[];
+  _variants = (opts.variants ?? []) as Record<string, unknown>[];
   _orderError = opts.orderError ?? null;
   _reserveResult = opts.reserveResult ?? { ok: true };
+  _redeemResult = opts.redeemResult ?? { ok: true, discount: 0 };
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -200,6 +219,8 @@ function mockStripeMissingUrl() {
 beforeEach(() => {
   setup(); // reset to defaults
   mockCreateSession.mockReset();
+  mockCreateCoupon.mockReset();
+  mockCreateCoupon.mockResolvedValue({ id: "coupon_order_123" });
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
 });
@@ -232,6 +253,76 @@ describe("POST /api/checkout", () => {
 
     const stripeSession = mockCreateSession.mock.calls[0][0];
     expect(stripeSession.line_items[0].price_data.unit_amount).toBe(5000);
+  });
+
+  test("TC-02b: a selected variant uses its DB price and snapshot", async () => {
+    setup({
+      products: [{ ...BASE_PRODUCT, has_variants: true }],
+      variants: [BASE_VARIANT],
+    });
+    mockStripeOk();
+
+    await POST(
+      makeRequest(
+        validPayload({
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              variant_id: VARIANT_ID,
+              quantity: 1,
+              unit_price: 1,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const stripeSession = mockCreateSession.mock.calls[0][0];
+    expect(stripeSession.line_items[0].price_data.unit_amount).toBe(7_500);
+  });
+
+  test("TC-02c: a variant from another product is rejected", async () => {
+    setup({
+      products: [{ ...BASE_PRODUCT, has_variants: true }],
+      variants: [{ ...BASE_VARIANT, product_id: ORDER_ID }],
+    });
+
+    const res = await POST(
+      makeRequest(
+        validPayload({
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              variant_id: VARIANT_ID,
+              quantity: 1,
+              unit_price: 7_500,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/variante invalide/i);
+  });
+
+  test("TC-02d: a promo is applied to the Stripe session amount", async () => {
+    setup({ redeemResult: { ok: true, discount: 2_000 } });
+    mockStripeOk();
+
+    await POST(makeRequest(validPayload({ promoCode: "PROMO20" })));
+
+    expect(mockCreateCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount_off: 2_000,
+        currency: "xof",
+        max_redemptions: 1,
+      }),
+      expect.objectContaining({ idempotencyKey: `order-discount-${ORDER_ID}` }),
+    );
+    expect(mockCreateSession.mock.calls[0][0].discounts).toEqual([
+      { coupon: "coupon_order_123" },
+    ]);
   });
 
   // TC-03 — boutique non publiée

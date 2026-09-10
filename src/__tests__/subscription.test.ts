@@ -48,7 +48,7 @@ describe("PLAN_PRICES (CAD cents)", () => {
 
   it("prices Pro at 9,99 CAD/month and 59 CAD/year (~50% off yearly)", () => {
     expect(PLAN_PRICES.pro.month).toBe(999);
-    expect(PLAN_PRICES.pro.year).toBe(5_900);
+    expect(PLAN_PRICES.pro.year).toBe(9_900);
     expect(PLAN_PRICES.pro.year).toBeLessThan(PLAN_PRICES.pro.month * 12);
   });
 

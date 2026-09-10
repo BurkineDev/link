@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles, Store } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { ShopCard } from "@/components/explore/shop-card";
 import type { ShopRow } from "@/lib/types/database";
 
@@ -30,22 +30,44 @@ type ExploreShop = Pick<
   | "featured_until"
 >;
 
+/**
+ * Rendu à la demande : avec Supabase, la lecture des cookies rendait cette
+ * page dynamique sans le dire. Sans ce réglage, Next.js la pré-rendrait au
+ * build en interrogeant la base — et un build ne doit jamais dépendre d'elle.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function ExplorePage() {
-  const supabase = await createClient();
-
   // Featured shops first (boost still active), then by recent update.
-  // `shops_explore_idx` covers this ordering on published rows.
-  const { data: rawShops } = await supabase
-    .from("shops")
-    .select(
-      "id, slug, name, description, logo_url, banner_url, theme_color, featured_until",
-    )
-    .eq("is_published", true)
-    .order("featured_until", { ascending: false, nullsFirst: false })
-    .order("updated_at", { ascending: false })
-    .limit(PAGE_SIZE);
+  const rows = await prisma.shop.findMany({
+    where: { isPublished: true },
+    orderBy: [
+      { featuredUntil: { sort: "desc", nulls: "last" } },
+      { updatedAt: "desc" },
+    ],
+    take: PAGE_SIZE,
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      description: true,
+      logoUrl: true,
+      bannerUrl: true,
+      themeColor: true,
+      featuredUntil: true,
+    },
+  });
 
-  const shops = (rawShops ?? []) as ExploreShop[];
+  const shops = rows.map((s) => ({
+    id: s.id,
+    slug: s.slug,
+    name: s.name,
+    description: s.description,
+    logo_url: s.logoUrl,
+    banner_url: s.bannerUrl,
+    theme_color: s.themeColor,
+    featured_until: s.featuredUntil?.toISOString() ?? null,
+  })) as ExploreShop[];
   const now = new Date();
   const featured = shops.filter(
     (s) => s.featured_until && new Date(s.featured_until) > now,

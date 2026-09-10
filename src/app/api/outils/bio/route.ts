@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { enforceAiLimits } from "@/lib/rate-limit";
 import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
 import { parseBioOptions } from "@/lib/ai/bio-options";
@@ -37,23 +37,28 @@ export async function POST(request: NextRequest) {
     const blocked = await enforceAiLimits(request, "bio");
     if (blocked) return blocked;
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
     }
 
-    // Lu avec la clé service : l'abonnement décide d'une dépense, il ne se
-    // lit pas à travers une politique que le client pourrait contourner.
-    const { data: sub } = await getAdminClient()
-      .from("creator_subscriptions")
-      .select("plan, status, provider, current_period_end")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // L'abonnement décide d'une dépense : il se lit côté serveur, jamais sur
+    // la foi d'une valeur envoyée par le client.
+    const sub = await prisma.creatorSubscription.findUnique({
+      where: { userId: user.id },
+      select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
+    });
 
-    const plan = getEffectivePlan(sub);
+    const plan = getEffectivePlan(
+      sub
+        ? {
+            plan: sub.plan,
+            status: sub.status,
+            provider: sub.provider,
+            current_period_end: sub.currentPeriodEnd?.toISOString() ?? null,
+          }
+        : null,
+    );
     if (!getPlanLimits(plan).aiWriting) {
       return NextResponse.json(
         {

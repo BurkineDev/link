@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
+import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import { serializeOrder } from "@/lib/db/serialize";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import {
   fetchPayment as fetchGeniusPayment,
   mapStatusToPaymentStatus,
 } from "@/lib/geniuspay";
+import { notifyPaidOrder } from "@/lib/order-notifications";
 
 // ---------------------------------------------------------------------------
 // GET /api/checkout/verify?session_id=cs_xxx
@@ -17,12 +20,10 @@ import {
 // so the success page can show the correct state without waiting on the
 // webhook to fire.
 //
-// Uses the ADMIN client on purpose: the buyer is anonymous and the orders
-// RLS policies only grant reads to the shop owner, so the anon client sees
-// no row and every buyer landed on "commande introuvable" after paying.
-// The high-entropy payment_ref (Stripe cs_…, GeniusPay MTX-…) acts as the
-// bearer capability, and the status updates only run after the provider
-// itself confirmed the payment.
+// L'acheteur est anonyme : il n'y a plus de RLS pour le filtrer, donc c'est
+// la référence de paiement à forte entropie (Stripe cs_…, Genius Pay MTX-…)
+// ou l'UUID de commande qui sert de capacité d'accès. Les changements de
+// statut ne s'exécutent qu'après confirmation par le prestataire lui-même.
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
@@ -41,54 +42,62 @@ export async function GET(request: NextRequest) {
     // valider : les accolades ne sont pas des caractères d'URL.)
     const isGeniusByOrder =
       provider === "geniuspay" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
+    const isFreeByOrder =
+      provider === "free" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
     const isGenius = provider === "geniuspay" && (!!reference || isGeniusByOrder);
     const isStripe = !!sessionId;
 
-    if (!isGenius && !isStripe) {
+    if (!isGenius && !isStripe && !isFreeByOrder) {
       return NextResponse.json(
         { error: "Paramètres de vérification manquants." },
         { status: 400 },
       );
     }
 
-    const supabase = getAdminClient();
+    // `payment_ref` n'est pas unique en base (une référence peut rester nulle
+    // sur plusieurs commandes en attente) : `findFirst`, avec la valeur
+    // toujours renseignée par construction.
+    const row =
+      isGeniusByOrder || isFreeByOrder
+        ? await prisma.order.findUnique({ where: { id: orderId! } })
+        : await prisma.order.findFirst({
+            where: { paymentRef: (isGenius ? reference : sessionId) as string },
+          });
 
-    const selection =
-      "id, shop_id, total_amount, currency, payment_status, status, items, buyer_name, buyer_email, payment_provider, payment_ref, discount_amount, promo_code";
-
-    const query = supabase.from("orders").select(selection);
-
-    const { data: order, error: orderError } = await (isGeniusByOrder
-      ? query.eq("id", orderId!)
-      : query.eq("payment_ref", (isGenius ? reference : sessionId) as string)
-    ).maybeSingle();
-
-    if (orderError || !order) {
+    if (!row) {
       return NextResponse.json(
         { error: "Commande introuvable pour cette référence." },
         { status: 404 },
       );
     }
 
+    const order = serializeOrder(row);
+
     const withShop = async (orderObj: typeof order) => {
-      const { data: shop } = await supabase
-        .from("shops")
-        .select("name, slug, whatsapp_number")
-        .eq("id", orderObj.shop_id)
-        .single();
+      const shop = await prisma.shop.findUnique({
+        where: { id: orderObj.shop_id },
+        select: { name: true, slug: true, whatsappNumber: true },
+      });
       // whatsapp_number is already public (it powers the wa.me CTAs on the
       // shop page); exposing it here lets the buyer relay their confirmation.
       return {
         ...orderObj,
         shop_name: shop?.name,
         shop_slug: shop?.slug,
-        shop_whatsapp: shop?.whatsapp_number ?? null,
+        shop_whatsapp: shop?.whatsappNumber ?? null,
       };
     };
 
     // Already settled — idempotent return.
     if (order.payment_status === "paid") {
       return NextResponse.json({ order: await withShop(order) });
+    }
+
+    if (isFreeByOrder) {
+      return NextResponse.json(
+        { error: "Cette commande gratuite n'est pas confirmée." },
+        { status: 409 },
+      );
     }
 
     // --------------------------------------------------------------------- //
@@ -114,10 +123,16 @@ export async function GET(request: NextRequest) {
         payment.currency.toUpperCase() === order.currency.toUpperCase();
 
       if (nextStatus === "paid" && amountOk && currencyOk) {
-        await supabase
-          .from("orders")
-          .update({ payment_status: "paid", status: "confirmed" })
-          .eq("id", order.id);
+        const settlement = await settlePaidOrder(
+          order.id,
+          payment.reference ?? (order.payment_ref as string),
+          "geniuspay",
+        );
+        if (settlement.settled) {
+          notifyPaidOrder(order.id).catch((error) =>
+            console.warn("[verify] order notification failed", error),
+          );
+        }
         return NextResponse.json({
           order: await withShop({
             ...order,
@@ -136,10 +151,11 @@ export async function GET(request: NextRequest) {
       }
 
       if (nextStatus === "failed") {
-        await supabase
-          .from("orders")
-          .update({ payment_status: "failed", status: "cancelled" })
-          .eq("id", order.id);
+        await cancelUnpaidOrder(
+          order.id,
+          payment.reference ?? order.payment_ref,
+          "geniuspay",
+        );
         return NextResponse.json({ error: "Le paiement a échoué." }, { status: 400 });
       }
 
@@ -177,10 +193,12 @@ export async function GET(request: NextRequest) {
       session.currency?.toUpperCase() === order.currency.toUpperCase();
 
     if (isPaid && amountOk && currencyOk) {
-      await supabase
-        .from("orders")
-        .update({ payment_status: "paid", status: "confirmed" })
-        .eq("id", order.id);
+      const settlement = await settlePaidOrder(order.id, session.id, "stripe");
+      if (settlement.settled) {
+        notifyPaidOrder(order.id).catch((error) =>
+          console.warn("[verify] order notification failed", error),
+        );
+      }
       return NextResponse.json({
         order: await withShop({
           ...order,
@@ -191,10 +209,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (isFailed) {
-      await supabase
-        .from("orders")
-        .update({ payment_status: "failed" })
-        .eq("id", order.id);
+      await cancelUnpaidOrder(order.id, session.id, "stripe");
       return NextResponse.json({ error: "Le paiement a échoué." }, { status: 400 });
     }
 

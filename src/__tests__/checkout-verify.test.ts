@@ -7,6 +7,9 @@ import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state
+//
+// La fixture reste en snake_case ; `toRow` la traduit en ligne Prisma
+// complète (dates, décimaux) pour que `serializeOrder` puisse la relire.
 // ---------------------------------------------------------------------------
 
 let _order: Record<string, unknown> | null = BASE_ORDER_DEFAULT();
@@ -25,36 +28,49 @@ function BASE_ORDER_DEFAULT() {
   };
 }
 
-// getAdminClient is synchronous, unlike the old cookie-bound createClient.
-const mockCreateClient = jest.fn().mockImplementation(() => ({
-  from: (table: string) => {
-    if (table === "orders") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: () => Promise.resolve({ data: _order, error: null }),
-          }),
-        }),
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
-      };
-    }
-    if (table === "shops") {
-      return {
-        select: () => ({
-          eq: () => ({
-            single: () =>
-              Promise.resolve({ data: { name: "Boutique Test", slug: "boutique-test" }, error: null }),
-          }),
-        }),
-      };
-    }
-    return {};
-  },
-}));
+const toRow = (o: Record<string, unknown>) => ({
+  id: o.id,
+  shopId: o.shop_id,
+  customerId: null,
+  buyerEmail: o.buyer_email,
+  buyerName: o.buyer_name,
+  buyerPhone: null,
+  status: o.status,
+  paymentStatus: o.payment_status,
+  paymentProvider: "stripe",
+  paymentRef: "cs_test_123",
+  totalAmount: o.total_amount,
+  shippingAmount: 0,
+  currency: o.currency,
+  items: o.items,
+  shippingAddress: null,
+  notes: null,
+  promoCode: null,
+  discountAmount: 0,
+  trackingToken: "tok-001",
+  createdAt: new Date("2026-01-01T00:00:00Z"),
+  updatedAt: new Date("2026-01-01T00:00:00Z"),
+});
 
-// The route reads/updates on behalf of an anonymous buyer, so it uses the
-// admin client (see route comments) — mock that entry point.
-jest.mock("@/lib/supabase/admin", () => ({ getAdminClient: mockCreateClient }));
+const mockPrisma = {
+  order: {
+    findUnique: jest.fn(async () => (_order ? toRow(_order) : null)),
+    findFirst: jest.fn(async () => (_order ? toRow(_order) : null)),
+  },
+  shop: {
+    findUnique: jest.fn(async () => ({
+      name: "Boutique Test",
+      slug: "boutique-test",
+      whatsappNumber: null,
+    })),
+  },
+};
+jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+
+jest.mock("@/lib/db/orders", () => ({
+  settlePaidOrder: jest.fn(async () => ({ settled: true })),
+  cancelUnpaidOrder: jest.fn(async () => ({ cancelled: true })),
+}));
 
 const mockRetrieveSession = jest.fn();
 jest.mock("@/lib/stripe", () => ({
@@ -68,6 +84,10 @@ jest.mock("@/lib/stripe", () => ({
     if (amount === null) return null;
     return ["XAF", "XOF"].includes(currency.toUpperCase()) ? amount : amount / 100;
   },
+}));
+
+jest.mock("@/lib/order-notifications", () => ({
+  notifyPaidOrder: jest.fn().mockResolvedValue(undefined),
 }));
 
 import { GET } from "@/app/api/checkout/verify/route";

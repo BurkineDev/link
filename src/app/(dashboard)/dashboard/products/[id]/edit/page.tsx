@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeProduct, serializeVariant } from "@/lib/db/serialize";
 import { ProductForm } from "@/components/dashboard/product-form";
 import type { CreateProductInput } from "@/lib/validations/product";
 import type { Row } from "@/lib/types/database";
@@ -18,41 +20,24 @@ interface EditProductPageProps {
 export default async function EditProductPage({ params }: EditProductPageProps) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shopRaw } = await supabase
-    .from("shops")
-    .select("id, slug, currency")
-    .eq("owner_id", user.id)
-    .single();
-
-  const shop = shopRaw as Pick<Row<"shops">, "id" | "slug" | "currency"> | null;
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, slug: true, currency: true },
+  });
   if (!shop) redirect("/dashboard");
 
   // Fetch product and verify it belongs to this shop
-  const { data: productRaw } = await supabase
-    .from("products")
-    .select("*")
-    .eq("id", id)
-    .eq("shop_id", shop.id)
-    .single();
+  const productRow = await prisma.product.findFirst({
+    where: { id, shopId: shop.id },
+    include: { variants: { orderBy: { id: "asc" } } },
+  });
+  if (!productRow) notFound();
 
-  const product = productRaw as Row<"products"> | null;
-  if (!product) notFound();
-
-  // Fetch variants
-  const { data: variantsRaw } = await supabase
-    .from("product_variants")
-    .select("*")
-    .eq("product_id", id)
-    .order("id");
-
-  const variantRows = (variantsRaw as Row<"product_variants">[] | null) ?? [];
-  const variants = variantRows.map((v) => ({
+  // Le formulaire lit la forme Supabase (snake_case).
+  const product = serializeProduct(productRow) as unknown as Row<"products">;
+  const variants = productRow.variants.map(serializeVariant).map((v) => ({
     id: v.id,
     name: v.name,
     options: v.options,
@@ -61,15 +46,11 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
     sku: v.sku,
   }));
 
-  // Fetch categories
-  const { data: categoriesRaw } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("shop_id", shop.id)
-    .order("position");
-
-  const categories =
-    (categoriesRaw as Pick<Row<"categories">, "id" | "name">[] | null) ?? [];
+  const categories = await prisma.category.findMany({
+    where: { shopId: shop.id },
+    orderBy: { position: "asc" },
+    select: { id: true, name: true },
+  });
 
   const defaultValues: Partial<CreateProductInput> = {
     name: product.name,
@@ -84,7 +65,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
     is_digital: product.is_digital,
     stock_quantity: product.stock_quantity,
     has_variants: product.has_variants,
-    variants: variants.length > 0 ? variants : undefined,
+    variants: variants.length > 0 ? (variants as CreateProductInput["variants"]) : undefined,
     metadata: product.metadata ?? undefined,
   };
 

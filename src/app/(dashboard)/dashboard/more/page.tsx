@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   BarChart3Icon,
   ChevronRightIcon,
@@ -93,17 +93,12 @@ const SECTIONS: Array<{
 ];
 
 export default async function MorePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("slug, is_published")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { slug: true, isPublished: true },
+  });
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -114,7 +109,7 @@ export default async function MorePage() {
         </p>
       </div>
 
-      {shop?.slug && shop.is_published && (
+      {shop?.slug && shop.isPublished && (
         <a
           href={`/${shop.slug}`}
           target="_blank"

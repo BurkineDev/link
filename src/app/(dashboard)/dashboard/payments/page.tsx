@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   Card,
   CardContent,
@@ -54,31 +55,42 @@ const PAYMENT_STATUS_META: Record<
 };
 
 export default async function PaymentsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, currency")
-    .eq("owner_id", user.id)
-    .single();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, currency: true },
+  });
   if (!shop) redirect("/dashboard");
 
   const currency = shop.currency as Currency;
 
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, total_amount, currency, payment_status, payment_provider, payment_ref, buyer_name, created_at",
-    )
-    .eq("shop_id", shop.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const rows = await prisma.order.findMany({
+    where: { shopId: shop.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      totalAmount: true,
+      currency: true,
+      paymentStatus: true,
+      paymentProvider: true,
+      paymentRef: true,
+      buyerName: true,
+      createdAt: true,
+    },
+  });
 
-  const payments = (data ?? []) as Array<
+  const payments = rows.map((row) => ({
+    id: row.id,
+    total_amount: Number(row.totalAmount),
+    currency: row.currency,
+    payment_status: row.paymentStatus,
+    payment_provider: row.paymentProvider,
+    payment_ref: row.paymentRef,
+    buyer_name: row.buyerName,
+    created_at: row.createdAt.toISOString(),
+  })) as Array<
     Pick<
       OrderRow,
       | "id"

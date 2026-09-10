@@ -1,23 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 
 import { resetPasswordSchema, type ResetPasswordInput } from "@/lib/validations/auth";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  // Better Auth ne crée pas de session pour réinitialiser : le lien reçu
+  // par e-mail arrive ici avec `?token=…` (ou `?error=INVALID_TOKEN` s'il a
+  // expiré). Sans jeton, l'utilisateur a ouvert la page directement.
+  const token = useSearchParams().get("token");
+  const hasSession = Boolean(token);
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -29,39 +33,26 @@ export default function ResetPasswordPage() {
     resolver: zodResolver(resetPasswordSchema),
   });
 
-  // The Supabase recovery callback (/api/auth/callback) exchanges the code
-  // for a session before redirecting here. If no session exists, the link
-  // has expired or the user opened the page directly.
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setHasSession(!!data.user);
-    });
-  }, []);
-
   async function onSubmit(data: ResetPasswordInput) {
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password: data.password });
+    if (!token) return;
+    const { error } = await authClient.resetPassword({
+      newPassword: data.password,
+      token,
+    });
 
     if (error) {
       toast.error(
-        error.message.toLowerCase().includes("same")
+        /same/i.test(error.message ?? "")
           ? "Le nouveau mot de passe doit être différent de l'ancien."
           : "Impossible de réinitialiser le mot de passe. Le lien a peut-être expiré.",
       );
       return;
     }
 
+    // Les autres sessions sont révoquées à la réinitialisation : on repasse
+    // par la connexion plutôt que d'atterrir sur un tableau de bord vide.
     setSuccess(true);
-    setTimeout(() => router.push("/dashboard"), 2000);
-  }
-
-  if (hasSession === null) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    setTimeout(() => router.push("/login"), 2000);
   }
 
   if (hasSession === false) {
@@ -200,5 +191,24 @@ export default function ResetPasswordPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+/**
+ * `useSearchParams` impose une frontière Suspense sur une page statique :
+ * le temps que les paramètres soient disponibles, on montre le même
+ * indicateur qu'avant.
+ */
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

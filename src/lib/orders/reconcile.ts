@@ -13,14 +13,14 @@
  * Server-only — ne jamais importer depuis un Client Component.
  */
 
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
+import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import {
   fetchPayment,
   isGeniusPayConfigured,
   mapStatusToPaymentStatus,
 } from "@/lib/geniuspay";
 import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
-import type { OrderItem } from "@/lib/types/database";
 
 /**
  * On laisse d'abord sa chance au webhook : inutile d'appeler Genius Pay pour
@@ -47,11 +47,10 @@ export interface ReconcileResult {
 
 interface PendingOrder {
   id: string;
-  total_amount: number;
+  totalAmount: number;
   currency: string;
-  payment_ref: string | null;
-  items: OrderItem[] | null;
-  created_at: string;
+  paymentRef: string;
+  createdAt: Date;
 }
 
 const EMPTY: ReconcileResult = {
@@ -73,29 +72,50 @@ export async function reconcilePendingGeniusPayOrders(
   if (!isGeniusPayConfigured()) return EMPTY;
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
-  const admin = getAdminClient();
-  const cutoff = new Date(Date.now() - MIN_AGE_MS).toISOString();
+  const cutoff = new Date(Date.now() - MIN_AGE_MS);
 
-  let query = admin
-    .from("orders")
-    .select("id, total_amount, currency, payment_ref, items, created_at")
-    .eq("payment_provider", "geniuspay")
-    .eq("payment_status", "pending")
-    .not("payment_ref", "is", null)
-    .lt("created_at", cutoff)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (opts.shopId) query = query.eq("shop_id", opts.shopId);
-
-  const { data, error } = await query;
-
-  if (error || !data?.length) {
-    if (error) console.error("[reconcile] read error:", error);
+  let rows: Array<{
+    id: string;
+    totalAmount: unknown;
+    currency: string;
+    paymentRef: string | null;
+    createdAt: Date;
+  }>;
+  try {
+    rows = await prisma.order.findMany({
+      where: {
+        paymentProvider: "geniuspay",
+        paymentStatus: "pending",
+        paymentRef: { not: null },
+        createdAt: { lt: cutoff },
+        ...(opts.shopId ? { shopId: opts.shopId } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        totalAmount: true,
+        currency: true,
+        paymentRef: true,
+        createdAt: true,
+      },
+    });
+  } catch (error) {
+    console.error("[reconcile] read error:", error);
     return EMPTY;
   }
 
-  const orders = data as unknown as PendingOrder[];
+  if (rows.length === 0) return EMPTY;
+
+  const orders: PendingOrder[] = rows
+    .filter((row): row is typeof row & { paymentRef: string } => row.paymentRef !== null)
+    .map((row) => ({
+      id: row.id,
+      totalAmount: Number(row.totalAmount),
+      currency: row.currency,
+      paymentRef: row.paymentRef,
+      createdAt: row.createdAt,
+    }));
   const result: ReconcileResult = { ...EMPTY };
 
   // Séquentiel : le lot est petit et Genius Pay applique un rate limit.
@@ -117,14 +137,13 @@ export async function reconcilePendingGeniusPayOrders(
 async function settleOrder(
   order: PendingOrder,
 ): Promise<"paid" | "failed" | "stillPending"> {
-  const admin = getAdminClient();
-  const payment = await fetchPayment(order.payment_ref as string);
+  const payment = await fetchPayment(order.paymentRef);
   const status = mapStatusToPaymentStatus(payment.status);
 
   if (status === "paid") {
     // Mêmes garde-fous que le webhook : on ne confirme jamais une commande
     // sur un paiement d'un autre montant ou d'une autre devise.
-    const amountOk = payment.amount >= order.total_amount;
+    const amountOk = payment.amount >= order.totalAmount;
     const currencyOk =
       payment.currency.toUpperCase() === order.currency.toUpperCase();
 
@@ -133,18 +152,19 @@ async function settleOrder(
       return "stillPending";
     }
 
-    // `eq("payment_status", "pending")` rend l'opération idempotente face au
-    // webhook qui arriverait au même moment : un seul des deux écrit.
-    const { data: updated, error } = await admin
-      .from("orders")
-      .update({ payment_status: "paid", status: "confirmed" })
-      .eq("id", order.id)
-      .eq("payment_status", "pending")
-      .select("id");
+    // Même chemin que le webhook : verrou, fiche client, écritures
+    // comptables, téléchargements. L'ancienne version se contentait de
+    // passer la commande à « payée », sans commission ni fiche client — une
+    // commande rattrapée ici n'apparaissait pas dans le registre financier.
+    // `settlePaidOrder` est idempotent face au webhook qui arriverait au
+    // même moment : un seul des deux écrit.
+    const settlement = await settlePaidOrder(
+      order.id,
+      payment.reference ?? order.paymentRef,
+      "geniuspay",
+    );
 
-    if (error) throw error;
-
-    if (updated?.length) {
+    if (settlement.settled) {
       notifySellerOfPaidOrder(order.id).catch((err) =>
         console.warn("[reconcile] notify seller failed", err),
       );
@@ -153,18 +173,11 @@ async function settleOrder(
     return "paid";
   }
 
-  const isStale = Date.now() - new Date(order.created_at).getTime() > STALE_AFTER_MS;
+  const isStale = Date.now() - order.createdAt.getTime() > STALE_AFTER_MS;
 
   if (status === "failed" || isStale) {
-    await releaseStock(order);
-
-    const { error } = await admin
-      .from("orders")
-      .update({ payment_status: "failed", status: "cancelled" })
-      .eq("id", order.id)
-      .eq("payment_status", "pending");
-
-    if (error) throw error;
+    // Rend le stock et l'usage du code promo, une seule fois.
+    await cancelUnpaidOrder(order.id, order.paymentRef, "geniuspay");
 
     console.info(
       "[reconcile] order",
@@ -175,20 +188,4 @@ async function settleOrder(
   }
 
   return "stillPending";
-}
-
-/** Rend au stock ce que la commande avait réservé. */
-async function releaseStock(order: PendingOrder) {
-  const items = order.items;
-  if (!items?.length) return;
-
-  const { error } = await getAdminClient().rpc("release_stock", {
-    items: items.map((it) => ({
-      product_id: it.product_id,
-      variant_id: it.variant_id ?? null,
-      quantity: it.quantity,
-    })),
-  });
-
-  if (error) console.error("[reconcile] release_stock error:", error);
 }
