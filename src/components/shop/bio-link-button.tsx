@@ -23,6 +23,7 @@ import {
 } from "@/components/shop/brand-icons";
 import { cn } from "@/lib/utils";
 import type { BioPalette } from "@/lib/bio-themes";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 
 // Per-link sharing is a rare tap on a page that must paint fast — load the
 // dialog only when someone actually reaches for it.
@@ -198,7 +199,7 @@ export function BioLinkButton({
   return (
     <li className="relative">
       {external ? (
-        <a
+        <SmartAppLink
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -207,7 +208,7 @@ export function BioLinkButton({
           style={focusRing}
         >
           {body}
-        </a>
+        </SmartAppLink>
       ) : (
         <Link
           href={link.url}

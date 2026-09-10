@@ -266,6 +266,10 @@ export type ShopRow = {
   checkout_mode: ShopCheckoutMode;
   intentions: Intention[];
   featured_until: string | null;
+  custom_domain: string | null;
+  custom_domain_verified_at: string | null;
+  show_biolien_badge: boolean;
+  shipping_enabled: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -411,6 +415,7 @@ export type TemplateRow = {
   preview_image: string | null;
   config: TemplateConfig;
   is_active: boolean;
+  is_premium: boolean;
 };
 
 export type CategoryRow = {
@@ -455,6 +460,7 @@ export type ProductVariantRow = {
 export type OrderRow = {
   id: string;
   shop_id: string;
+  customer_id: string | null;
   buyer_email: string;
   buyer_name: string;
   buyer_phone: string | null;
@@ -463,12 +469,14 @@ export type OrderRow = {
   payment_provider: PaymentProvider | null;
   payment_ref: string | null;
   total_amount: number;
+  shipping_amount: number;
   currency: Currency;
   items: OrderItem[];
   shipping_address: ShippingAddress | null;
   notes: string | null;
   promo_code: string | null;
   discount_amount: number;
+  tracking_token: string;
   created_at: string;
   updated_at: string;
 };
@@ -482,6 +490,95 @@ export type OrderItemRow = {
   unit_price: number;
   subtotal: number;
   product_snapshot: OrderItemSnapshot;
+};
+
+export type CustomerRow = {
+  id: string;
+  shop_id: string;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  tags: string[];
+  notes: string | null;
+  marketing_opt_in: boolean;
+  first_order_at: string | null;
+  last_order_at: string | null;
+  order_count: number;
+  total_spent: number;
+  currency: Currency;
+  created_at: string;
+  updated_at: string;
+};
+
+export type OrderStatusEventRow = {
+  id: string;
+  order_id: string;
+  status: OrderStatus;
+  note: string | null;
+  public_message: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type AnalyticsEventRow = {
+  id: string;
+  shop_id: string;
+  block_id: string | null;
+  link_id: string | null;
+  type: "page_view" | "link_click" | "block_click" | "product_view" | "add_to_cart" | "checkout_started" | "purchase";
+  visitor_id: string | null;
+  session_id: string | null;
+  source: string | null;
+  medium: string | null;
+  campaign: string | null;
+  referrer: string | null;
+  path: string | null;
+  metadata: Json | null;
+  created_at: string;
+};
+
+export type ShippingZoneRow = {
+  id: string;
+  shop_id: string;
+  name: string;
+  countries: string[];
+  rate: number;
+  free_above: number | null;
+  estimated_min: number | null;
+  estimated_max: number | null;
+  is_active: boolean;
+  currency: Currency;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DigitalDownloadRow = {
+  id: string;
+  order_id: string;
+  order_item_id: string | null;
+  product_id: string;
+  token: string;
+  file_key: string;
+  file_name: string | null;
+  download_count: number;
+  download_limit: number;
+  expires_at: string | null;
+  last_downloaded_at: string | null;
+  created_at: string;
+};
+
+export type TransactionLedgerRow = {
+  id: string;
+  shop_id: string;
+  order_id: string | null;
+  type: "gross" | "platform_fee" | "seller_net" | "refund" | "payout";
+  amount: number;
+  currency: Currency;
+  status: "pending" | "posted" | "void";
+  provider: string | null;
+  reference: string | null;
+  metadata: Json | null;
+  created_at: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -512,6 +609,10 @@ export type ShopInsert = Omit<
   | "checkout_mode"
   | "intentions"
   | "featured_until"
+  | "custom_domain"
+  | "custom_domain_verified_at"
+  | "show_biolien_badge"
+  | "shipping_enabled"
 > & {
   tiktok_pixel_id?: string | null;
   meta_pixel_id?: string | null;
@@ -526,9 +627,15 @@ export type ShopInsert = Omit<
   checkout_mode?: ShopCheckoutMode;
   intentions?: Intention[];
   featured_until?: string | null;
+  custom_domain?: string | null;
+  custom_domain_verified_at?: string | null;
+  show_biolien_badge?: boolean;
+  shipping_enabled?: boolean;
 };
 
-export type TemplateInsert = Omit<TemplateRow, "id">;
+export type TemplateInsert = Omit<TemplateRow, "id" | "is_premium"> & {
+  is_premium?: boolean;
+};
 
 export type CategoryInsert = Omit<CategoryRow, "id">;
 
@@ -536,7 +643,19 @@ export type ProductInsert = Omit<ProductRow, "id" | "created_at" | "updated_at">
 
 export type ProductVariantInsert = Omit<ProductVariantRow, "id">;
 
-export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "updated_at">;
+export type OrderInsert = Omit<
+  OrderRow,
+  | "id"
+  | "customer_id"
+  | "shipping_amount"
+  | "tracking_token"
+  | "created_at"
+  | "updated_at"
+> & {
+  customer_id?: string | null;
+  shipping_amount?: number;
+  tracking_token?: string;
+};
 
 export type OrderItemInsert = Omit<OrderItemRow, "id">;
 
@@ -639,6 +758,36 @@ export interface Database {
         Insert: BoostPurchaseInsert;
         Update: BoostPurchaseUpdate;
       } & NoRelationships;
+      customers: {
+        Row: CustomerRow;
+        Insert: Omit<CustomerRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<CustomerRow, "id" | "shop_id" | "created_at">>;
+      } & NoRelationships;
+      order_status_events: {
+        Row: OrderStatusEventRow;
+        Insert: Omit<OrderStatusEventRow, "id" | "created_at">;
+        Update: never;
+      } & NoRelationships;
+      analytics_events: {
+        Row: AnalyticsEventRow;
+        Insert: Omit<AnalyticsEventRow, "id" | "created_at">;
+        Update: never;
+      } & NoRelationships;
+      shipping_zones: {
+        Row: ShippingZoneRow;
+        Insert: Omit<ShippingZoneRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<ShippingZoneRow, "id" | "shop_id" | "created_at">>;
+      } & NoRelationships;
+      digital_downloads: {
+        Row: DigitalDownloadRow;
+        Insert: Omit<DigitalDownloadRow, "id" | "token" | "download_count" | "last_downloaded_at" | "created_at">;
+        Update: Partial<Omit<DigitalDownloadRow, "id" | "order_id" | "product_id" | "token" | "created_at">>;
+      } & NoRelationships;
+      transaction_ledger: {
+        Row: TransactionLedgerRow;
+        Insert: Omit<TransactionLedgerRow, "id" | "created_at">;
+        Update: Partial<Pick<TransactionLedgerRow, "status" | "metadata">>;
+      } & NoRelationships;
     };
     Views: Record<string, never>;
     Functions: {
@@ -656,6 +805,40 @@ export interface Database {
       };
       redeem_promo_code: {
         Args: { p_shop_id: string; p_code: string; p_order_total: number };
+        Returns: Json;
+      };
+      release_promo_redemption: {
+        Args: { p_shop_id: string; p_code: string };
+        Returns: void;
+      };
+      cancel_unpaid_order: {
+        Args: {
+          p_order_id: string;
+          p_payment_ref: string | null;
+          p_payment_provider: PaymentProvider | null;
+        };
+        Returns: Json;
+      };
+      settle_paid_order: {
+        Args: {
+          p_order_id: string;
+          p_payment_ref: string;
+          p_payment_provider: PaymentProvider;
+        };
+        Returns: Json;
+      };
+      transition_order_status: {
+        Args: {
+          p_order_id: string;
+          p_status: OrderStatus;
+          p_actor: string;
+          p_note?: string | null;
+          p_public_message?: string | null;
+        };
+        Returns: Json;
+      };
+      consume_digital_download: {
+        Args: { p_token: string };
         Returns: Json;
       };
       track_shop_link_click: {

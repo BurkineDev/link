@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
-import { createClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma";
 import { isBioThemeId, resolveBioTheme } from "@/lib/bio-themes";
-import type { Database } from "@/lib/types/database";
+import type { ShopRow } from "@/lib/types/database";
 
 /**
  * GET /api/story/{slug} — a ready-to-post story image (1080×1920, 9:16) for a
@@ -15,7 +15,8 @@ import type { Database } from "@/lib/types/database";
  * public page already shows. Unpublished or unknown slugs get a 404.
  */
 
-export const runtime = "edge";
+// Runtime Node.js : Prisma ne tourne pas sur le runtime edge, et next/og
+// rend aussi bien sur Node.
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -37,24 +38,35 @@ export async function GET(request: Request, ctx: Ctx) {
     return new Response("Not found", { status: 404 });
   }
 
-  // Bare anon client — this route is public and cookie-free, so the RLS
-  // "published shops only" policy is exactly the access control we want.
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
+  // Route publique et sans cookie : seules les boutiques publiées sont
+  // lisibles, c'est le `where` qui l'impose.
+  const row = await prisma.shop.findFirst({
+    where: { slug, isPublished: true },
+    select: {
+      name: true,
+      slug: true,
+      description: true,
+      logoUrl: true,
+      bioTheme: true,
+      themeColor: true,
+      accentColor: true,
+    },
+  });
 
-  const { data: shop } = await supabase
-    .from("shops")
-    .select(
-      "name, slug, description, logo_url, bio_theme, theme_color, accent_color",
-    )
-    .eq("slug", slug)
-    .eq("is_published", true)
-    .single();
+  if (!row) return new Response("Not found", { status: 404 });
 
-  if (!shop) return new Response("Not found", { status: 404 });
+  const shop = {
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    logo_url: row.logoUrl,
+    bio_theme: row.bioTheme,
+    theme_color: row.themeColor,
+    accent_color: row.accentColor,
+  } as Pick<
+    ShopRow,
+    "name" | "slug" | "description" | "logo_url" | "bio_theme" | "theme_color" | "accent_color"
+  >;
 
   const palette = resolveBioTheme(
     isBioThemeId(themeOverride) ? { ...shop, bio_theme: themeOverride } : shop,

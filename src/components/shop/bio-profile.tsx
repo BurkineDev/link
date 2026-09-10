@@ -9,6 +9,7 @@ import {
   XIcon,
   YoutubeIcon,
 } from "@/components/shop/brand-icons";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { cn } from "@/lib/utils";
 import type { BioPalette } from "@/lib/bio-themes";
 import type { ShopRow, SocialLinks } from "@/lib/types/database";
@@ -95,7 +96,7 @@ export function BioSocials({
       {active.map((social) => {
         const Icon = social.icon;
         return (
-          <a
+          <SmartAppLink
             key={social.key}
             href={social.href(links[social.key]!.trim())}
             target="_blank"
@@ -114,7 +115,7 @@ export function BioSocials({
             }
           >
             <Icon className="size-6" />
-          </a>
+          </SmartAppLink>
         );
       })}
     </nav>

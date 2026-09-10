@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeOrder } from "@/lib/db/serialize";
 import { OrderStatusBadge } from "@/components/dashboard/order-status-badge";
 import { BoostCard } from "@/components/dashboard/boost-card";
 import {
@@ -104,28 +105,40 @@ function Tile({
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
 
-  if (!user) redirect("/login");
-
-  const [profileResult, shopResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("full_name, username")
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("shops")
-      .select("id, name, slug, is_published, currency, featured_until")
-      .eq("owner_id", user.id)
-      .single(),
+  const [profileRow, shopRow] = await Promise.all([
+    prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { fullName: true, username: true },
+    }),
+    prisma.shop.findFirst({
+      where: { ownerId: user.id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isPublished: true,
+        currency: true,
+        featuredUntil: true,
+      },
+    }),
   ]);
 
-  const profile = profileResult.data;
-  const shop = shopResult.data;
+  // Le reste de la page lit la forme Supabase (snake_case) ; on la reproduit.
+  const profile = profileRow
+    ? { full_name: profileRow.fullName, username: profileRow.username }
+    : null;
+  const shop = shopRow
+    ? {
+        id: shopRow.id,
+        name: shopRow.name,
+        slug: shopRow.slug,
+        is_published: shopRow.isPublished,
+        currency: shopRow.currency,
+        featured_until: shopRow.featuredUntil?.toISOString() ?? null,
+      }
+    : null;
 
   const displayName =
     profile?.full_name?.split(" ")[0] ??
@@ -146,39 +159,31 @@ export default async function DashboardPage() {
   let viewsCount = 0;
 
   if (shop?.id) {
-    const [ordersStatsResult, productsResult, recentOrdersResult, viewsResult] =
+    const [ordersStats, productsTotal, recentRows, viewsTotal] =
       await Promise.all([
-        supabase
-          .from("orders")
-          .select("total_amount, status, payment_status")
-          .eq("shop_id", shop.id),
-        supabase
-          .from("products")
-          .select("id", { count: "exact", head: true })
-          .eq("shop_id", shop.id),
-        supabase
-          .from("orders")
-          .select("*")
-          .eq("shop_id", shop.id)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        // La table est alimentée par track_shop_page_view à chaque ouverture
-        // de la page publique. La carte affichait « bientôt disponible »
-        // alors que le chiffre existait déjà.
-        supabase
-          .from("shop_page_views")
-          .select("id", { count: "exact", head: true })
-          .eq("shop_id", shop.id),
+        prisma.order.findMany({
+          where: { shopId: shop.id },
+          select: { totalAmount: true, paymentStatus: true },
+        }),
+        prisma.product.count({ where: { shopId: shop.id } }),
+        prisma.order.findMany({
+          where: { shopId: shop.id },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        }),
+        // La table est alimentée à chaque ouverture de la page publique. La
+        // carte affichait « bientôt disponible » alors que le chiffre
+        // existait déjà.
+        prisma.shopPageView.count({ where: { shopId: shop.id } }),
       ]);
 
-    const ordersStats = ordersStatsResult.data ?? [];
     ordersCount = ordersStats.length;
     totalRevenue = ordersStats
-      .filter((o) => o.payment_status === "paid")
-      .reduce((sum, o) => sum + (o.total_amount ?? 0), 0);
-    productsCount = productsResult.count ?? 0;
-    recentOrders = (recentOrdersResult.data ?? []) as OrderRow[];
-    viewsCount = viewsResult.count ?? 0;
+      .filter((o) => o.paymentStatus === "paid")
+      .reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    productsCount = productsTotal;
+    recentOrders = recentRows.map(serializeOrder) as unknown as OrderRow[];
+    viewsCount = viewsTotal;
   }
 
   const currency = shop?.currency ?? "XOF";

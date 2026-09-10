@@ -18,7 +18,7 @@ import {
   AtSign,
 } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
+import { signIn, signUp } from "@/lib/auth-client";
 import { StarterOffer, type RegisterInvite } from "@/components/auth/starter-offer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,7 +157,6 @@ export function RegisterForm({
   const onboardingPath = next
     ? `/dashboard/onboarding?next=${encodeURIComponent(next)}`
     : "/dashboard/onboarding";
-  const authCallback = `/api/auth/callback?next=${encodeURIComponent(onboardingPath)}`;
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -203,25 +202,23 @@ export function RegisterForm({
     async function checkUsername() {
       setUsernameStatus("checking");
       try {
-        const supabase = createClient();
-        // Passe par `username_available` plutôt que de lire `profiles` :
-        // la table n'est plus en lecture publique, et de toute façon une
-        // page d'inscription n'a besoin que d'un oui ou d'un non. Lire la
-        // table donnait au passage la liste de tous les inscrits.
-        const { data, error } = await supabase.rpc("username_available", {
-          p_username: trimmed,
-        });
+        // Une page d'inscription n'a besoin que d'un oui ou d'un non ; la
+        // route ne renvoie rien d'autre, et surtout pas la liste des inscrits.
+        const res = await fetch(
+          `/api/username-available?username=${encodeURIComponent(trimmed)}`,
+        );
 
         if (cancelled) return;
 
-        if (error) {
+        if (!res.ok) {
           // Le doute ne doit pas bloquer l'inscription : la contrainte
           // d'unicité en base reste le juge de paix.
           setUsernameStatus("available");
           return;
         }
 
-        setUsernameStatus(data === false ? "taken" : "available");
+        const { available } = (await res.json()) as { available?: boolean };
+        setUsernameStatus(available === false ? "taken" : "available");
       } catch {
         if (!cancelled) setUsernameStatus("idle");
       }
@@ -235,31 +232,27 @@ export function RegisterForm({
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function onSubmit(data: RegisterFormInput) {
-    const supabase = createClient();
-
-    const { error } = await supabase.auth.signUp({
+    const { error } = await signUp.email({
       email: data.email,
       password: data.password,
-      options: {
-        data: {
-          full_name: data.full_name,
-          username: data.username,
-          // D'où vient cette inscription. Sans ce repère, impossible de savoir
-          // si la boucle « une page amène un vendeur » fonctionne.
-          ...(invite ? { referred_by: invite.slug } : {}),
-        },
-        emailRedirectTo: `${window.location.origin}${authCallback}`,
-      },
+      name: data.full_name,
+      username: data.username,
+      // D'où vient cette inscription. Sans ce repère, impossible de savoir
+      // si la boucle « une page amène un vendeur » fonctionne.
+      ...(invite ? { referredBy: invite.slug } : {}),
+      // Où atterrit le lien de confirmation : l'onboarding, avec `next`
+      // encodé dedans pour être rejoué à la fin.
+      callbackURL: onboardingPath,
     });
 
     if (error) {
-      // Le service d'e-mail intégré de Supabase plafonne à quelques envois par
-      // heure. Sans ce cas nommé, le vendeur lisait « Inscription échouée,
-      // réessayez » suivi d'un message anglais — et réessayer ne fait
-      // qu'aggraver la limite. Son compte n'est pas en cause : on le lui dit.
+      // Better Auth limite le nombre de requêtes par fenêtre. Sans ce cas
+      // nommé, le vendeur lisait « Inscription échouée, réessayez » — et
+      // réessayer ne fait qu'aggraver la limite. Son compte n'est pas en
+      // cause : on le lui dit.
       const rateLimited =
         error.status === 429 ||
-        /rate limit|too many requests/i.test(error.message);
+        /rate limit|too many requests/i.test(error.message ?? "");
 
       if (rateLimited) {
         toast.error("Trop d'inscriptions en même temps.", {
@@ -270,7 +263,10 @@ export function RegisterForm({
         return;
       }
 
-      if (error.message.includes("already registered") || error.message.includes("already exists")) {
+      if (
+        error.code === "USER_ALREADY_EXISTS" ||
+        /already (registered|exists)/i.test(error.message ?? "")
+      ) {
         toast.error("Un compte existe déjà avec cet email.", {
           description: (
             <span>
@@ -283,7 +279,7 @@ export function RegisterForm({
         });
       } else {
         toast.error("Inscription échouée. Veuillez réessayer.", {
-          description: error.message,
+          description: error.message ?? undefined,
         });
       }
       return;
@@ -301,12 +297,9 @@ export function RegisterForm({
   // ── Google OAuth ───────────────────────────────────────────────────────────
   async function handleGoogleSignUp() {
     setIsGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await signIn.social({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}${authCallback}`,
-      },
+      callbackURL: onboardingPath,
     });
 
     if (error) {

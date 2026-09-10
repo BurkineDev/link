@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { safeNextPath } from "@/lib/validations/next-path";
 import { RegisterForm } from "./register-form";
 import type { RegisterInvite } from "@/components/auth/starter-offer";
@@ -42,13 +42,10 @@ export default async function RegisterPage({ searchParams }: Props) {
   let invite: RegisterInvite | null = null;
 
   if (de) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("shops")
-      .select("name, slug")
-      .eq("slug", de)
-      .eq("is_published", true)
-      .maybeSingle();
+    const data = await prisma.shop.findFirst({
+      where: { slug: de, isPublished: true },
+      select: { name: true, slug: true },
+    });
     if (data) invite = { name: data.name, slug: data.slug };
   }
 

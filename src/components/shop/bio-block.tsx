@@ -2,6 +2,7 @@
 
 import { MessageCircle } from "lucide-react";
 import { BioLinkButton } from "@/components/shop/bio-link-button";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { blockClickEndpoint } from "@/lib/blocks/ids";
 import type { ResolvedBlock } from "@/lib/blocks/types";
 import type { BioPalette } from "@/lib/bio-themes";
@@ -121,7 +122,7 @@ function renderBlock({
         `Bonjour ${shopName} 👋\nJ'ai des questions sur ta boutique.\n\nBoutique : ${pageUrl}`;
 
       return (
-        <a
+        <SmartAppLink
           href={`https://wa.me/${digits}?text=${encodeURIComponent(message)}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -142,7 +143,7 @@ function renderBlock({
         >
           <MessageCircle className="size-5" />
           {config.label}
-        </a>
+        </SmartAppLink>
       );
     }
 
@@ -179,7 +180,7 @@ function renderBlock({
 
       if (!config.linkUrl) return image;
       return (
-        <a
+        <SmartAppLink
           href={config.linkUrl}
           target="_blank"
           rel="noopener noreferrer"
@@ -187,7 +188,7 @@ function renderBlock({
           className="block"
         >
           {image}
-        </a>
+        </SmartAppLink>
       );
     }
 
@@ -207,7 +208,7 @@ function renderBlock({
         <ul className="flex flex-wrap justify-center gap-2">
           {networks.map((entry) => (
             <li key={`${entry.network}:${entry.url}`}>
-              <a
+              <SmartAppLink
                 href={entry.url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -223,7 +224,7 @@ function renderBlock({
                 }}
               >
                 {entry.network}
-              </a>
+              </SmartAppLink>
             </li>
           ))}
         </ul>

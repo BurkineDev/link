@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { Sidebar, BottomNav } from "@/components/dashboard/sidebar";
 import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
 import {
@@ -26,42 +27,45 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Le proxy ne fait qu'un contrôle optimiste sur le cookie : c'est ici que
+  // la session est réellement vérifiée (redirection vers /login sinon).
+  const user = await requireUser();
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  // The proxy already forces unfinished onboarding to /dashboard/onboarding.
-  // When we ARE on that page, render children without the dashboard chrome
-  // (the onboarding page provides its own full-screen layout).
   const reqHeaders = await headers();
   const pathname = reqHeaders.get("x-pathname") ?? "";
-  if (pathname === "/dashboard/onboarding") {
+  const isOnboarding = pathname === "/dashboard/onboarding";
+
+  const [profile, shop] = await Promise.all([
+    prisma.profile.findUnique({
+      where: { id: user.id },
+      select: {
+        fullName: true,
+        username: true,
+        avatarUrl: true,
+        onboardingCompleted: true,
+      },
+    }),
+    prisma.shop.findFirst({
+      where: { ownerId: user.id },
+      select: { name: true, slug: true, isPublished: true },
+    }),
+  ]);
+
+  // Un vendeur qui n'a pas terminé son onboarding est ramené dessus, quelle
+  // que soit la page du tableau de bord demandée. Ce contrôle vivait dans le
+  // proxy ; il est ici parce que c'est le seul endroit qui lit la base.
+  if (!isOnboarding && !profile?.onboardingCompleted) {
+    redirect("/dashboard/onboarding");
+  }
+
+  // Sur la page d'onboarding, pas de chrome : elle fournit sa propre mise en
+  // page plein écran.
+  if (isOnboarding) {
     return <>{children}</>;
   }
 
-  const [profileResult, shopResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("full_name, username, avatar_url")
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("shops")
-      .select("name, slug, is_published")
-      .eq("owner_id", user.id)
-      .single(),
-  ]);
-
-  const profile = profileResult.data;
-  const shop = shopResult.data;
-
   const displayName =
-    profile?.full_name ?? profile?.username ?? user.email ?? "Mon compte";
+    profile?.fullName ?? profile?.username ?? user.email ?? "Mon compte";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
@@ -104,12 +108,12 @@ export default async function DashboardLayout({
               <span
                 className={[
                   "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                  shop.is_published
+                  shop.isPublished
                     ? "bg-[var(--b-lime)] text-[var(--b-ink)]"
                     : "bg-[var(--b-wash)] text-[var(--b-muted)] border border-[var(--b-line)]",
                 ].join(" ")}
               >
-                {shop.is_published ? "En ligne" : "Hors ligne"}
+                {shop.isPublished ? "En ligne" : "Hors ligne"}
               </span>
             )}
           </div>
@@ -132,8 +136,8 @@ export default async function DashboardLayout({
             <DropdownMenu>
               <DropdownMenuTrigger className="cursor-pointer rounded-full ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all">
                 <Avatar className="size-8">
-                  {profile?.avatar_url && (
-                    <AvatarImage src={profile.avatar_url} alt={displayName} />
+                  {profile?.avatarUrl && (
+                    <AvatarImage src={profile.avatarUrl} alt={displayName} />
                   )}
                   <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
                     {initials}
@@ -145,8 +149,8 @@ export default async function DashboardLayout({
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex items-center gap-2.5">
                       <Avatar className="size-8">
-                        {profile?.avatar_url && (
-                          <AvatarImage src={profile.avatar_url} alt={displayName} />
+                        {profile?.avatarUrl && (
+                          <AvatarImage src={profile.avatarUrl} alt={displayName} />
                         )}
                         <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
                           {initials}

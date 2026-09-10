@@ -9,6 +9,11 @@ import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mutable state read by the persistent mocks
+//
+// La fixture de commande reste en snake_case ; `toOrder` la traduit en ligne
+// Prisma. Les appels à `settlePaidOrder` / `cancelUnpaidOrder` sont capturés
+// sous la forme des anciens paramètres SQL (`p_*`) pour que les assertions
+// existantes restent valables.
 // ---------------------------------------------------------------------------
 
 let _order: Record<string, unknown> | null = null;
@@ -16,43 +21,56 @@ let _orderError: unknown = null;
 let _updateResult: unknown = null;
 let _updateError: unknown = null;
 let _releaseResult: unknown = null;
+let _settleResult: unknown = null;
 
 let _event: unknown = null;
 let _constructThrows = false;
 
-const mockAdminClient = {
-  from: (table: string) => {
-    if (table === "orders") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: () =>
-              _orderError
-                ? Promise.resolve({ data: null, error: _orderError })
-                : Promise.resolve({ data: _order, error: null }),
-          }),
-        }),
-        update: (payload: unknown) => ({
-          eq: () => {
-            _updateResult = payload;
-            return Promise.resolve({ error: _updateError });
-          },
-        }),
-      };
-    }
-    return {};
-  },
-  rpc: (fn: string, payload: unknown) => {
-    if (fn === "release_stock") {
-      _releaseResult = payload;
-      return Promise.resolve({ error: null });
-    }
-    return Promise.resolve({ error: null });
-  },
-};
+const toOrder = (o: Record<string, unknown>) => ({
+  id: o.id,
+  totalAmount: o.total_amount,
+  currency: o.currency,
+  paymentStatus: o.payment_status,
+});
 
-jest.mock("@/lib/supabase/admin", () => ({
-  getAdminClient: () => mockAdminClient,
+const mockModels = {
+  order: {
+    findUnique: jest.fn(async () => {
+      if (_orderError) throw _orderError;
+      return _order ? toOrder(_order) : null;
+    }),
+    update: jest.fn(async (args: { data: unknown }) => {
+      _updateResult = args.data;
+      if (_updateError) throw _updateError;
+      return {};
+    }),
+  },
+  creatorSubscription: {
+    findFirst: jest.fn(async () => null),
+    updateMany: jest.fn(async () => ({ count: 0 })),
+    upsert: jest.fn(async () => ({})),
+  },
+  boostPurchase: {
+    update: jest.fn(async () => ({})),
+    updateMany: jest.fn(async () => ({ count: 0 })),
+  },
+  shop: { update: jest.fn(async () => ({})) },
+};
+const mockPrisma = {
+  ...mockModels,
+  $transaction: jest.fn(async (fn: (tx: typeof mockModels) => Promise<unknown>) => fn(mockModels)),
+};
+jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+
+jest.mock("@/lib/db/orders", () => ({
+  settlePaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
+    _settleResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
+    return { settled: true };
+  }),
+  cancelUnpaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
+    _releaseResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
+    return { cancelled: true };
+  }),
 }));
 
 // Keep fromStripeAmount real; only stub getStripe (signature verification).
@@ -73,7 +91,7 @@ jest.mock("@/lib/stripe", () => {
 
 const mockNotify = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/lib/order-notifications", () => ({
-  notifySellerOfPaidOrder: mockNotify,
+  notifyPaidOrder: mockNotify,
 }));
 
 import { POST } from "@/app/api/webhooks/stripe/route";
@@ -142,6 +160,7 @@ beforeEach(() => {
   _updateResult = null;
   _updateError = null;
   _releaseResult = null;
+  _settleResult = null;
   _event = completedEvent();
   _constructThrows = false;
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
@@ -175,10 +194,11 @@ describe("POST /api/webhooks/stripe", () => {
   test("completed + paid confirms order and notifies seller", async () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
-    expect(_updateResult).toEqual({
-      payment_status: "paid",
-      status: "confirmed",
-      payment_ref: SESSION_ID,
+    expect(_updateResult).toBeNull();
+    expect(_settleResult).toEqual({
+      p_order_id: ORDER_ID,
+      p_payment_ref: SESSION_ID,
+      p_payment_provider: "stripe",
     });
     expect(mockNotify).toHaveBeenCalledWith(ORDER_ID);
   });
@@ -231,13 +251,11 @@ describe("POST /api/webhooks/stripe", () => {
     _event = expiredEvent();
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
-    expect(_updateResult).toEqual({
-      payment_status: "failed",
-      status: "cancelled",
-      payment_ref: SESSION_ID,
-    });
+    expect(_updateResult).toBeNull();
     expect(_releaseResult).toEqual({
-      items: [{ product_id: "p-1", variant_id: "v-1", quantity: 2 }],
+      p_order_id: ORDER_ID,
+      p_payment_ref: SESSION_ID,
+      p_payment_provider: "stripe",
     });
   });
 

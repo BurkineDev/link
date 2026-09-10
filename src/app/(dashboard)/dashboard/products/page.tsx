@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeProduct } from "@/lib/db/serialize";
 import type { Row } from "@/lib/types/database";
 import { ProductsClient } from "./products-client";
 
@@ -8,28 +10,22 @@ export const metadata = {
 };
 
 export default async function ProductsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const user = await requireUser();
 
-  const { data: shopRaw } = await supabase
-    .from("shops")
-    .select("id, name, slug, currency")
-    .eq("owner_id", user.id)
-    .single();
-
-  const shop = shopRaw as Pick<Row<"shops">, "id" | "name" | "slug" | "currency"> | null;
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true, name: true, slug: true, currency: true },
+  });
   if (!shop) redirect("/dashboard");
 
-  const { data: productsRaw } = await supabase
-    .from("products")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .order("created_at", { ascending: false });
+  const rows = await prisma.product.findMany({
+    where: { shopId: shop.id },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const products = (productsRaw as Row<"products">[] | null) ?? [];
+  // Le composant client attend encore la forme Supabase (snake_case) ; la
+  // sérialisation la reproduit à l'identique.
+  const products = rows.map(serializeProduct) as unknown as Row<"products">[];
 
   return (
     <ProductsClient

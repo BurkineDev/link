@@ -5,7 +5,7 @@
  * account in CAD):
  *   • Découverte (free)   — 5 produits, 5% commission, gratuit
  *   • Starter             — 20 produits, 3% commission, 4,99 CAD/mois
- *   • Pro                 — illimité, 0% commission, 9,99 CAD/mois or 59 CAD/an
+ *   • Pro                 — illimité, 0% commission, 9,99 CAD/mois or 99 CAD/an
  *
  * All prices are stored in the smallest unit of CAD (cents — CAD is a
  * 2-decimal currency), so 4,99 CAD = 499 cents.
@@ -66,7 +66,7 @@ export const PLAN_LIMITS = {
 export const PLAN_PRICES = {
   free: { month: 0, year: 0 },
   starter: { month: 499, year: 4_900 },
-  pro: { month: 999, year: 5_900 },
+  pro: { month: 999, year: 9_900 },
 } as const satisfies Record<SubscriptionPlan, Record<BillingInterval, number>>;
 
 export const PLAN_CURRENCY = "CAD" as const;

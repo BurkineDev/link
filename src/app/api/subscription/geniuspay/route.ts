@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { createPayment, isGeniusPayConfigured } from "@/lib/geniuspay";
 import {
   PREPAID_CURRENCY,
@@ -10,7 +10,6 @@ import {
   type PaidPlan,
   type PrepaidMonths,
 } from "@/lib/subscription";
-import type { SubscriptionPaymentInsert } from "@/lib/types/database";
 
 export const runtime = "nodejs";
 
@@ -42,10 +41,7 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   // L'authentification d'abord : l'état de configuration de nos prestataires
   // ne regarde pas un appelant anonyme.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
@@ -78,11 +74,10 @@ export async function POST(request: NextRequest) {
 
   // Le numéro de la boutique sert à pré-remplir le paiement : sur mobile, un
   // champ de moins à saisir change le taux d'abandon.
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("name, whatsapp_number, contact_phone")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const shop = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { name: true, whatsappNumber: true, contactPhone: true },
+  });
 
   const appUrl = (
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
@@ -97,7 +92,7 @@ export async function POST(request: NextRequest) {
       customer: {
         name: shop?.name ?? undefined,
         email: user.email ?? undefined,
-        phone: shop?.whatsapp_number ?? shop?.contact_phone ?? undefined,
+        phone: shop?.whatsappNumber ?? shop?.contactPhone ?? undefined,
       },
       success_url: `${appUrl}/dashboard/settings?abonnement=succes`,
       error_url: `${appUrl}/pricing?paiement=echec`,
@@ -118,26 +113,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Écrit avec la clé service : `subscription_payments` n'a aucune politique
-  // d'écriture, et ne doit pas en avoir — un client capable d'insérer ici
+  // Seul le serveur écrit ici : un client capable d'insérer une ligne
   // s'offrirait un abonnement.
-  const admin = getAdminClient();
-  const row: SubscriptionPaymentInsert = {
-    user_id: user.id,
-    plan,
-    months,
-    amount,
-    currency: PREPAID_CURRENCY,
-    provider: "geniuspay",
-    reference: payment.reference,
-    status: "pending",
-  };
-
-  const { error: insertError } = await admin
-    .from("subscription_payments")
-    .insert(row);
-
-  if (insertError) {
+  try {
+    await prisma.subscriptionPayment.create({
+      data: {
+        userId: user.id,
+        plan,
+        months,
+        amount,
+        currency: PREPAID_CURRENCY,
+        provider: "geniuspay",
+        reference: payment.reference,
+        status: "pending",
+      },
+    });
+  } catch (insertError) {
     // Le paiement existe chez Genius Pay mais pas chez nous : sans cette
     // ligne, le webhook ne saurait pas quoi créditer. Mieux vaut refuser
     // maintenant que d'encaisser un paiement qu'on ne pourra pas honorer.

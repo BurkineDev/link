@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
+import { reserveStock, releaseStock } from "@/lib/db/stock";
+import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
+import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
 import {
   createPayment as createGeniusPayment,
   isGeniusPayConfigured,
   type CreatePaymentInput,
 } from "@/lib/geniuspay";
-import type {
-  OrderInsert,
-  OrderItem,
-  ShippingAddress,
-  ShopRow,
-  ProductRow,
-} from "@/lib/types/database";
+import type { OrderItem } from "@/lib/types/database";
+import type { Prisma } from "../../../../prisma/generated/client/client";
 import type { Currency } from "@/lib/constants";
+import { notifyPaidOrder } from "@/lib/order-notifications";
 
 // ---------------------------------------------------------------------------
 // Request body schema
@@ -99,6 +97,7 @@ export async function POST(request: NextRequest) {
       notes,
       paymentMethod,
       promoCode,
+      currency,
     } = parsed.data;
 
     // -- Mobile Money availability ---------------------------------------------
@@ -110,72 +109,89 @@ export async function POST(request: NextRequest) {
     }
 
     // -- Fetch shop info -------------------------------------------------------
-    const supabase = await createClient();
+    const shop = await prisma.shop.findUnique({
+      where: { id: shopId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        currency: true,
+        isPublished: true,
+        ownerId: true,
+        shippingEnabled: true,
+      },
+    });
 
-    const { data: shop, error: shopError } = (await supabase
-      .from("shops")
-      .select("id, name, slug, currency, is_published, owner_id")
-      .eq("id", shopId)
-      .single()) as {
-      data: Pick<
-        ShopRow,
-        "id" | "name" | "slug" | "currency" | "is_published" | "owner_id"
-      > | null;
-      error: unknown;
-    };
-
-    if (shopError || !shop) {
+    if (!shop) {
       return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
     }
 
-    if (!shop.is_published) {
+    if (!shop.isPublished) {
       return NextResponse.json(
         { error: "Cette boutique n'est pas encore ouverte." },
         { status: 403 },
       );
     }
 
-    const admin = getAdminClient();
+    if (currency !== shop.currency) {
+      return NextResponse.json(
+        { error: "La devise du panier ne correspond pas à celle de la boutique." },
+        { status: 400 },
+      );
+    }
 
     // Block checkout if the shop owner's subscription is past_due.
-    {
-      const { data: ownerSub } = await admin
-        .from("creator_subscriptions")
-        .select("status")
-        .eq("user_id", shop.owner_id)
-        .maybeSingle();
-      if (ownerSub?.status === "past_due") {
-        return NextResponse.json(
-          { error: "Cette boutique est temporairement indisponible." },
-          { status: 403 },
-        );
-      }
+    const ownerSub = await prisma.creatorSubscription.findUnique({
+      where: { userId: shop.ownerId },
+      select: { status: true },
+    });
+    if (ownerSub?.status === "past_due") {
+      return NextResponse.json(
+        { error: "Cette boutique est temporairement indisponible." },
+        { status: 403 },
+      );
     }
 
     // -- Fetch product prices from DB to avoid price tampering -----------------
     const productIds = items.map((i) => i.product_id);
 
-    const { data: products, error: productsError } = (await supabase
-      .from("products")
-      .select("id, name, price, currency, images, is_published, is_digital")
-      .in("id", productIds)) as {
-      data:
-        | Pick<
-            ProductRow,
-            "id" | "name" | "price" | "currency" | "images" | "is_published" | "is_digital"
-          >[]
-        | null;
-      error: unknown;
-    };
-
-    if (productsError || !products) {
-      return NextResponse.json(
-        { error: "Impossible de récupérer les produits." },
-        { status: 500 },
-      );
-    }
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        shopId: true,
+        name: true,
+        price: true,
+        currency: true,
+        images: true,
+        isPublished: true,
+        isDigital: true,
+        hasVariants: true,
+      },
+    });
 
     const productMap = new Map(products.map((p) => [p.id, p]));
+
+    // A variant is a priced inventory item of its own. The client-provided
+    // variant id therefore has to be resolved and tied back to the selected
+    // product before we calculate a centime of the order.
+    const variantIds = [
+      ...new Set(
+        items
+          .map((item) => item.variant_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const variants =
+      variantIds.length > 0
+        ? await prisma.productVariant.findMany({
+            where: { id: { in: variantIds } },
+            select: { id: true, productId: true, name: true, price: true, sku: true },
+          })
+        : [];
+
+    const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
 
     // -- Build order items -----------------------------------------------------
     let subtotalAmount = 0;
@@ -189,14 +205,39 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      if (!product.is_published) {
+      if (product.shopId !== shopId) {
+        return NextResponse.json(
+          { error: `Produit introuvable: ${item.product_id}` },
+          { status: 400 },
+        );
+      }
+      if (!product.isPublished) {
         return NextResponse.json(
           { error: `Produit indisponible: ${product.name}` },
           { status: 400 },
         );
       }
 
-      const unitPrice = product.price;
+      const variant = item.variant_id
+        ? variantMap.get(item.variant_id)
+        : undefined;
+
+      if (product.hasVariants && !variant) {
+        return NextResponse.json(
+          { error: `Choisissez une variante pour « ${product.name} ».` },
+          { status: 400 },
+        );
+      }
+
+      if (item.variant_id && (!variant || variant.productId !== product.id)) {
+        return NextResponse.json(
+          { error: `Variante invalide pour « ${product.name} ».` },
+          { status: 400 },
+        );
+      }
+
+      // `Decimal` ou nombre selon la source : `Number()` accepte les deux.
+      const unitPrice = Number(variant?.price ?? product.price);
       const subtotal = unitPrice * item.quantity;
       subtotalAmount += subtotal;
 
@@ -210,9 +251,11 @@ export async function POST(request: NextRequest) {
           product_id: item.product_id,
           product_name: product.name,
           variant_id: item.variant_id ?? undefined,
+          variant_name: variant?.name,
+          sku: variant?.sku ?? undefined,
           unit_price: unitPrice,
           currency: (product.currency ?? shop.currency) as Currency,
-          image_url: product.images?.[0]?.url,
+          image_url: firstImageUrl(product.images),
         },
       });
     }
@@ -221,30 +264,27 @@ export async function POST(request: NextRequest) {
     let discountAmount = 0;
     let appliedPromoCode: string | null = null;
 
-    if (promoCode) {
-      const { data: redeemResult, error: redeemError } = await admin.rpc(
-        "redeem_promo_code",
-        {
-          p_shop_id: shopId,
-          p_code: promoCode.toUpperCase(),
-          p_order_total: subtotalAmount,
-        },
-      );
+    const releasePromo = async () => {
+      if (!appliedPromoCode) return;
+      try {
+        await releasePromoRedemption(shopId, appliedPromoCode);
+      } catch (error) {
+        console.error("[checkout] release_promo_redemption error:", error);
+      }
+      appliedPromoCode = null;
+    };
 
-      if (redeemError) {
-        console.error("[checkout] redeem_promo_code error:", redeemError);
+    if (promoCode) {
+      let redeem: Awaited<ReturnType<typeof redeemPromoCode>>;
+      try {
+        redeem = await redeemPromoCode(shopId, promoCode.toUpperCase(), subtotalAmount);
+      } catch (error) {
+        console.error("[checkout] redeem_promo_code error:", error);
         return NextResponse.json(
           { error: "Impossible de valider le code promo." },
           { status: 500 },
         );
       }
-
-      const redeem = (redeemResult ?? {}) as {
-        ok?: boolean;
-        reason?: string;
-        discount?: number;
-        min_order_amount?: number;
-      };
 
       if (!redeem.ok) {
         const message =
@@ -264,7 +304,63 @@ export async function POST(request: NextRequest) {
       appliedPromoCode = promoCode.toUpperCase();
     }
 
-    const totalAmount = Math.max(0, subtotalAmount - discountAmount);
+    const hasPhysicalItems = items.some(
+      (item) => !productMap.get(item.product_id)?.isDigital,
+    );
+    let shippingAmount = 0;
+
+    if (hasPhysicalItems && shop.shippingEnabled) {
+      if (!shippingAddress) {
+        await releasePromo();
+        return NextResponse.json(
+          { error: "Une adresse de livraison est requise." },
+          { status: 422 },
+        );
+      }
+
+      let zones: Array<{
+        countries: string[];
+        rate: unknown;
+        freeAbove: unknown;
+        currency: string;
+      }>;
+      try {
+        zones = await prisma.shippingZone.findMany({
+          where: { shopId, isActive: true },
+          select: { countries: true, rate: true, freeAbove: true, currency: true },
+        });
+      } catch (error) {
+        console.error("[checkout] shipping zones error:", error);
+        await releasePromo();
+        return NextResponse.json(
+          { error: "Impossible de calculer la livraison." },
+          { status: 500 },
+        );
+      }
+
+      const country = shippingAddress.country.toUpperCase();
+      const zone = zones.find(
+        (candidate) =>
+          candidate.currency === shop.currency &&
+          candidate.countries.map((code) => code.toUpperCase()).includes(country),
+      );
+      if (!zone) {
+        await releasePromo();
+        return NextResponse.json(
+          { error: "La livraison n'est pas disponible pour ce pays." },
+          { status: 422 },
+        );
+      }
+      shippingAmount =
+        zone.freeAbove != null && subtotalAmount >= Number(zone.freeAbove)
+          ? 0
+          : Number(zone.rate);
+    }
+
+    const totalAmount = Math.max(
+      0,
+      subtotalAmount - discountAmount + shippingAmount,
+    );
 
     // -- Atomically reserve stock ---------------------------------------------
     const reservePayload = items.map((it) => ({
@@ -273,29 +369,17 @@ export async function POST(request: NextRequest) {
       quantity: it.quantity,
     }));
 
-    // reserve_stock requires service_role since 006_security_hardening
-    // revoked EXECUTE from public roles. The check is still safe — the
-    // RPC validates ownership-agnostic stock levels, never auth state.
-    const { data: reserveResult, error: reserveError } = await admin.rpc(
-      "reserve_stock",
-      { items: reservePayload },
-    );
-
-    if (reserveError) {
-      console.error("[checkout] reserve_stock error:", reserveError);
+    let reservation: Awaited<ReturnType<typeof reserveStock>>;
+    try {
+      reservation = await reserveStock(reservePayload);
+    } catch (error) {
+      console.error("[checkout] reserve_stock error:", error);
+      await releasePromo();
       return NextResponse.json(
         { error: "Impossible de vérifier le stock. Veuillez réessayer." },
         { status: 500 },
       );
     }
-
-    const reservation = (reserveResult ?? {}) as {
-      ok?: boolean;
-      reason?: string;
-      product_name?: string;
-      available?: number;
-      requested?: number;
-    };
 
     if (!reservation.ok) {
       const friendlyMessage = (() => {
@@ -312,50 +396,63 @@ export async function POST(request: NextRequest) {
         }
       })();
 
+      await releasePromo();
       return NextResponse.json({ error: friendlyMessage }, { status: 409 });
     }
 
-    // -- Create order in Supabase ---------------------------------------------
-    const orderInsert = {
-      shop_id: shopId,
-      buyer_email: buyerDetails.email,
-      buyer_name: buyerDetails.full_name,
-      buyer_phone: buyerDetails.phone,
-      status: "pending" as const,
-      payment_status: "pending" as const,
-      payment_provider:
-        paymentMethod.type === "mobile_money"
-          ? ("geniuspay" as const)
-          : ("stripe" as const),
-      payment_ref: null,
-      total_amount: totalAmount,
-      currency: shop.currency,
-      items: orderItems as OrderItem[],
-      shipping_address: (shippingAddress ?? null) as ShippingAddress | null,
-      notes: notes ?? null,
-      promo_code: appliedPromoCode,
-      discount_amount: discountAmount,
-    } satisfies OrderInsert;
+    // -- Create order ---------------------------------------------------------
+    const paymentProvider =
+      paymentMethod.type === "mobile_money" ? ("geniuspay" as const) : ("stripe" as const);
 
-    // Écrit avec la clé service, et c'est indispensable : `orders` autorise
-    // l'insertion anonyme mais réserve la *lecture* au propriétaire de la
-    // boutique. Or PostgREST traduit `.insert().select()` en
-    // `INSERT ... RETURNING`, que Postgres refuse quand la ligne créée ne
-    // passe pas la politique de lecture — 42501, et donc aucun acheteur non
-    // connecté ne pouvait commander.
+    // La commande et ses lignes sont créées d'un seul tenant : Prisma
+    // enveloppe une création imbriquée dans une transaction. L'ancienne
+    // version faisait deux insertions séparées et devait annuler la commande
+    // à la main si la seconde échouait.
     //
-    // Sans danger : le montant ne vient pas du client. Les prix sont relus
-    // depuis `products` un peu plus haut, la boutique a été vérifiée publiée,
-    // et le stock a déjà été réservé.
-    const { data: order, error: orderError } = (await admin
-      .from("orders")
-      .insert(orderInsert)
-      .select("id")
-      .single()) as { data: { id: string } | null; error: unknown };
-
-    if (orderError || !order) {
-      console.error("[checkout] order insert error:", orderError);
-      await admin.rpc("release_stock", { items: reservePayload });
+    // Le montant ne vient pas du client : les prix ont été relus depuis
+    // `products`, la boutique vérifiée publiée, et le stock déjà réservé.
+    let order: { id: string };
+    try {
+      order = await prisma.order.create({
+        data: {
+          shopId,
+          buyerEmail: buyerDetails.email,
+          buyerName: buyerDetails.full_name,
+          buyerPhone: buyerDetails.phone,
+          status: "pending",
+          paymentStatus: "pending",
+          paymentProvider,
+          paymentRef: null,
+          totalAmount,
+          shippingAmount,
+          currency: shop.currency,
+          items: orderItems as unknown as Prisma.InputJsonValue,
+          // Colonne JSON nullable : omettre le champ écrit NULL, comme avant.
+          shippingAddress: shippingAddress
+            ? (shippingAddress as unknown as Prisma.InputJsonValue)
+            : undefined,
+          notes: notes ?? null,
+          promoCode: appliedPromoCode,
+          discountAmount,
+          orderItems: {
+            create: orderItems.map((item) => ({
+              productId: item.product_id,
+              variantId: item.variant_id ?? null,
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              subtotal: item.subtotal,
+              productSnapshot: item.product_snapshot as unknown as Prisma.InputJsonValue,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+    } catch (error) {
+      console.error("[checkout] order insert error:", error);
+      await releaseStock(reservePayload).catch((releaseError) =>
+        console.error("[checkout] release_stock error:", releaseError),
+      );
+      await releasePromo();
       return NextResponse.json(
         { error: "Impossible de créer la commande." },
         { status: 500 },
@@ -364,18 +461,45 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-    // Toutes les écritures sur la commande passent par la clé service. La
-    // politique UPDATE d'`orders` est réservée au propriétaire de la boutique :
-    // avec le client utilisateur, ces mises à jour ne levaient aucune erreur,
-    // elles ne touchaient simplement aucune ligne — `payment_ref` n'était donc
-    // jamais écrit, et l'annulation de stock ne s'appliquait pas.
+    // Annule la commande et rend stock + promo en une seule transaction.
     const rollback = async () => {
-      await admin.rpc("release_stock", { items: reservePayload });
-      await admin
-        .from("orders")
-        .update({ status: "cancelled", payment_status: "failed" })
-        .eq("id", order.id);
+      try {
+        await cancelUnpaidOrder(order.id, null, paymentProvider);
+      } catch (error) {
+        console.error("[checkout] cancel_unpaid_order error:", error);
+      }
+      // The database transaction has returned the promo use as well.
+      appliedPromoCode = null;
     };
+
+    // A 100% promo is a valid free order. Sending a zero-value payment to a
+    // gateway would fail, so settle it locally and use the order UUID as the
+    // high-entropy verification capability on the success page.
+    if (totalAmount === 0) {
+      const paymentReference = `promo:${appliedPromoCode ?? "free"}`;
+      let settled = false;
+      try {
+        settled = (await settlePaidOrder(order.id, paymentReference, "free")).settled;
+      } catch (error) {
+        console.error("[checkout] free order settlement error:", error);
+      }
+      if (!settled) {
+        await rollback();
+        return NextResponse.json(
+          { error: "Impossible de confirmer la commande gratuite." },
+          { status: 500 },
+        );
+      }
+      notifyPaidOrder(order.id).catch((error) =>
+        console.warn("[checkout] order notification failed", error),
+      );
+
+      return NextResponse.json({
+        paymentLink: `${appUrl}/checkout/success?provider=free&order=${order.id}`,
+        orderId: order.id,
+        provider: "free" as const,
+      });
+    }
 
     // -- Route to the right payment provider ----------------------------------
     if (paymentMethod.type === "mobile_money") {
@@ -418,10 +542,10 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        await admin
-          .from("orders")
-          .update({ payment_ref: result.reference })
-          .eq("id", order.id);
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { paymentRef: result.reference },
+        });
 
         return NextResponse.json({
           paymentLink: paymentLink,
@@ -459,6 +583,23 @@ export async function POST(request: NextRequest) {
 
     let checkoutSession;
     try {
+      const stripeCoupon =
+        discountAmount > 0
+          ? await stripe.coupons.create(
+              {
+                amount_off: toStripeAmount(discountAmount, shop.currency),
+                currency: shop.currency.toLowerCase(),
+                duration: "once",
+                max_redemptions: 1,
+                name: appliedPromoCode
+                  ? `Code promo ${appliedPromoCode}`
+                  : "Remise Bio-Lien",
+                metadata: { orderId: order.id, shopId },
+              },
+              { idempotencyKey: `order-discount-${order.id}` },
+            )
+          : null;
+
       checkoutSession = await stripe.checkout.sessions.create({
         mode: "payment",
         customer_email: buyerDetails.email,
@@ -493,15 +634,21 @@ export async function POST(request: NextRequest) {
               },
             };
           }),
-          // Promo line item (negative discount via Stripe coupon would be cleaner,
-          // but inline price_data must stay positive — we apply the discount as
-          // a separate negative-priced row using Stripe's "discounts" parameter
-          // when STRIPE_COUPON_ID is provided. Until then, we just store the
-          // discount in the DB and surface it on the order summary client-side.)
-          // -- See order.discount_amount for the source of truth. --
+          ...(shippingAmount > 0
+            ? [
+                {
+                  quantity: 1,
+                  price_data: {
+                    currency: shop.currency.toLowerCase(),
+                    unit_amount: toStripeAmount(shippingAmount, shop.currency),
+                    product_data: { name: "Livraison" },
+                  },
+                },
+              ]
+            : []),
         ],
-        ...(discountAmount > 0 && process.env.STRIPE_COUPON_ID
-          ? { discounts: [{ coupon: process.env.STRIPE_COUPON_ID }] }
+        ...(stripeCoupon
+          ? { discounts: [{ coupon: stripeCoupon.id }] }
           : {}),
       });
     } catch (err) {
@@ -522,10 +669,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await admin
-      .from("orders")
-      .update({ payment_ref: checkoutSession.id })
-      .eq("id", order.id);
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentRef: checkoutSession.id },
+    });
 
     return NextResponse.json({
       paymentLink: checkoutSession.url,
@@ -539,4 +686,13 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+/** `images` est un JSON libre : `[{ url }]` en pratique, mais rien ne l'impose. */
+function firstImageUrl(images: unknown): string | undefined {
+  if (!Array.isArray(images)) return undefined;
+  const first = images[0];
+  if (typeof first !== "object" || first === null) return undefined;
+  const url = (first as { url?: unknown }).url;
+  return typeof url === "string" ? url : undefined;
 }

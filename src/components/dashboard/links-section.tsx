@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   MousePointerClick,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { ImageUploader } from "@/components/dashboard/image-uploader";
 import { detectLink } from "@/lib/links/detect";
+import { SUPPORTED_APP_COUNT } from "@/lib/links/platforms";
 import type { ShopLinkRow } from "@/lib/types/database";
 
 // Map each link kind to a Lucide SVG icon (no emojis — keeps the UI premium).
@@ -115,13 +117,14 @@ export function LinksSection({
       return;
     }
     setIsAdding(true);
+    const normalizedUrl = detectLink(url).url;
     const res = await fetch("/api/shop-links", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         shop_id: shopId,
         label: label.trim(),
-        url: url.trim(),
+        url: normalizedUrl,
         icon,
         thumbnail_url: thumbnail,
         position: links.length,
@@ -227,6 +230,19 @@ export function LinksSection({
           </p>
         </div>
 
+        <div className="mb-4 flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <Smartphone className="size-4" aria-hidden />
+          </span>
+          <div>
+            <p className="text-xs font-semibold">Ouverture directe activée</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+              {SUPPORTED_APP_COUNT} apps reconnues. Sur mobile, le bouton ouvre
+              l&apos;app installée et garde le web comme solution de secours.
+            </p>
+          </div>
+        </div>
+
         {/* L'URL d'abord : c'est elle qui remplit tout le reste. */}
         <div className="space-y-1.5">
           <Label className="text-xs">Colle ton lien</Label>
@@ -239,7 +255,7 @@ export function LinksSection({
           />
           <p className="text-[11px] text-muted-foreground">
             {detected
-              ? `${detected} reconnu — l'icône et le nom sont remplis.`
+              ? `${detected} reconnu — ouverture directe dans l'app.`
               : "Instagram, TikTok, YouTube, WhatsApp… on reconnaît la plateforme toute seule."}
           </p>
         </div>
@@ -377,6 +393,12 @@ export function LinksSection({
                 <MousePointerClick className="size-3" />
                 {link.click_count}
               </span>
+              {detectLink(link.url).recognized && (
+                <span className="hidden shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 md:inline-flex dark:text-emerald-400">
+                  <Smartphone className="size-3" aria-hidden />
+                  App directe
+                </span>
+              )}
               <div className="flex shrink-0 items-center gap-1">
                 <Switch
                   checked={link.is_active}

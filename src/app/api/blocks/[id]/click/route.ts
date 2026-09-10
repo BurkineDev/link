@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { trackPageBlockClick } from "@/lib/db/tracking";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -8,8 +8,8 @@ import { getClientIp, rateLimit } from "@/lib/rate-limit";
  *
  * Jumeau public de /api/shop-links/{id}/click, pour les pages dont la
  * composition est passée aux blocs : même contrat, mêmes garde-fous.
- *   • la RPC est SECURITY DEFINER et ne sait faire qu'une chose, +1 sur le
- *     compteur d'un bloc visible d'une boutique publiée ;
+ *   • `trackPageBlockClick` ne sait faire qu'une chose, +1 sur le compteur
+ *     d'un bloc visible d'une boutique publiée ;
  *   • un id inconnu est un no-op silencieux — impossible d'énumérer les blocs ;
  *   • une limite par IP empêche un seul client de gonfler un compteur.
  *
@@ -35,11 +35,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   if (!success) return noContent();
 
   try {
-    const supabase = await createClient();
-    const { error } = await supabase.rpc("track_page_block_click", {
-      p_block_id: id,
-    });
-    if (error) console.error("[api/blocks click] rpc error", error);
+    await trackPageBlockClick(id);
   } catch (error) {
     console.error("[api/blocks click] unexpected error", error);
   }

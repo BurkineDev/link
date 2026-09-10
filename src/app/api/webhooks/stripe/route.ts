@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/prisma";
+import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
-import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
+import { notifyPaidOrder } from "@/lib/order-notifications";
 import { BOOSTS } from "@/lib/subscription";
 import type {
   BillingInterval,
   BoostType,
-  OrderItem,
   SubscriptionPlan,
   SubscriptionStatus,
 } from "@/lib/types/database";
@@ -101,31 +101,24 @@ async function handleOrderCheckoutEvent(
     return;
   }
 
-  const supabase = getAdminClient();
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .select("id, total_amount, currency, payment_status, items")
-    .eq("id", orderId)
-    .maybeSingle();
-
-  if (orderError) {
-    console.error("[stripe-webhook] DB read error:", orderError);
-    throw orderError;
-  }
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, totalAmount: true, currency: true, paymentStatus: true },
+  });
 
   if (!order) {
     console.warn("[stripe-webhook] order not found for session:", session.id);
     return;
   }
 
-  if (order.payment_status === "paid" || order.payment_status === "failed") {
+  if (order.paymentStatus === "paid" || order.paymentStatus === "failed") {
     // Already processed — idempotent no-op.
     return;
   }
 
   if (eventType === "checkout.session.completed") {
     const paidAmount = fromStripeAmount(session.amount_total, order.currency);
-    const amountOk = paidAmount !== null && paidAmount >= order.total_amount;
+    const amountOk = paidAmount !== null && paidAmount >= Number(order.totalAmount);
     const currencyOk =
       session.currency?.toUpperCase() === order.currency.toUpperCase();
 
@@ -137,58 +130,23 @@ async function handleOrderCheckoutEvent(
       return;
     }
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        payment_status: "paid",
-        status: "confirmed",
-        payment_ref: session.id,
-      })
-      .eq("id", order.id);
+    // Verrou, contrôles d'état et écritures comptables sont dans
+    // `settlePaidOrder` : un webhook rejoué retombe sur `already_paid`.
+    const settlement = await settlePaidOrder(order.id, session.id, "stripe");
 
-    if (error) {
-      console.error("[stripe-webhook] DB update error:", error);
-      throw error;
+    if (settlement.settled) {
+      notifyPaidOrder(order.id).catch((err) =>
+        console.warn("[stripe-webhook] order notification failed", err),
+      );
     }
-
-    // Best-effort seller notification — never blocks order confirmation.
-    notifySellerOfPaidOrder(order.id).catch((err) =>
-      console.warn("[stripe-webhook] notify seller failed", err),
-    );
 
     console.info(`[stripe-webhook] order ${order.id} confirmed. session=${session.id}`);
     return;
   }
 
-  // session.expired — release reserved stock back to inventory.
-  const items = order.items as OrderItem[];
-  if (items?.length) {
-    const payload = items.map((it) => ({
-      product_id: it.product_id,
-      variant_id: it.variant_id ?? null,
-      quantity: it.quantity,
-    }));
-    const { error: releaseError } = await supabase.rpc("release_stock", {
-      items: payload,
-    });
-    if (releaseError) {
-      console.error("[stripe-webhook] release_stock error:", releaseError);
-    }
-  }
-
-  const { error } = await supabase
-    .from("orders")
-    .update({
-      payment_status: "failed",
-      status: "cancelled",
-      payment_ref: session.id,
-    })
-    .eq("id", order.id);
-
-  if (error) {
-    console.error("[stripe-webhook] DB update error:", error);
-    throw error;
-  }
+  // session.expired — release stock and promo exactly once, even when the
+  // browser verification callback races this webhook.
+  await cancelUnpaidOrder(order.id, session.id, "stripe");
 
   console.info(`[stripe-webhook] order ${order.id} expired. session=${session.id}`);
 }
@@ -233,15 +191,13 @@ async function handleSubscriptionChange(sub: Stripe.Subscription) {
   }
 
   // Fall back to looking up the user via customer_id.
-  const supabase = getAdminClient();
-  const { data } = await supabase
-    .from("creator_subscriptions")
-    .select("user_id")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
+  const existing = await prisma.creatorSubscription.findFirst({
+    where: { stripeCustomerId: customerId },
+    select: { userId: true },
+  });
 
-  if (data?.user_id) {
-    await upsertSubscriptionFromStripe(data.user_id, sub);
+  if (existing?.userId) {
+    await upsertSubscriptionFromStripe(existing.userId, sub);
   } else {
     console.warn(
       "[stripe-webhook] could not resolve user for subscription:",
@@ -255,13 +211,12 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   if (!customerId) return;
 
-  const supabase = getAdminClient();
-  const { error } = await supabase
-    .from("creator_subscriptions")
-    .update({ status: "past_due" })
-    .eq("stripe_customer_id", customerId);
-
-  if (error) {
+  try {
+    await prisma.creatorSubscription.updateMany({
+      where: { stripeCustomerId: customerId },
+      data: { status: "past_due" },
+    });
+  } catch (error) {
     console.error("[stripe-webhook] failed to mark subscription past_due:", error);
   }
 }
@@ -288,29 +243,24 @@ async function upsertSubscriptionFromStripe(
     ? { plan: "free" as SubscriptionPlan, interval: null as BillingInterval | null }
     : resolvePlanFromSubscription(sub);
 
-  const supabase = getAdminClient();
-  const { error } = await supabase
-    .from("creator_subscriptions")
-    .upsert(
-      {
-        user_id: userId,
-        plan,
-        status: mapStripeStatus(sub.status),
-        billing_interval: interval,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: sub.id,
-        current_period_end: periodEndUnix
-          ? new Date(periodEndUnix * 1000).toISOString()
-          : null,
-        cancel_at_period_end: sub.cancel_at_period_end,
-      },
-      { onConflict: "user_id" },
-    );
+  const values = {
+    plan,
+    status: mapStripeStatus(sub.status),
+    billingInterval: interval,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: sub.id,
+    currentPeriodEnd: periodEndUnix ? new Date(periodEndUnix * 1000) : null,
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+    // Un événement Stripe ne concerne qu'un abonnement géré par Stripe : on
+    // l'affirme, plutôt que de laisser un ancien `geniuspay` en place.
+    provider: "stripe" as const,
+  };
 
-  if (error) {
-    console.error("[stripe-webhook] subscription upsert error:", error);
-    throw error;
-  }
+  await prisma.creatorSubscription.upsert({
+    where: { userId },
+    create: { userId, ...values },
+    update: values,
+  });
 }
 
 /**
@@ -382,14 +332,11 @@ async function handleBoostCheckoutEvent(
     return;
   }
 
-  const supabase = getAdminClient();
-
   if (eventType === "checkout.session.expired") {
-    await supabase
-      .from("boost_purchases")
-      .update({ status: "expired" })
-      .eq("id", boostPurchaseId)
-      .eq("status", "pending");
+    await prisma.boostPurchase.updateMany({
+      where: { id: boostPurchaseId, status: "pending" },
+      data: { status: "expired" },
+    });
     return;
   }
 
@@ -413,32 +360,25 @@ async function handleBoostCheckoutEvent(
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
 
-  const { error: updateError } = await supabase
-    .from("boost_purchases")
-    .update({
-      status: "paid",
-      stripe_payment_intent_id: paymentIntentId,
-      activated_at: now.toISOString(),
-      expires_at: expiresAt ? expiresAt.toISOString() : null,
-    })
-    .eq("id", boostPurchaseId);
+  // L'activation du boost et son effet sur la boutique vont ensemble.
+  await prisma.$transaction(async (tx) => {
+    await tx.boostPurchase.update({
+      where: { id: boostPurchaseId },
+      data: {
+        status: "paid",
+        stripePaymentIntentId: paymentIntentId,
+        activatedAt: now,
+        expiresAt,
+      },
+    });
 
-  if (updateError) {
-    console.error("[stripe-webhook] boost update error:", updateError);
-    throw updateError;
-  }
-
-  // Apply the boost's side-effects on the shop.
-  if (boostType === "featured_24h" && expiresAt) {
-    const { error: shopError } = await supabase
-      .from("shops")
-      .update({ featured_until: expiresAt.toISOString() })
-      .eq("id", shopId);
-    if (shopError) {
-      console.error("[stripe-webhook] shop featured_until update error:", shopError);
-      throw shopError;
+    if (boostType === "featured_24h" && expiresAt) {
+      await tx.shop.update({
+        where: { id: shopId },
+        data: { featuredUntil: expiresAt },
+      });
     }
-  }
+  });
 
   console.info(
     `[stripe-webhook] boost ${boostType} activated for shop ${shopId} (purchase=${boostPurchaseId})`,

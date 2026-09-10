@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { transitionOrderStatus } from "@/lib/db/orders";
+import { serializeOrder } from "@/lib/db/serialize";
 
 const updateStatusSchema = z.object({
   status: z.enum(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"]),
+  note: z.string().trim().max(500).nullable().optional(),
+  public_message: z.string().trim().max(500).nullable().optional(),
 });
+
+const DEFAULT_PUBLIC_MESSAGES: Partial<Record<z.infer<typeof updateStatusSchema>["status"], string>> = {
+  confirmed: "Paiement confirmé. La commande est transmise au vendeur.",
+  processing: "La commande est en cours de préparation.",
+  shipped: "La commande a été expédiée.",
+  delivered: "La commande a été livrée.",
+  cancelled: "La commande a été annulée.",
+};
 
 // PATCH /api/orders/[id]/status — update order status (shop owner only)
 export async function PATCH(
@@ -12,8 +25,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -31,40 +43,54 @@ export async function PATCH(
     return NextResponse.json({ error: "Statut invalide" }, { status: 422 });
   }
 
-  // Verify the order belongs to a shop owned by this user via the shop_id
-  const { data: orderData } = await supabase
-    .from("orders")
-    .select("id, shop_id")
-    .eq("id", id)
-    .maybeSingle();
+  try {
+    // Même séquence de réponses que l'ancienne route : 404 si la commande
+    // n'existe pas, 403 si elle appartient à une autre boutique. La transition
+    // elle-même revérifie la propriété sous verrou.
+    const order = await prisma.order.findUnique({
+      where: { id },
+      select: { shop: { select: { ownerId: true } } },
+    });
 
-  if (!orderData) {
-    return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
-  }
+    if (!order) {
+      return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
+    }
+    if (order.shop.ownerId !== user.id) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
 
-  // Verify shop ownership
-  const { data: shopData } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", orderData.shop_id)
-    .eq("owner_id", user.id)
-    .maybeSingle();
+    const result = await transitionOrderStatus({
+      orderId: id,
+      status: parsed.data.status,
+      actorId: user.id,
+      note: parsed.data.note ?? null,
+      publicMessage:
+        parsed.data.public_message ??
+        DEFAULT_PUBLIC_MESSAGES[parsed.data.status] ??
+        null,
+    });
 
-  if (!shopData) {
-    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-  }
+    if (!result.updated) {
+      const message =
+        result.reason === "invalid_transition"
+          ? "Ce changement de statut n'est pas autorisé."
+          : result.reason === "paid_order_requires_refund"
+            ? "Une commande payée doit être remboursée auprès du prestataire avant d'être annulée."
+            : result.reason === "forbidden"
+              ? "Accès refusé"
+              : result.reason === "unchanged"
+                ? "La commande a déjà ce statut."
+                : "Commande introuvable";
+      return NextResponse.json(
+        { error: message, reason: result.reason },
+        { status: result.reason === "forbidden" ? 403 : result.reason === "not_found" ? 404 : 409 },
+      );
+    }
 
-  const { data: updated, error } = await supabase
-    .from("orders")
-    .update({ status: parsed.data.status })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("[api/orders status PATCH] update error", error);
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id } });
+    return NextResponse.json({ order: serializeOrder(updated) });
+  } catch (error) {
+    console.error("[api/orders status PATCH] error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
-
-  return NextResponse.json({ order: updated });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { RESERVED_SLUGS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
@@ -17,12 +17,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ available: false, reason: "reserved" });
   }
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  return NextResponse.json({ available: !data });
+  try {
+    const existing = await prisma.shop.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    return NextResponse.json({ available: existing === null });
+  } catch (error) {
+    console.error("[api/shops/check-slug] error", error);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
 }

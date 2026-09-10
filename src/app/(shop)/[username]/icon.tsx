@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
-import { createClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma";
 import { resolveBioTheme } from "@/lib/bio-themes";
-import type { Database } from "@/lib/types/database";
+import type { ShopRow } from "@/lib/types/database";
 
 /**
  * Icône d'onglet propre à chaque boutique.
@@ -16,7 +16,8 @@ import type { Database } from "@/lib/types/database";
  * story), et une icône de 32 px n'a de toute façon la place que d'une lettre.
  */
 
-export const runtime = "edge";
+// Runtime Node.js : Prisma ne tourne pas sur le runtime edge, et next/og
+// rend aussi bien sur Node.
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
@@ -32,20 +33,18 @@ export default async function Icon({ params }: Props) {
 
   if (/^[a-z0-9_-]{3,50}$/.test(username)) {
     try {
-      const supabase = createClient<Database>(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { persistSession: false, autoRefreshToken: false } },
-      );
+      const row = await prisma.shop.findFirst({
+        where: { slug: username, isPublished: true },
+        select: { name: true, bioTheme: true, themeColor: true, accentColor: true },
+      });
 
-      const { data: shop } = await supabase
-        .from("shops")
-        .select("name, bio_theme, theme_color, accent_color")
-        .eq("slug", username)
-        .eq("is_published", true)
-        .single();
-
-      if (shop) {
+      if (row) {
+        const shop = {
+          name: row.name,
+          bio_theme: row.bioTheme,
+          theme_color: row.themeColor,
+          accent_color: row.accentColor,
+        } as Pick<ShopRow, "name" | "bio_theme" | "theme_color" | "accent_color">;
         const palette = resolveBioTheme(shop);
         look = {
           // La surface, pas le fond : à 32 px il faut un aplat franc, et

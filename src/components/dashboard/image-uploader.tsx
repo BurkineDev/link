@@ -2,7 +2,6 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ImageIcon, Loader2, X, UploadCloud } from "lucide-react";
@@ -66,22 +65,25 @@ export function ImageUploader({
 
   const uploadFile = useCallback(
     async (file: File) => {
-      const supabase = createClient();
-      const path = `${shopId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+      // Le dépôt passe par le serveur, qui vérifie la boutique et signe
+      // l'écriture sur R2 : aucun identifiant de stockage dans le navigateur.
+      const form = new FormData();
+      form.append("file", file);
+      form.append("folder", shopId);
 
-      const { data, error } = await supabase.storage
-        .from("shop-assets")
-        .upload(path, file, { upsert: false });
-
-      if (error || !data) {
-        return { url: "", error: error?.message ?? "Échec de l'upload" };
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: form });
+        const body = (await res.json().catch(() => ({}))) as {
+          url?: string;
+          error?: string;
+        };
+        if (!res.ok || !body.url) {
+          return { url: "", error: body.error ?? "Échec de l'upload" };
+        }
+        return { url: body.url, error: undefined };
+      } catch {
+        return { url: "", error: "Échec de l'upload" };
       }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("shop-assets").getPublicUrl(data.path);
-
-      return { url: publicUrl, error: undefined };
     },
     [shopId]
   );

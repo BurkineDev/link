@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Loader2, UserIcon, Sparkles, ArrowRight, Crown, CalendarClock } from "lucide-react";
 
 import { updateProfileSchema, type UpdateProfileInput } from "@/lib/validations/auth";
-import { createClient } from "@/lib/supabase/client";
 import { PLAN_LIMITS, getEffectivePlan } from "@/lib/subscription";
 import type { SubscriptionProvider } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
@@ -64,19 +63,19 @@ export function ProfileClient({
   async function onSubmit(values: UpdateProfileInput) {
     setIsSaving(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           full_name: values.full_name ?? null,
           username: values.username ?? null,
           bio: values.bio ?? null,
-        })
-        .eq("id", profile?.id ?? "");
+        }),
+      });
 
-      if (error) {
+      if (!res.ok) {
         toast.error(
-          error.code === "23505"
+          res.status === 409
             ? "Ce nom d'utilisateur est déjà pris."
             : "Impossible de mettre à jour le profil.",
         );

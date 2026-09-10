@@ -12,6 +12,7 @@
  */
 
 import { LINK_ICON_VALUES, type LinkIconValue } from "./icons";
+import { findLinkPlatform, normalizeLinkHost } from "./platforms";
 
 export interface DetectedLink {
   /** Adresse utilisable telle quelle : schéma ajouté, espaces retirés. */
@@ -24,45 +25,8 @@ export interface DetectedLink {
   handle: string | null;
   /** Vrai seulement si une plateforme connue a été reconnue. */
   recognized: boolean;
-}
-
-/**
- * Table des plateformes. Les domaines sont comparés sur l'hôte exact ou un
- * sous-domaine, jamais en sous-chaîne : `instagram.com.phishing.example`
- * ne doit pas passer pour Instagram.
- */
-const PLATFORMS: {
-  hosts: string[];
-  icon: LinkIconValue;
-  label: string;
-  /** Faux quand l'adresse ne désigne pas un profil (lien de partage court). */
-  hasHandle?: boolean;
-}[] = [
-  { hosts: ["instagram.com", "instagr.am"], icon: "instagram", label: "Instagram", hasHandle: true },
-  { hosts: ["tiktok.com"], icon: "tiktok", label: "TikTok", hasHandle: true },
-  { hosts: ["vm.tiktok.com", "vt.tiktok.com"], icon: "tiktok", label: "TikTok" },
-  { hosts: ["facebook.com", "fb.com", "fb.me"], icon: "facebook", label: "Facebook", hasHandle: true },
-  { hosts: ["youtube.com"], icon: "youtube", label: "YouTube", hasHandle: true },
-  { hosts: ["youtu.be"], icon: "youtube", label: "YouTube" },
-  { hosts: ["wa.me", "api.whatsapp.com", "chat.whatsapp.com", "whatsapp.com"], icon: "whatsapp", label: "WhatsApp" },
-  { hosts: ["t.me", "telegram.me", "telegram.org"], icon: "telegram", label: "Telegram", hasHandle: true },
-  // Reconnues pour le libellé, sans icône dédiée dans notre vocabulaire.
-  { hosts: ["x.com", "twitter.com"], icon: "website", label: "X", hasHandle: true },
-  { hosts: ["linkedin.com"], icon: "website", label: "LinkedIn" },
-  { hosts: ["snapchat.com"], icon: "website", label: "Snapchat", hasHandle: true },
-  { hosts: ["open.spotify.com", "spotify.com"], icon: "website", label: "Spotify" },
-  { hosts: ["pinterest.com", "pin.it"], icon: "website", label: "Pinterest", hasHandle: true },
-  { hosts: ["threads.net", "threads.com"], icon: "website", label: "Threads", hasHandle: true },
-];
-
-/** `www.` et `m.` ne changent pas la plateforme. */
-function normalizeHost(host: string): string {
-  return host.toLowerCase().replace(/^(www|m|mobile)\./, "");
-}
-
-/** Hôte exact, ou sous-domaine — jamais une simple inclusion de texte. */
-function hostMatches(host: string, domain: string): boolean {
-  return host === domain || host.endsWith(`.${domain}`);
+  /** Identifiant stable de la plateforme, utilisé pour l'ouverture native. */
+  platformId: string | null;
 }
 
 /**
@@ -86,6 +50,7 @@ const FALLBACK: Omit<DetectedLink, "url"> = {
   label: "",
   handle: null,
   recognized: false,
+  platformId: null,
 };
 
 /**
@@ -100,10 +65,10 @@ export function detectLink(raw: string): DetectedLink {
 
   // mailto: et tel: se reconnaissent avant toute analyse d'hôte.
   if (/^mailto:/i.test(url)) {
-    return { url, icon: "email", label: "Email", handle: null, recognized: true };
+    return { url, icon: "email", label: "Email", handle: null, recognized: true, platformId: "email" };
   }
   if (/^tel:/i.test(url)) {
-    return { url, icon: "phone", label: "Téléphone", handle: null, recognized: true };
+    return { url, icon: "phone", label: "Téléphone", handle: null, recognized: true, platformId: "phone" };
   }
 
   let parsed: URL;
@@ -120,16 +85,17 @@ export function detectLink(raw: string): DetectedLink {
     return { ...FALLBACK, url };
   }
 
-  const host = normalizeHost(parsed.hostname);
+  const host = normalizeLinkHost(parsed.hostname);
+  const platform = findLinkPlatform(parsed);
 
-  for (const platform of PLATFORMS) {
-    if (!platform.hosts.some((d) => hostMatches(host, d))) continue;
+  if (platform) {
     return {
       url,
       icon: platform.icon,
       label: platform.label,
       handle: platform.hasHandle ? extractHandle(parsed) : null,
       recognized: true,
+      platformId: platform.id,
     };
   }
 
@@ -141,6 +107,7 @@ export function detectLink(raw: string): DetectedLink {
     label: host,
     handle: null,
     recognized: false,
+    platformId: null,
   };
 }
 

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { Logo } from "@/components/shared/logo";
 import {
@@ -160,7 +160,6 @@ export default function OnboardingPage() {
   // transité par une URL, il n'est pas plus fiable qu'à l'arrivée.
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
-  const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [bioTheme, setBioTheme] = useState<BioThemeId>(DEFAULT_BIO_THEME);
@@ -189,35 +188,28 @@ export default function OnboardingPage() {
 
   const form1 = useForm<Step1Values>({ resolver: zodResolver(step1Schema) });
 
-  // Prefill step 1 from what the seller already typed at signup (stored in
-  // auth user_metadata by the register page). They just confirm and continue.
+  // Prefill step 1 from what the seller already typed at signup — kept on
+  // the Better Auth user (`name`, and the `username` additional field).
+  // They just confirm and continue.
+  const { data: session } = useSession();
+  const sessionUser = session?.user as
+    | { name?: string | null; username?: string | null }
+    | undefined;
+  const sessionName = sessionUser?.name ?? null;
+  const sessionUsername = sessionUser?.username ?? null;
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (cancelled || !user) return;
-      const meta = (user.user_metadata ?? {}) as {
-        full_name?: string;
-        username?: string;
-      };
-      if (meta.full_name && !form1.getValues("fullName")) {
-        form1.setValue("fullName", meta.full_name);
-      }
-      if (
-        meta.username &&
-        !form1.getValues("username") &&
-        usernameSchema.safeParse(meta.username).success
-      ) {
-        form1.setValue("username", meta.username);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (sessionName && !form1.getValues("fullName")) {
+      form1.setValue("fullName", sessionName);
+    }
+    if (
+      sessionUsername &&
+      !form1.getValues("username") &&
+      usernameSchema.safeParse(sessionUsername).success
+    ) {
+      form1.setValue("username", sessionUsername);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sessionName, sessionUsername]);
   const form2 = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
     defaultValues: { currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" },
@@ -254,13 +246,20 @@ export default function OnboardingPage() {
     let cancelled = false;
     const check = async () => {
       setCheckingSlug(true);
-      const { data } = await supabase
-        .from("shops")
-        .select("id")
-        .eq("slug", debouncedSlug)
-        .maybeSingle();
+      // Même vérification que le serveur au moment de créer : longueur,
+      // caractères, slugs réservés, unicité.
+      let available = false;
+      try {
+        const res = await fetch(
+          `/api/shops/check-slug?slug=${encodeURIComponent(debouncedSlug)}`,
+        );
+        const json = (await res.json()) as { available?: boolean };
+        available = res.ok && json.available === true;
+      } catch {
+        available = false;
+      }
       if (!cancelled) {
-        setSlugAvailable(!data);
+        setSlugAvailable(available);
         setCheckingSlug(false);
       }
     };
@@ -268,8 +267,6 @@ export default function OnboardingPage() {
     return () => {
       cancelled = true;
     };
-    // supabase client is stable across renders — safe to omit from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSlug]);
 
   const handleStep1 = form1.handleSubmit((data) => {
@@ -291,51 +288,8 @@ export default function OnboardingPage() {
     setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-
-      // Update profile
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ full_name: step1Data.fullName, username: step1Data.username })
-        .eq("id", user.id);
-
-      if (profileError) throw profileError;
-
-      const { data: createdShop, error: shopError } = await supabase
-        .from("shops")
-        .insert({
-          owner_id: user.id,
-          name: step2Data.shopName,
-          slug: step2Data.shopSlug,
-          description: step2Data.description ?? null,
-          currency: step2Data.currency as "XOF" | "XAF" | "GHS" | "NGN" | "KES" | "MAD" | "USD",
-          template_id: null,
-          bio_theme: bioTheme,
-          theme_color: DEFAULT_THEME_COLOR,
-          accent_color: DEFAULT_ACCENT_COLOR,
-          is_published: false,
-          logo_url: null,
-          banner_url: null,
-          contact_email: null,
-          contact_phone: null,
-          social_links: null,
-          checkout_mode: step2Data.checkoutMode,
-          whatsapp_number:
-            step2Data.checkoutMode === "whatsapp"
-              ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
-              : null,
-          intentions,
-        })
-        .select("id")
-        .single();
-
-      if (shopError) throw shopError;
-
-      // La première page est composée à partir des intentions. Si l'insertion
-      // des blocs échoue, la boutique existe quand même : le vendeur arrive
-      // sur un Page Builder vide plutôt que sur une erreur, et rien n'est
-      // perdu — mieux vaut ça que de rejouer tout l'onboarding.
+      // La première page est composée à partir des intentions ; le serveur
+      // crée profil, boutique et blocs en une seule transaction.
       const seeds = seedBlocksForIntentions({
         intentions,
         whatsappNumber: step2Data.whatsappNumber,
@@ -344,23 +298,38 @@ export default function OnboardingPage() {
         shopName: step2Data.shopName,
       });
 
-      if (createdShop && seeds.length > 0) {
-        const { error: blocksError } = await supabase.from("page_blocks").insert(
-          seeds.map((seed) => ({
-            shop_id: (createdShop as { id: string }).id,
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: step1Data.fullName,
+          username: step1Data.username,
+          shop: {
+            name: step2Data.shopName,
+            slug: step2Data.shopSlug,
+            description: step2Data.description ?? null,
+            currency: step2Data.currency,
+            checkoutMode: step2Data.checkoutMode,
+            whatsappNumber:
+              step2Data.checkoutMode === "whatsapp"
+                ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
+                : null,
+            bioTheme,
+            intentions,
+          },
+          blocks: seeds.map((seed) => ({
             type: seed.type,
             position: seed.position,
             title: seed.title,
-            config: seed.config as never,
+            config: seed.config,
           })),
-        );
-        if (blocksError) console.error("[onboarding] page_blocks", blocksError);
-      }
+        }),
+      });
 
-      await supabase
-        .from("profiles")
-        .update({ onboarding_completed: true })
-        .eq("id", user.id);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Une erreur est survenue");
+      }
 
       toast.success("Ta boutique est créée ! 🎉");
       router.push(nextPath ?? "/dashboard");

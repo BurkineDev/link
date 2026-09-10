@@ -8,6 +8,7 @@ import { MessageCircle, Share2, ShoppingBag, Sparkles } from "lucide-react";
 import { BioProfile, BioSocials } from "@/components/shop/bio-profile";
 import { BioBlock } from "@/components/shop/bio-block";
 import { BioProductCard } from "@/components/shop/bio-product-card";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 
 import { TrackingPixels } from "@/components/shop/tracking-pixels";
 import { useCart } from "@/hooks/use-cart";
@@ -434,7 +435,7 @@ export function ShopPage({
       {/* ── Floating order CTA ── */}
       {isWhatsAppMode ? (
         !hasWhatsAppBlock && (
-        <a
+        <SmartAppLink
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
@@ -448,7 +449,7 @@ export function ShopPage({
         >
           <MessageCircle className="size-5 text-white" />
           <span className="text-sm font-semibold text-white">Commander</span>
-        </a>
+        </SmartAppLink>
         )
       ) : (
         showCartFab && (

@@ -1,25 +1,18 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { serializeShop } from "@/lib/db/serialize";
 import type { ShopRow } from "@/lib/types/database";
 import ShopClient from "./shop-client";
 
 export default async function ShopPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
 
-  if (!user) redirect("/login");
+  const row = await prisma.shop.findFirst({ where: { ownerId: user.id } });
 
-  const { data } = await supabase
-    .from("shops")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
+  if (!row) redirect("/dashboard/onboarding");
 
-  const shop = data as ShopRow | null;
-
-  if (!shop) redirect("/dashboard/onboarding");
+  const shop = serializeShop(row) as unknown as ShopRow;
 
   return <ShopClient shop={shop} />;
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { BOOSTS, PLAN_CURRENCY } from "@/lib/subscription";
 import type { BoostType } from "@/lib/types/database";
@@ -23,10 +23,7 @@ const bodySchema = z.object({
  * webhook flips the row to 'paid' and applies the boost effects.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -51,13 +48,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify the shop belongs to the caller.
-  const { data: shop, error: shopError } = await supabase
-    .from("shops")
-    .select("id, owner_id, name")
-    .eq("id", parsed.shopId)
-    .maybeSingle();
+  const shop = await prisma.shop.findFirst({
+    where: { id: parsed.shopId, ownerId: user.id },
+    select: { id: true, name: true },
+  });
 
-  if (shopError || !shop || shop.owner_id !== user.id) {
+  if (!shop) {
     return NextResponse.json(
       { error: "Boutique introuvable." },
       { status: 404 },
@@ -75,28 +71,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const admin = getAdminClient();
-
   // Create the pending boost row first so the webhook can find it by id.
-  const { data: boostRow, error: insertError } = await admin
-    .from("boost_purchases")
-    .insert({
-      shop_id: shop.id,
-      user_id: user.id,
-      type: boost.type,
-      amount: boost.amount,
-      currency: boost.currency,
-      status: "pending",
-      stripe_session_id: null,
-      stripe_payment_intent_id: null,
-      activated_at: null,
-      expires_at: null,
-      metadata: null,
-    })
-    .select("id")
-    .single();
-
-  if (insertError || !boostRow) {
+  let boostRow: { id: string };
+  try {
+    boostRow = await prisma.boostPurchase.create({
+      data: {
+        shopId: shop.id,
+        userId: user.id,
+        type: boost.type,
+        amount: boost.amount,
+        currency: boost.currency,
+        status: "pending",
+        provider: "stripe",
+      },
+      select: { id: true },
+    });
+  } catch (insertError) {
     console.error("[boosts/checkout] insert error:", insertError);
     return NextResponse.json(
       { error: "Impossible de préparer le boost." },
@@ -150,10 +140,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await admin
-    .from("boost_purchases")
-    .update({ stripe_session_id: session.id })
-    .eq("id", boostRow.id);
+  await prisma.boostPurchase.update({
+    where: { id: boostRow.id },
+    data: { stripeSessionId: session.id },
+  });
 
   return NextResponse.json({ url: session.url, boostId: boostRow.id });
 }

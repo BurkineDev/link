@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { createPayment, isGeniusPayConfigured } from "@/lib/geniuspay";
 import { BOOSTS, PREPAID_CURRENCY } from "@/lib/subscription";
-import type { BoostPurchaseInsert, BoostType } from "@/lib/types/database";
+import type { BoostType } from "@/lib/types/database";
 
 export const runtime = "nodejs";
 
@@ -24,10 +24,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
@@ -56,13 +53,12 @@ export async function POST(request: NextRequest) {
 
   // La boutique doit appartenir à l'appelant : sans ce contrôle, on pourrait
   // mettre en avant la boutique d'un autre — ou la lui faire payer.
-  const { data: shop } = await supabase
-    .from("shops")
-    .select("id, owner_id, name, whatsapp_number, contact_phone")
-    .eq("id", parsed.shopId)
-    .maybeSingle();
+  const shop = await prisma.shop.findFirst({
+    where: { id: parsed.shopId, ownerId: user.id },
+    select: { id: true, name: true, whatsappNumber: true, contactPhone: true },
+  });
 
-  if (!shop || shop.owner_id !== user.id) {
+  if (!shop) {
     return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
   }
 
@@ -79,7 +75,7 @@ export async function POST(request: NextRequest) {
       customer: {
         name: shop.name,
         email: user.email ?? undefined,
-        phone: shop.whatsapp_number ?? shop.contact_phone ?? undefined,
+        phone: shop.whatsappNumber ?? shop.contactPhone ?? undefined,
       },
       success_url: `${appUrl}/dashboard?boost=1`,
       error_url: `${appUrl}/dashboard?boost=echec`,
@@ -98,25 +94,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const admin = getAdminClient();
-  const row: BoostPurchaseInsert = {
-    shop_id: shop.id,
-    user_id: user.id,
-    type: boost.type,
-    amount: boost.amountXof,
-    currency: PREPAID_CURRENCY,
-    status: "pending",
-    provider: "geniuspay",
-    reference: payment.reference,
-    stripe_session_id: null,
-    stripe_payment_intent_id: null,
-    activated_at: null,
-    expires_at: null,
-    metadata: null,
-  };
-
-  const { error: insertError } = await admin.from("boost_purchases").insert(row);
-  if (insertError) {
+  try {
+    await prisma.boostPurchase.create({
+      data: {
+        shopId: shop.id,
+        userId: user.id,
+        type: boost.type,
+        amount: boost.amountXof,
+        currency: PREPAID_CURRENCY,
+        status: "pending",
+        provider: "geniuspay",
+        reference: payment.reference,
+      },
+    });
+  } catch (insertError) {
     // Sans cette ligne, le webhook ne saurait pas quel boost activer : mieux
     // vaut refuser que d'encaisser sans pouvoir honorer.
     console.error("[boosts/geniuspay] insert", insertError);

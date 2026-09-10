@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import type { OrderRow, OrderStatus, Currency } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 // ---- helpers ----
 
@@ -87,6 +87,16 @@ const STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: "refunded", label: "Remboursée" },
 ];
 
+const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["processing", "cancelled"],
+  processing: ["shipped", "delivered", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+  refunded: [],
+};
+
 // ---- Order detail sheet ----
 
 interface OrderDetailSheetProps {
@@ -111,18 +121,24 @@ function OrderDetailSheet({
   async function handleStatusChange(newStatus: OrderStatus) {
     if (!order) return;
     setUpdatingStatus(true);
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("orders")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .update({ status: newStatus } as any)
-      .eq("id", order.id)
-      .select()
-      .single();
-
-    setUpdatingStatus(false);
-    if (!error && data) {
-      onStatusUpdated(data as OrderRow);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        order?: OrderRow;
+        error?: string;
+      };
+      if (!response.ok || !data.order) {
+        toast.error(data.error ?? "Impossible de changer le statut.");
+        return;
+      }
+      onStatusUpdated(data.order);
+      toast.success("Statut de la commande mis à jour.");
+    } finally {
+      setUpdatingStatus(false);
     }
   }
 
@@ -155,7 +171,12 @@ function OrderDetailSheet({
                   <SelectValue placeholder="Changer le statut" />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((opt) => (
+                  {STATUS_OPTIONS.filter(
+                    (opt) =>
+                      opt.value === order.status ||
+                      (NEXT_STATUSES[order.status]?.includes(opt.value) &&
+                        !(opt.value === "cancelled" && order.payment_status === "paid")),
+                  ).map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>

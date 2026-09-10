@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { trackShopLinkClick } from "@/lib/db/tracking";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -9,8 +9,8 @@ import { getClientIp, rateLimit } from "@/lib/rate-limit";
  * Public and unauthenticated by design: it is called from the visitor's
  * browser via `sendBeacon` as they leave the page. Three things keep it
  * harmless:
- *   • the SQL side is a SECURITY DEFINER RPC whose only capability is +1 on
- *     the counter of an active link belonging to a published shop;
+ *   • `trackShopLinkClick`'s only capability is +1 on the counter of an
+ *     active link belonging to a published shop;
  *   • unknown ids are a silent no-op, so the endpoint can't enumerate links;
  *   • a per-IP in-memory limit stops a single client inflating a counter.
  *
@@ -37,11 +37,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   if (!success) return noContent();
 
   try {
-    const supabase = await createClient();
-    const { error } = await supabase.rpc("track_shop_link_click", {
-      p_link_id: id,
-    });
-    if (error) console.error("[api/shop-links click] rpc error", error);
+    await trackShopLinkClick(id);
   } catch (error) {
     console.error("[api/shop-links click] unexpected error", error);
   }

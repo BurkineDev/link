@@ -13,6 +13,7 @@ import {
 import { FacebookIcon, XIcon } from "@/components/shop/brand-icons";
 import { QrCode } from "@/components/shared/qr-code";
 import { cn } from "@/lib/utils";
+import { SmartAppLink } from "@/components/shop/smart-app-link";
 
 /**
  * Share sheet for a bio page or a single link.
@@ -160,7 +161,7 @@ export function BioShareSheet({
           {CHANNELS.map((channel) => {
             const Icon = channel.icon;
             return (
-            <a
+            <SmartAppLink
               key={channel.key}
               href={channel.href({ url, title })}
               target="_blank"
@@ -179,7 +180,7 @@ export function BioShareSheet({
                 <Icon className="size-4" />
               </span>
               {channel.label}
-            </a>
+            </SmartAppLink>
             );
           })}
         </div>

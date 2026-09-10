@@ -6,6 +6,7 @@ const config: Config = {
   extensionsToTreatAsEsm: [".ts", ".tsx"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
+    "^server-only$": "<rootDir>/src/__mocks__/server-only.ts",
   },
   transform: {
     "^.+\\.(ts|tsx)$": [

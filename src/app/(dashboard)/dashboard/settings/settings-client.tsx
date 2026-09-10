@@ -4,7 +4,6 @@ import React, { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { ShopRow, ShopLinkRow } from "@/lib/types/database";
 import type {
   ShopFontFamily,
@@ -112,24 +111,23 @@ function ImageField({
 
   const handleUpload = async (file: File) => {
     setUploading(true);
-    const supabase = createClient();
-    const path = `${shopId}/${storageKey}-${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-    const { data, error } = await supabase.storage
-      .from("shop-assets")
-      .upload(path, file, { upsert: true });
+    const form = new FormData();
+    form.append("file", file, `${storageKey}-${file.name}`);
+    form.append("folder", shopId);
 
-    if (error || !data) {
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const body = (await res.json().catch(() => ({}))) as { url?: string };
+      if (!res.ok || !body.url) {
+        toast.error("Échec de l'upload.");
+        return;
+      }
+      onChange(body.url);
+    } catch {
       toast.error("Échec de l'upload.");
+    } finally {
       setUploading(false);
-      return;
     }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("shop-assets").getPublicUrl(data.path);
-
-    onChange(publicUrl);
-    setUploading(false);
   };
 
   return (
@@ -434,36 +432,52 @@ export function SettingsClient({
     shop.whatsapp_number ?? "",
   );
 
-  const supabase = createClient();
+  // ---------------------------------------------------------------------------
+  // Save helpers — toutes les écritures passent par /api/shops/[id], qui
+  // vérifie la propriété côté serveur (il n'y a plus de RLS pour le faire).
+  // ---------------------------------------------------------------------------
 
-  // ---------------------------------------------------------------------------
-  // Save helpers
-  // ---------------------------------------------------------------------------
+  const patchShop = async (
+    payload: Record<string, unknown>,
+  ): Promise<{ ok: true } | { ok: false; status: number; message: string }> => {
+    try {
+      const res = await fetch(`/api/shops/${shop.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return { ok: true };
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return {
+        ok: false,
+        status: res.status,
+        message: body.error ?? "Erreur lors de la sauvegarde.",
+      };
+    } catch {
+      return { ok: false, status: 0, message: "Erreur lors de la sauvegarde." };
+    }
+  };
 
   const saveGeneral = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({
-        name,
-        slug,
-        description: description || null,
-        logo_url: logoUrl,
-        banner_url: bannerUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", shop.id);
+    const result = await patchShop({
+      name,
+      slug,
+      description: description || null,
+      logo_url: logoUrl,
+      banner_url: bannerUrl,
+    });
 
     setSaving(false);
-    if (error) {
-      if (error.code === "23505") {
+    if (!result.ok) {
+      if (result.status === 409) {
         toast.error("Cette adresse est déjà utilisée. Choisis-en une autre.");
-      } else if (error.code === "23514") {
+      } else if (result.status === 422) {
         toast.error(
           "Adresse invalide. Utilise uniquement lettres minuscules, chiffres et tirets.",
         );
       } else {
-        toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+        toast.error(result.message);
       }
     } else {
       toast.success("Informations mises à jour.");
@@ -473,22 +487,18 @@ export function SettingsClient({
 
   const saveAppearance = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({
-        theme_color: themeColor,
-        accent_color: accentColor,
-        font_family: fontFamily,
-        border_radius: borderRadius,
-        cta_shape: ctaShape,
-        bio_theme: bioTheme,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", shop.id);
+    const result = await patchShop({
+      theme_color: themeColor,
+      accent_color: accentColor,
+      font_family: fontFamily,
+      border_radius: borderRadius,
+      cta_shape: ctaShape,
+      bio_theme: bioTheme,
+    });
 
     setSaving(false);
-    if (error) {
-      toast.error(error.message ?? "Erreur lors de la sauvegarde.");
+    if (!result.ok) {
+      toast.error(result.message);
     } else {
       toast.success("Apparence mise à jour.");
       router.refresh();
@@ -506,23 +516,19 @@ export function SettingsClient({
 
   const saveContact = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({
-        contact_email: contactEmail || null,
-        contact_phone: contactPhone || null,
-        social_links: {
-          instagram: instagram || undefined,
-          facebook: facebook || undefined,
-          tiktok: tiktok || undefined,
-          twitter: twitter || undefined,
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", shop.id);
+    const result = await patchShop({
+      contact_email: contactEmail || null,
+      contact_phone: contactPhone || null,
+      social_links: {
+        instagram: instagram || undefined,
+        facebook: facebook || undefined,
+        tiktok: tiktok || undefined,
+        twitter: twitter || undefined,
+      },
+    });
     setSaving(false);
-    if (error) {
-      toast.error(error.message);
+    if (!result.ok) {
+      toast.error(result.message);
     } else {
       toast.success("Contact mis à jour.");
       router.refresh();
@@ -547,17 +553,13 @@ export function SettingsClient({
     }
 
     setSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({
-        currency,
-        checkout_mode: checkoutMode,
-        whatsapp_number: checkoutMode === "whatsapp" ? digits : whatsappNumber.trim() ? digits : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", shop.id);
+    const result = await patchShop({
+      currency,
+      checkout_mode: checkoutMode,
+      whatsapp_number: checkoutMode === "whatsapp" ? digits : whatsappNumber.trim() ? digits : null,
+    });
     setSaving(false);
-    if (error) {
+    if (!result.ok) {
       toast.error("Impossible d'enregistrer. Réessaie.");
     } else {
       toast.success("Paramètres de paiement mis à jour.");
@@ -572,11 +574,8 @@ export function SettingsClient({
   };
 
   const handleUnpublish = async () => {
-    const { error } = await supabase
-      .from("shops")
-      .update({ is_published: false, updated_at: new Date().toISOString() })
-      .eq("id", shop.id);
-    if (error) toast.error(error.message);
+    const result = await patchShop({ is_published: false });
+    if (!result.ok) toast.error(result.message);
     else {
       toast.success("Boutique dépubliée.");
       router.refresh();
@@ -584,9 +583,10 @@ export function SettingsClient({
   };
 
   const handleDeleteShop = async () => {
-    const { error } = await supabase.from("shops").delete().eq("id", shop.id);
-    if (error) {
-      toast.error(error.message);
+    const res = await fetch(`/api/shops/${shop.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error ?? "Impossible de supprimer la boutique.");
     } else {
       toast.success("Boutique supprimée.");
       router.push("/dashboard");

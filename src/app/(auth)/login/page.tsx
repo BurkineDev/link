@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, LogIn, MailCheck } from "lucide-react";
 
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
-import { createClient } from "@/lib/supabase/client";
+import { authClient, signIn } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,11 +60,13 @@ function RegistrationBanner() {
     if (!email) return;
     setResending(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.resend({ type: "signup", email });
+      const { error } = await authClient.sendVerificationEmail({
+        email,
+        callbackURL: "/dashboard/onboarding",
+      });
       if (error) {
         const rateLimited =
-          error.status === 429 || /rate limit|too many/i.test(error.message);
+          error.status === 429 || /rate limit|too many/i.test(error.message ?? "");
         toast.error(
           rateLimited
             ? "Nos envois sont momentanément saturés. Réessaie dans quelques minutes."
@@ -127,17 +129,16 @@ export default function LoginPage() {
 
   // ── Email / password sign-in ───────────────────────────────────────────────
   async function onSubmit(data: LoginInput) {
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await signIn.email({
       email: data.email,
       password: data.password,
     });
 
     if (error) {
       toast.error(
-        error.message === "Invalid login credentials"
+        error.code === "INVALID_EMAIL_OR_PASSWORD"
           ? "Email ou mot de passe incorrect."
-          : error.message === "Email not confirmed"
+          : error.code === "EMAIL_NOT_VERIFIED"
             ? "Veuillez confirmer votre email avant de vous connecter."
             : "Une erreur est survenue. Veuillez réessayer.",
       );
@@ -152,19 +153,16 @@ export default function LoginPage() {
   // ── Google OAuth ───────────────────────────────────────────────────────────
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await signIn.social({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      },
+      callbackURL: "/dashboard",
     });
 
     if (error) {
       toast.error("Impossible de se connecter avec Google. Réessayez.");
       setIsGoogleLoading(false);
     }
-    // On success, Supabase redirects the browser — no need to setIsGoogleLoading(false)
+    // On success, Better Auth redirects the browser — no need to setIsGoogleLoading(false)
   }
 
   const isLoading = isSubmitting || isGoogleLoading;

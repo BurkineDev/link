@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import type { ShopRow } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,21 +16,22 @@ interface ShopClientProps {
 
 export default function ShopClient({ shop }: ShopClientProps) {
   const router = useRouter();
-  const supabase = createClient();
   const [isPublished, setIsPublished] = useState(shop.is_published);
   const [isSaving, setIsSaving] = useState(false);
 
   const handlePublish = async () => {
     setIsSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({ is_published: true, updated_at: new Date().toISOString() })
-      .eq("id", shop.id);
+    const res = await fetch(`/api/shops/${shop.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_published: true }),
+    });
 
     setIsSaving(false);
 
-    if (error) {
-      toast.error(error.message ?? "Impossible de publier la boutique.");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error ?? "Impossible de publier la boutique.");
       return;
     }
 
@@ -42,15 +42,17 @@ export default function ShopClient({ shop }: ShopClientProps) {
 
   const handleUnpublish = async () => {
     setIsSaving(true);
-    const { error } = await supabase
-      .from("shops")
-      .update({ is_published: false, updated_at: new Date().toISOString() })
-      .eq("id", shop.id);
+    const res = await fetch(`/api/shops/${shop.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_published: false }),
+    });
 
     setIsSaving(false);
 
-    if (error) {
-      toast.error(error.message ?? "Impossible de dépublier la boutique.");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error ?? "Impossible de dépublier la boutique.");
       return;
     }
 
