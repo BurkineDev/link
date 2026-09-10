@@ -49,3 +49,4 @@ dev.env
 prisma/generated
 # Sauvegardes locales d env
 .env.local.bak-*
+prod.env
