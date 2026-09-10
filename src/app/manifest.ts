@@ -22,15 +22,15 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     lang: "fr",
     dir: "ltr",
-    background_color: "#ffffff",
-    // Peint la barre système au jaune de la marque une fois installée.
-    theme_color: "#F1CB1C",
+    background_color: "#F6F9F4",
+    // Peint la barre système au vert citron de la marque une fois installée.
+    theme_color: "#C6FF00",
     categories: ["shopping", "business"],
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       // Android rogne l'icône à sa propre forme : la version « maskable »
-      // garde le B dans la zone sûre centrale pour ne pas se faire couper.
+      // garde le maillon dans la zone sûre centrale pour ne pas se faire couper.
       {
         src: "/icon-maskable-512.png",
         sizes: "512x512",
