@@ -1,6 +1,6 @@
 /**
- * Le pictogramme Bio-Lien : deux maillons entrelacés, dégradé vert soutenu →
- * citron, d'après la planche de marque de septembre 2026.
+ * Le pictogramme Bio-Lien : deux maillons entrelacés, dans le citron des boutons
+ * (`--b-lime`), d'après la planche de marque de septembre 2026.
  *
  * Dessiné en SVG pour rester net du favicon 16 px au héros de l'accueil.
  * `tone="brand"` applique le dégradé ; `tone="mono"` prend la couleur du texte
@@ -60,9 +60,10 @@ export function LogoMark({
             y2="6"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0" stopColor="#5FBF00" />
-            <stop offset="0.5" stopColor="#9BDE00" />
-            <stop offset="1" stopColor="#C6FF00" />
+            {/* Même citron que les boutons (--b-lime), assombri vers le bas pour le relief. */}
+            <stop offset="0" stopColor="var(--b-green-bright, #a4d62a)" />
+            <stop offset="0.45" stopColor="var(--b-lime-deep, #cbeb43)" />
+            <stop offset="1" stopColor="var(--b-lime, #d9f55c)" />
           </linearGradient>
         )}
         {/* Aux deux croisements opposés, le maillon B repasse devant A. */}

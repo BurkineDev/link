@@ -108,7 +108,7 @@ export function BrandBackdrop({
 
 /**
  * Le logotype : le maillon suivi de « Bio-Lien », « Bio » en encre et
- * « -Lien » en vert, comme sur la planche de marque. `dark` passe « Bio » en
+ * « -Lien » dans le citron des boutons (`--b-lime`). `dark` passe « Bio » en
  * clair pour les fonds sombres ; le vert reste le même.
  */
 export function Wordmark({
@@ -127,7 +127,7 @@ export function Wordmark({
     >
       <LogoMark className="size-[1.25em] shrink-0" />
       <span>
-        Bio<span style={{ color: "var(--b-green)" }}>-Lien</span>
+        Bio<span style={{ color: "var(--b-lime)" }}>-Lien</span>
       </span>
     </span>
   );
