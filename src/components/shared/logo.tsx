@@ -30,7 +30,7 @@ export function Logo({ className, size = "md", href = "/" }: LogoProps) {
       <LogoMark className="size-[1.25em] shrink-0" />
       {/* « Bio » hérite de la couleur du parent : lisible sur clair comme sur sombre. */}
       <span>
-        Bio<span className="text-[var(--b-lime)]">-Lien</span>
+        Bio<span className="logo-outline text-[var(--b-lime)]">-Lien</span>
       </span>
     </Link>
   );

@@ -423,3 +423,10 @@ input[type="submit"] {
     scrollbar-color: oklch(0.85 0 0) transparent;
   }
 }
+
+/* Le « -Lien » du logotype : remplissage citron cerné d'encre, le contour
+   est peint sous le remplissage pour ne pas grignoter les lettres. */
+.logo-outline {
+  -webkit-text-stroke: 0.045em var(--b-ink);
+  paint-order: stroke fill;
+}

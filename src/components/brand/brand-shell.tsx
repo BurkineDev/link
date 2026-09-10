@@ -127,7 +127,7 @@ export function Wordmark({
     >
       <LogoMark className="size-[1.25em] shrink-0" />
       <span>
-        Bio<span style={{ color: "var(--b-lime)" }}>-Lien</span>
+        Bio<span className="logo-outline" style={{ color: "var(--b-lime)" }}>-Lien</span>
       </span>
     </span>
   );
