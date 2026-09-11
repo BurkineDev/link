@@ -8,6 +8,7 @@ import {
   mapStatusToPaymentStatus,
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 
 // ---------------------------------------------------------------------------
 // GET /api/checkout/verify?session_id=cs_xxx
@@ -129,8 +130,9 @@ export async function GET(request: NextRequest) {
           "geniuspay",
         );
         if (settlement.settled) {
-          notifyPaidOrder(order.id).catch((error) =>
-            console.warn("[verify] order notification failed", error),
+          scheduleAfterResponse(
+            () => notifyPaidOrder(order.id),
+            (error) => console.warn("[verify] order notification failed", error),
           );
         }
         return NextResponse.json({
@@ -195,8 +197,9 @@ export async function GET(request: NextRequest) {
     if (isPaid && amountOk && currencyOk) {
       const settlement = await settlePaidOrder(order.id, session.id, "stripe");
       if (settlement.settled) {
-        notifyPaidOrder(order.id).catch((error) =>
-          console.warn("[verify] order notification failed", error),
+        scheduleAfterResponse(
+          () => notifyPaidOrder(order.id),
+          (error) => console.warn("[verify] order notification failed", error),
         );
       }
       return NextResponse.json({

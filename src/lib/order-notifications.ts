@@ -1,10 +1,10 @@
 /**
  * Server-only side effects triggered when an order transitions to "paid".
- * Buyer email + seller WhatsApp/email.
+ * Buyer email + seller email (always) + seller WhatsApp (when configured).
  *
- * Designed to be fire-and-forget — callers should not await the result if
- * they're inside a webhook handler that needs to ACK fast. Errors here
- * never propagate to the buyer.
+ * Callers wrap these in `after()` from next/server so the response is sent
+ * first and the platform keeps the invocation alive until delivery settles.
+ * Errors here never propagate to the buyer.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -129,6 +129,8 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
       currency: true,
       buyerName: true,
       buyerPhone: true,
+      buyerEmail: true,
+      shippingAddress: true,
       items: true,
     },
   });
@@ -137,59 +139,178 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
 
   const shopRow = await prisma.shop.findUnique({
     where: { id: orderRow.shopId },
-    select: { name: true, whatsappNumber: true },
+    select: {
+      name: true,
+      whatsappNumber: true,
+      contactEmail: true,
+      owner: { select: { user: { select: { email: true } } } },
+    },
   });
 
-  // Le reste de la fonction lit la forme Supabase (snake_case).
+  if (!shopRow) return;
+
   const order = {
     id: orderRow.id,
-    shop_id: orderRow.shopId,
     total_amount: Number(orderRow.totalAmount),
     currency: orderRow.currency,
     buyer_name: orderRow.buyerName,
     buyer_phone: orderRow.buyerPhone,
+    buyer_email: orderRow.buyerEmail,
     items: orderRow.items,
   };
-  const shop = shopRow
-    ? { name: shopRow.name, whatsapp_number: shopRow.whatsappNumber }
-    : null;
-
-  if (!shop?.whatsapp_number) return;
+  const shop = {
+    name: shopRow.name,
+    whatsapp_number: shopRow.whatsappNumber,
+    // L'e-mail de contact de la boutique prime ; sinon celui du compte.
+    email: shopRow.contactEmail || shopRow.owner?.user?.email || null,
+  };
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
+  const itemCount = items.reduce((sum, it) => sum + it.quantity, 0);
   const totalLabel = formatTotal(order.total_amount, order.currency as Currency);
+  const detailUrl = orderUrl(order.id);
+
+  // 1. E-mail au vendeur, toujours. C'est le seul canal qui ne dépend ni
+  //    d'un numéro WhatsApp renseigné ni de l'API Cloud : sans lui, une
+  //    commande payée n'était vue que si le vendeur ouvrait son dashboard.
+  const results = await Promise.allSettled([
+    shop.email
+      ? sendSellerEmail({
+          to: shop.email,
+          shopName: shop.name,
+          orderId: order.id,
+          buyerName: order.buyer_name,
+          buyerPhone: order.buyer_phone,
+          buyerEmail: order.buyer_email,
+          shippingAddress: orderRow.shippingAddress,
+          items,
+          itemCount,
+          totalLabel,
+          detailUrl,
+        })
+      : Promise.reject(
+          new Error(`shop ${shop.name} has no email (contactEmail/owner) for order ${order.id}`),
+        ),
+    // 2. WhatsApp, en complément, quand le vendeur a un numéro.
+    shop.whatsapp_number
+      ? sendSellerWhatsApp({
+          whatsappNumber: shop.whatsapp_number,
+          shopName: shop.name,
+          orderId: order.id,
+          buyerName: order.buyer_name,
+          buyerPhone: order.buyer_phone,
+          itemCount,
+          totalLabel,
+          detailUrl,
+        })
+      : Promise.resolve(),
+  ]);
+
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.warn("[order-notifications] seller channel failed", result.reason);
+    }
+  }
+}
+
+async function sendSellerEmail(args: {
+  to: string;
+  shopName: string;
+  orderId: string;
+  buyerName: string;
+  buyerPhone: string | null;
+  buyerEmail: string;
+  shippingAddress: unknown;
+  items: OrderItem[];
+  itemCount: number;
+  totalLabel: string;
+  detailUrl: string;
+}): Promise<void> {
+  const shortId = args.orderId.slice(0, 8).toUpperCase();
+  const address = formatShippingAddress(args.shippingAddress);
+  const itemText = args.items
+    .map(
+      (item) =>
+        `• ${item.product_snapshot.product_name}${item.product_snapshot.variant_name ? ` — ${item.product_snapshot.variant_name}` : ""} × ${item.quantity}`,
+    )
+    .join("\n");
+  const contactText = [
+    `Client : ${args.buyerName}`,
+    args.buyerPhone ? `Téléphone : ${args.buyerPhone}` : null,
+    `E-mail : ${args.buyerEmail}`,
+    address ? `Livraison : ${address}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const contactHtml = [
+    `<li>Client : ${escapeEmailHtml(args.buyerName)}</li>`,
+    args.buyerPhone
+      ? `<li>Téléphone : <a href="https://wa.me/${escapeEmailHtml(args.buyerPhone.replace(/\D/g, ""))}">${escapeEmailHtml(args.buyerPhone)}</a></li>`
+      : "",
+    `<li>E-mail : ${escapeEmailHtml(args.buyerEmail)}</li>`,
+    address ? `<li>Livraison : ${escapeEmailHtml(address)}</li>` : "",
+  ].join("");
+
+  await sendTransactionalEmail({
+    to: args.to,
+    subject: `Nouvelle commande payée — ${args.totalLabel} (${shortId})`,
+    text: `Nouvelle commande payée sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}\n\n${contactText}\n\nVoir la commande : ${args.detailUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Nouvelle commande payée</h1><p>Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul><p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.</p></div>`,
+    idempotencyKey: `order-seller/${args.orderId}`,
+  });
+}
+
+async function sendSellerWhatsApp(args: {
+  whatsappNumber: string;
+  shopName: string;
+  orderId: string;
+  buyerName: string;
+  buyerPhone: string | null;
+  itemCount: number;
+  totalLabel: string;
+  detailUrl: string;
+}): Promise<void> {
   const body = formatOrderMessageForSeller({
-    shopName: shop.name,
-    buyerName: order.buyer_name,
-    buyerPhone: order.buyer_phone,
-    totalLabel,
-    itemCount: items.reduce((sum, it) => sum + it.quantity, 0),
-    orderUrl: orderUrl(order.id),
+    shopName: args.shopName,
+    buyerName: args.buyerName,
+    buyerPhone: args.buyerPhone,
+    totalLabel: args.totalLabel,
+    itemCount: args.itemCount,
+    orderUrl: args.detailUrl,
   });
 
   if (isWhatsAppCloudConfigured()) {
     // Template first: business-initiated messages outside a 24h service
     // window are only deliverable as pre-approved templates (Meta 131047).
-    const buyerLabel = order.buyer_phone
-      ? `${order.buyer_name} (${order.buyer_phone})`
-      : order.buyer_name;
-    const viaTemplate = await sendOrderTemplate(shop.whatsapp_number, {
+    const buyerLabel = args.buyerPhone
+      ? `${args.buyerName} (${args.buyerPhone})`
+      : args.buyerName;
+    const viaTemplate = await sendOrderTemplate(args.whatsappNumber, {
       buyerLabel,
-      itemCount: items.reduce((sum, it) => sum + it.quantity, 0),
-      totalLabel,
-      orderShortId: order.id.slice(0, 8).toUpperCase(),
+      itemCount: args.itemCount,
+      totalLabel: args.totalLabel,
+      orderShortId: args.orderId.slice(0, 8).toUpperCase(),
     });
     if (viaTemplate) return;
 
     // Free text lands whenever the seller has messaged the business in the
     // last 24 hours (e.g. a buyer relayed their order confirmation).
-    const viaText = await sendCloudApiMessage({ to: shop.whatsapp_number, body });
+    const viaText = await sendCloudApiMessage({ to: args.whatsappNumber, body });
     if (viaText) return;
   }
 
   console.info(
-    `[order-notifications] WhatsApp fallback for shop ${shop.name}: ${buildWaMeLink(shop.whatsapp_number, body)}`,
+    `[order-notifications] WhatsApp fallback for shop ${args.shopName}: ${buildWaMeLink(args.whatsappNumber, body)}`,
   );
+}
+
+function formatShippingAddress(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const a = value as Record<string, unknown>;
+  const parts = ["address", "city", "country"]
+    .map((key) => (typeof a[key] === "string" ? (a[key] as string).trim() : ""))
+    .filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
 }
 
 export async function notifyPaidOrder(orderId: string): Promise<void> {

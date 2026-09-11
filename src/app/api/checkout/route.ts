@@ -14,6 +14,7 @@ import type { OrderItem } from "@/lib/types/database";
 import type { Prisma } from "../../../../prisma/generated/client/client";
 import type { Currency } from "@/lib/constants";
 import { notifyPaidOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 
 // ---------------------------------------------------------------------------
 // Request body schema
@@ -490,8 +491,9 @@ export async function POST(request: NextRequest) {
           { status: 500 },
         );
       }
-      notifyPaidOrder(order.id).catch((error) =>
-        console.warn("[checkout] order notification failed", error),
+      scheduleAfterResponse(
+        () => notifyPaidOrder(order.id),
+        (error) => console.warn("[checkout] order notification failed", error),
       );
 
       return NextResponse.json({
