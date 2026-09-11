@@ -43,3 +43,23 @@ export function isMobileMoneyCovered(country: string | null | undefined): boolea
   if (!country) return true;
   return MOBILE_MONEY_COUNTRIES.has(country.toUpperCase());
 }
+
+/**
+ * Devises dans lesquelles un paiement Mobile Money peut être confirmé.
+ *
+ * Genius Pay règle TOUJOURS en XOF : `GET /payments/{ref}` renvoie
+ * `currency: "XOF"` et un montant converti, quelle que soit la devise
+ * envoyée. Or nos trois chemins de confirmation (webhook, vérification,
+ * réconciliation) exigent l'égalité stricte montant + devise avec la
+ * commande. Une boutique en XAF ou KES encaissait donc l'acheteur sans que
+ * la commande soit jamais confirmée : stock bloqué, vendeur jamais prévenu.
+ *
+ * Tant que le rapprochement en devise convertie n'est pas implémenté, le
+ * Mobile Money n'est proposé qu'aux boutiques en XOF.
+ */
+export const MOBILE_MONEY_CURRENCIES = new Set(["XOF"]);
+
+export function isMobileMoneyCurrency(currency: string | null | undefined): boolean {
+  if (!currency) return false;
+  return MOBILE_MONEY_CURRENCIES.has(currency.toUpperCase());
+}

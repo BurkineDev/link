@@ -436,6 +436,34 @@ describe("POST /api/checkout", () => {
     expect(res.status).toBe(503);
   });
 
+  // TC-12c — Genius Pay règle en XOF : une boutique dans une autre devise
+  // ne peut pas voir sa commande confirmée. On refuse AVANT toute réservation.
+  test("TC-12c: mobile_money est refusé pour une boutique hors XOF, sans toucher au stock", async () => {
+    process.env.GENIUSPAY_API_KEY = "k";
+    process.env.GENIUSPAY_API_SECRET = "s";
+    process.env.GENIUSPAY_WEBHOOK_SECRET = "w";
+    setup({
+      shop: { ...BASE_SHOP, currency: "XAF" },
+      products: [{ ...BASE_PRODUCT, currency: "XAF" }],
+    });
+    const reserve = (jest.requireMock("@/lib/db/stock") as { reserveStock: jest.Mock }).reserveStock;
+    reserve.mockClear();
+
+    const res = await POST(
+      makeRequest(validPayload({ currency: "XAF", paymentMethod: { type: "mobile_money" } })),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.code).toBe("MOBILE_MONEY_CURRENCY_UNSUPPORTED");
+    expect(json.error).toMatch(/XAF/);
+    expect(reserve).not.toHaveBeenCalled();
+
+    delete process.env.GENIUSPAY_API_KEY;
+    delete process.env.GENIUSPAY_API_SECRET;
+    delete process.env.GENIUSPAY_WEBHOOK_SECRET;
+  });
+
   // TC-12 — body non-JSON
   test("TC-12: non-JSON body returns 4xx or 500", async () => {
     const req = new NextRequest("http://localhost:3000/api/checkout", {
