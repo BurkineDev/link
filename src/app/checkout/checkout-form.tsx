@@ -11,6 +11,7 @@ import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
 import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
+import { dialCodeEntry, dialCodeFor, nsnHint, toE164 } from "@/lib/phone/dial-codes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,10 +45,7 @@ const checkoutSchema = z
       .string()
       .min(1, "L'adresse email est requise")
       .email("Adresse email invalide"),
-    phone: z
-      .string()
-      .min(1, "Le numéro de téléphone est requis")
-      .regex(/^\+?[1-9]\d{6,14}$/, "Numéro de téléphone invalide (ex: +22507000000)"),
+    phone: z.string().min(1, "Le numéro de téléphone est requis"),
     requires_shipping: z.boolean(),
     address_line1: z.string().max(200).optional(),
     city: z.string().max(100).optional(),
@@ -83,44 +81,18 @@ const checkoutSchema = z
 type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
 // ---------------------------------------------------------------------------
-// Country code presets for phone selector
+// Indicatifs : une seule source de vérité, partagée avec le côté vendeur
+// (src/lib/phone/dial-codes.ts). Les deux tables partielles qui vivaient ici
+// laissaient tout pays absent retomber sur +225.
 // ---------------------------------------------------------------------------
 
-const PHONE_CODES = [
-  { code: "+221", flag: "🇸🇳", label: "SN" },
-  { code: "+225", flag: "🇨🇮", label: "CI" },
-  { code: "+223", flag: "🇲🇱", label: "ML" },
-  { code: "+226", flag: "🇧🇫", label: "BF" },
-  { code: "+237", flag: "🇨🇲", label: "CM" },
-  { code: "+233", flag: "🇬🇭", label: "GH" },
-  { code: "+234", flag: "🇳🇬", label: "NG" },
-  { code: "+254", flag: "🇰🇪", label: "KE" },
-  { code: "+212", flag: "🇲🇦", label: "MA" },
-  { code: "+1", flag: "🇺🇸", label: "US" },
-];
-
-/**
- * Indicatif téléphonique par pays de livraison.
- *
- * Les deux champs étaient indépendants, et l'indicatif restait figé sur +225.
- * Un acheteur burkinabè qui choisissait « Burkina Faso » puis tapait son
- * numéro repartait avec `+225` collé devant : un numéro qui n'existe nulle
- * part. Genius Pay acceptait le paiement, ne trouvait aucun opérateur à qui
- * l'adresser, et la transaction restait « en attente » pour toujours. C'est
- * ce qui est arrivé au tout premier paiement réel.
- */
-const DIAL_CODE_BY_COUNTRY: Record<string, string> = {
-  SN: "+221",
-  CI: "+225",
-  ML: "+223",
-  BF: "+226",
-  CM: "+237",
-  GH: "+233",
-  NG: "+234",
-  KE: "+254",
-  MA: "+212",
-  US: "+1",
-};
+/** Pays proposés dans le sélecteur d'indicatif : ceux de la livraison, dans le même ordre. */
+const PHONE_CODE_OPTIONS = AFRICAN_COUNTRIES.map((c) => ({
+  iso2: c.code,
+  dialCode: dialCodeFor(c.code) ?? "",
+  flag: dialCodeEntry(c.code)?.flag ?? "",
+  name: c.name,
+})).filter((c) => c.dialCode);
 
 // ---------------------------------------------------------------------------
 // Component
@@ -141,7 +113,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     ? items[0].shopSlug.charAt(0).toUpperCase() + items[0].shopSlug.slice(1)
     : "Boutique";
 
-  const [phoneCountryCode, setPhoneCountryCode] = useState("+225");
+  const [phoneIso2, setPhoneIso2] = useState("CI");
   // Un choix manuel de l'acheteur l'emporte : on ne le lui reprend pas quand
   // il modifie ensuite son pays de livraison.
   const [phoneCodePinned, setPhoneCodePinned] = useState(false);
@@ -165,6 +137,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     register,
     handleSubmit,
     control,
+    setError,
     formState: { errors },
   } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
@@ -180,10 +153,15 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
   // L'indicatif suit le pays de livraison tant que l'acheteur ne l'a pas
   // choisi lui-même. Dérivé plutôt que synchronisé : il n'y a qu'une seule
   // source de vérité, et rien à resynchroniser après coup.
-  const dialCode = phoneCodePinned
-    ? phoneCountryCode
-    : (shippingCountry && DIAL_CODE_BY_COUNTRY[shippingCountry]) ||
-      phoneCountryCode;
+  const phoneCountry = phoneCodePinned
+    ? phoneIso2
+    : (shippingCountry && dialCodeFor(shippingCountry) ? shippingCountry : phoneIso2);
+  const dialCode = dialCodeFor(phoneCountry) ?? "";
+  const phoneHint = nsnHint(phoneCountry);
+  const phoneValue = useWatch({ control, name: "phone" });
+  // Le numéro international réellement envoyé — et débité en Mobile Money.
+  // Affiché sous le champ pour que l'acheteur le voie avant de payer.
+  const composedPhone = phoneValue ? toE164(phoneValue, phoneCountry) : null;
 
   const countryLabel =
     AFRICAN_COUNTRIES.find((c) => c.code === shippingCountry)?.name ?? null;
@@ -252,6 +230,15 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
       return;
     }
 
+    const phone = toE164(values.phone, phoneCountry);
+    if (!phone) {
+      setError("phone", {
+        type: "manual",
+        message: `Numéro invalide pour ${dialCode} : ${phoneHint ?? "vérifie l'indicatif et le nombre de chiffres"}.`,
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -260,7 +247,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
         buyerDetails: {
           full_name: values.full_name,
           email: values.email,
-          phone: dialCode + values.phone.replace(/\s+/g, ""),
+          phone,
         },
         shippingAddress: values.requires_shipping
           ? {
@@ -268,7 +255,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
               address_line1: values.address_line1!,
               city: values.city!,
               country: values.country!,
-              phone: dialCode + values.phone.replace(/\s+/g, ""),
+              phone,
             }
           : null,
         items: items.map((item) => ({
@@ -376,19 +363,22 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                   <Label htmlFor="phone">Numéro de téléphone</Label>
                   <div className="flex gap-2">
                     <Select
-                      value={dialCode}
+                      value={phoneCountry}
                       onValueChange={(v) => {
-                        setPhoneCountryCode(v ?? "+225");
+                        if (!v) return;
+                        setPhoneIso2(v);
                         setPhoneCodePinned(true);
                       }}
                     >
-                      <SelectTrigger className="w-24 shrink-0">
-                        <SelectValue />
+                      <SelectTrigger className="w-[7.5rem] shrink-0" aria-label="Indicatif du pays">
+                        <SelectValue>
+                          {dialCodeEntry(phoneCountry)?.flag} {dialCode}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {PHONE_CODES.map((c) => (
-                          <SelectItem key={c.code} value={c.code}>
-                            {c.flag} {c.code}
+                        {PHONE_CODE_OPTIONS.map((c) => (
+                          <SelectItem key={c.iso2} value={c.iso2}>
+                            {c.flag} {c.dialCode} · {c.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -396,13 +386,22 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="0708070000"
+                      inputMode="tel"
+                      placeholder={phoneHint ? `${phoneHint}, ex. 70 12 34 56` : "Ton numéro"}
                       autoComplete="tel-national"
                       className="flex-1"
                       aria-invalid={!!errors.phone}
+                      aria-describedby="phone-help"
                       {...register("phone")}
                     />
                   </div>
+                  <p id="phone-help" className="text-xs text-muted-foreground">
+                    {composedPhone
+                      ? `Numéro utilisé : ${composedPhone}${payment.type === "mobile_money" ? " (celui qui sera débité)" : ""}`
+                      : phoneHint
+                        ? `Sans l'indicatif ${dialCode} : ${phoneHint}.`
+                        : "Choisis l'indicatif de ton pays."}
+                  </p>
                   {errors.phone && (
                     <p className="text-xs text-destructive">{errors.phone.message}</p>
                   )}

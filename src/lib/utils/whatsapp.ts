@@ -7,6 +7,7 @@
  */
 
 import { formatPrice } from "@/lib/utils/format";
+import { isValidE164 } from "@/lib/phone/dial-codes";
 import type { Currency } from "@/lib/types/database";
 
 /** Strip everything except digits — wa.me wants a digits-only phone number. */
@@ -16,9 +17,10 @@ export function normalizeWhatsAppNumber(raw: string | null | undefined): string 
 }
 
 export function isValidWhatsAppNumber(raw: string | null | undefined): boolean {
-  const digits = normalizeWhatsAppNumber(raw);
-  // ITU-T E.164: country code + subscriber number, between 8 and 15 digits.
-  return digits.length >= 8 && digits.length <= 15;
+  // Indicatif d'un pays connu + longueur nationale admise : une simple
+  // fourchette 8-15 laissait passer « 70123456 » sans indicatif, et chaque
+  // bouton d'achat pointait vers un wa.me mort.
+  return isValidE164(normalizeWhatsAppNumber(raw));
 }
 
 interface BuildOptions {

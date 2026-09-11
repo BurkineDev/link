@@ -4,6 +4,8 @@ import React, { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { isValidE164 } from "@/lib/phone/dial-codes";
+import { WhatsAppNumberField } from "@/components/dashboard/whatsapp-number-field";
 import type { ShopRow, ShopLinkRow } from "@/lib/types/database";
 import type {
   ShopFontFamily,
@@ -545,10 +547,11 @@ export function SettingsClient({
   };
 
   const savePayments = async () => {
-    // In WhatsApp mode the number is required and must look like E.164.
+    // Le champ ne renvoie qu'un numéro composé valide (indicatif + longueur
+    // du pays) ou "" : en mode WhatsApp, il est obligatoire.
     const digits = whatsappNumber.replace(/\D/g, "");
-    if (checkoutMode === "whatsapp" && (digits.length < 8 || digits.length > 15)) {
-      toast.error("Entre un numéro WhatsApp valide (avec l'indicatif pays).");
+    if (checkoutMode === "whatsapp" && !isValidE164(digits)) {
+      toast.error("Choisis l'indicatif et saisis un numéro WhatsApp complet.");
       return;
     }
 
@@ -1306,22 +1309,12 @@ export function SettingsClient({
             </div>
 
             {checkoutMode === "whatsapp" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="whatsapp-number">Ton numéro WhatsApp</Label>
-                <Input
-                  id="whatsapp-number"
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="+226 70 00 00 00"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Inclure l&apos;indicatif pays (ex: +226 Burkina, +221 Sénégal,
-                  +225 Côte d&apos;Ivoire). C&apos;est ici que les commandes
-                  arrivent.
-                </p>
-              </div>
+              <WhatsAppNumberField
+                id="whatsapp-number"
+                value={whatsappNumber}
+                onChange={setWhatsappNumber}
+                currency={currency}
+              />
             )}
 
             <Separator />

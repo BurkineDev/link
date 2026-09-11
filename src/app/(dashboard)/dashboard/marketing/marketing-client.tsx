@@ -1,5 +1,6 @@
 "use client";
 
+import { WhatsAppNumberField } from "@/components/dashboard/whatsapp-number-field";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -355,6 +356,8 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
       body: JSON.stringify({
         tiktok_pixel_id: tiktok.trim() || null,
         meta_pixel_id: meta.trim() || null,
+        // Le champ ne renvoie qu'un numéro composé valide ou "" (jamais un
+        // numéro sans indicatif, qui donnait un lien wa.me mort).
         whatsapp_number: whatsapp.trim() || null,
       }),
     });
@@ -420,16 +423,13 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
           </p>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="whatsapp">Numéro WhatsApp (international)</Label>
-          <Input
-            id="whatsapp"
-            placeholder="+2250708070000"
-            value={whatsapp}
-            onChange={(e) => setWhatsapp(e.target.value)}
-            maxLength={20}
-          />
-        </div>
+        <WhatsAppNumberField
+          id="whatsapp"
+          value={whatsapp}
+          onChange={setWhatsapp}
+          currency={shop.currency}
+          help="Ton numéro n'est jamais visible par les acheteurs."
+        />
 
         <div className="pt-2">
           <Button

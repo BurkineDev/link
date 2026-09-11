@@ -1,3 +1,4 @@
+import { isValidE164 } from "@/lib/phone/dial-codes";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -42,7 +43,9 @@ const patchSchema = z
     social_links: z.unknown().optional(),
     tiktok_pixel_id: nullableText(100),
     meta_pixel_id: nullableText(100),
-    whatsapp_number: nullableText(30),
+    whatsapp_number: nullableText(30).refine((v) => !v || isValidE164(v), {
+      message: "Numéro WhatsApp incomplet : indicatif du pays requis.",
+    }),
     checkout_mode: z.string().trim().max(30).optional(),
     intentions: z.array(z.string().max(50)).max(20).optional(),
     show_biolien_badge: z.boolean().optional(),
