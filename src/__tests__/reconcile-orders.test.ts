@@ -95,7 +95,7 @@ jest.mock("@/lib/geniuspay", () => ({
 }));
 
 jest.mock("@/lib/order-notifications", () => ({
-  notifySellerOfPaidOrder: jest.fn((id: string) => {
+  notifyPaidOrder: jest.fn((id: string) => {
     _notified.push(id);
     return Promise.resolve();
   }),

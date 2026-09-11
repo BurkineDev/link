@@ -13,6 +13,7 @@
  * Server-only — ne jamais importer depuis un Client Component.
  */
 
+
 import { prisma } from "@/lib/prisma";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import {
@@ -20,7 +21,8 @@ import {
   isGeniusPayConfigured,
   mapStatusToPaymentStatus,
 } from "@/lib/geniuspay";
-import { notifySellerOfPaidOrder } from "@/lib/order-notifications";
+import { notifyPaidOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 
 /**
  * On laisse d'abord sa chance au webhook : inutile d'appeler Genius Pay pour
@@ -165,8 +167,13 @@ async function settleOrder(
     );
 
     if (settlement.settled) {
-      notifySellerOfPaidOrder(order.id).catch((err) =>
-        console.warn("[reconcile] notify seller failed", err),
+      // Acheteur ET vendeur : une commande rattrapée ici est le cas où le
+      // webhook a été manqué, donc où personne n'a encore reçu le lien de
+      // suivi ni les téléchargements. `after()` est valide ici car la
+      // réconciliation ne tourne que depuis une route ou une page serveur.
+      scheduleAfterResponse(
+        () => notifyPaidOrder(order.id),
+        (err) => console.warn("[reconcile] notification failed", err),
       );
       console.info("[reconcile] order", order.id, "confirmed");
     }

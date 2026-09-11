@@ -8,6 +8,7 @@ import {
   type GeniusPayStatus,
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 
 export const runtime = "nodejs";
 
@@ -147,8 +148,12 @@ export async function POST(request: NextRequest) {
     try {
       const settlement = await settlePaidOrder(order.id, data.reference!, "geniuspay");
       if (settlement.settled) {
-        notifyPaidOrder(order.id).catch((err) =>
-          console.warn("[geniuspay-webhook] order notification failed", err),
+        // Après la réponse : Vercel garde l'invocation vivante jusqu'à la
+        // fin de l'envoi, alors qu'une promesse détachée pouvait être gelée
+        // dès le 200 renvoyé à Genius Pay.
+        scheduleAfterResponse(
+          () => notifyPaidOrder(order.id),
+          (err) => console.warn("[geniuspay-webhook] order notification failed", err),
         );
       }
     } catch (error) {

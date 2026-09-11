@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import { notifyPaidOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { BOOSTS } from "@/lib/subscription";
 import type {
   BillingInterval,
@@ -135,8 +136,9 @@ async function handleOrderCheckoutEvent(
     const settlement = await settlePaidOrder(order.id, session.id, "stripe");
 
     if (settlement.settled) {
-      notifyPaidOrder(order.id).catch((err) =>
-        console.warn("[stripe-webhook] order notification failed", err),
+      scheduleAfterResponse(
+        () => notifyPaidOrder(order.id),
+        (err) => console.warn("[stripe-webhook] order notification failed", err),
       );
     }
 
