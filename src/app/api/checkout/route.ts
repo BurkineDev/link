@@ -5,6 +5,7 @@ import { reserveStock, releaseStock } from "@/lib/db/stock";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
+import { isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import {
   createPayment as createGeniusPayment,
   isGeniusPayConfigured,
@@ -131,6 +132,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Cette boutique n'est pas encore ouverte." },
         { status: 403 },
+      );
+    }
+
+    // Genius Pay règle toujours en XOF : pour une autre devise, le paiement
+    // serait encaissé sans jamais pouvoir être confirmé (voir
+    // mobile-money-coverage.ts). On refuse avant de toucher au stock.
+    if (paymentMethod.type === "mobile_money" && !isMobileMoneyCurrency(shop.currency)) {
+      return NextResponse.json(
+        {
+          error: `Le paiement Mobile Money n'est disponible que pour les boutiques en FCFA (XOF). Cette boutique vend en ${shop.currency} : choisis la carte bancaire.`,
+          code: "MOBILE_MONEY_CURRENCY_UNSUPPORTED",
+        },
+        { status: 400 },
       );
     }
 

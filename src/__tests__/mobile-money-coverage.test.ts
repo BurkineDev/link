@@ -10,6 +10,7 @@
 import {
   MOBILE_MONEY_COUNTRIES,
   isMobileMoneyCovered,
+  isMobileMoneyCurrency,
 } from "@/lib/payments/mobile-money-coverage";
 
 describe("isMobileMoneyCovered", () => {
@@ -44,5 +45,24 @@ describe("isMobileMoneyCovered", () => {
 
   test("la liste compte les 12 pays documentés", () => {
     expect(MOBILE_MONEY_COUNTRIES.size).toBe(12);
+  });
+});
+
+describe("isMobileMoneyCurrency", () => {
+  test("seul le XOF est réglable en Mobile Money (Genius Pay règle toujours en XOF)", () => {
+    expect(isMobileMoneyCurrency("XOF")).toBe(true);
+    expect(isMobileMoneyCurrency("xof")).toBe(true);
+  });
+
+  test("XAF, KES, GHS, NGN ne le sont pas : l'acheteur serait débité sans confirmation", () => {
+    for (const c of ["XAF", "KES", "GHS", "NGN", "MAD", "USD", "CAD"]) {
+      expect(isMobileMoneyCurrency(c)).toBe(false);
+    }
+  });
+
+  test("une devise absente n'ouvre pas le Mobile Money", () => {
+    expect(isMobileMoneyCurrency(null)).toBe(false);
+    expect(isMobileMoneyCurrency(undefined)).toBe(false);
+    expect(isMobileMoneyCurrency("")).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
 
 import { useCart } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
-import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
+import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,7 +150,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
   const [paymentSelection, setPaymentSelection] = useState<{
     type: PaymentType;
     mobileProvider?: MobileProvider;
-  }>({ type: mobileMoneyEnabled ? "mobile_money" : "card" });
+  }>({ type: mobileMoneyEnabled && isMobileMoneyCurrency(currency) ? "mobile_money" : "card" });
 
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{
@@ -194,8 +194,11 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
   // Dérivé, pas synchronisé : le choix de l'acheteur reste intact s'il revient
   // à un pays couvert.
   const mobileMoneyCovered = isMobileMoneyCovered(shippingCountry);
+  // Même logique pour la devise : Genius Pay règle en XOF, une boutique en
+  // XAF ou KES ne peut pas voir sa commande confirmée.
+  const mobileMoneyCurrencyOk = isMobileMoneyCurrency(currency);
   const payment =
-    !mobileMoneyCovered && paymentSelection.type === "mobile_money"
+    (!mobileMoneyCovered || !mobileMoneyCurrencyOk) && paymentSelection.type === "mobile_money"
       ? { type: "card" as PaymentType, mobileProvider: undefined }
       : paymentSelection;
 
@@ -478,6 +481,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                 mobileMoneyDisabled={!mobileMoneyEnabled}
                 buyerCountry={shippingCountry}
                 buyerCountryLabel={countryLabel}
+                shopCurrency={currency}
               />
             </section>
 

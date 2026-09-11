@@ -1,7 +1,7 @@
 "use client";
 
 import { CreditCard, Info, ShieldCheck, Smartphone } from "lucide-react";
-import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
+import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { cn } from "@/lib/utils";
 
 export type PaymentType = "card" | "mobile_money";
@@ -22,6 +22,8 @@ interface PaymentMethodsProps {
   buyerCountry?: string | null;
   /** Nom lisible du pays, pour l'expliquer à l'acheteur. */
   buyerCountryLabel?: string | null;
+  /** Devise de la boutique : le Mobile Money ne règle qu'en XOF. */
+  shopCurrency?: string | null;
 }
 
 const PROVIDERS: { id: MobileProvider; label: string; emoji: string }[] = [
@@ -37,11 +39,15 @@ export function PaymentMethods({
   mobileMoneyDisabled = false,
   buyerCountry,
   buyerCountryLabel,
+  shopCurrency,
 }: PaymentMethodsProps) {
   // Genius Pay accepte le paiement puis n'envoie jamais le push quand le pays
   // n'est pas couvert. Mieux vaut le dire avant que l'acheteur attende.
   const outOfCoverage = !isMobileMoneyCovered(buyerCountry);
-  const mobileMoneyUnavailable = mobileMoneyDisabled || outOfCoverage;
+  // Et il règle toujours en XOF : une boutique dans une autre devise verrait
+  // son acheteur débité sans que la commande soit jamais confirmée.
+  const wrongCurrency = shopCurrency != null && !isMobileMoneyCurrency(shopCurrency);
+  const mobileMoneyUnavailable = mobileMoneyDisabled || outOfCoverage || wrongCurrency;
 
   return (
     <div className="space-y-3">
@@ -108,7 +114,9 @@ export function PaymentMethods({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">Mobile Money</p>
           <p className="text-xs text-muted-foreground">
-            {outOfCoverage
+            {wrongCurrency
+              ? `Réservé aux boutiques en FCFA (celle-ci vend en ${shopCurrency})`
+              : outOfCoverage
               ? `Pas encore disponible ${buyerCountryLabel ? `au ${buyerCountryLabel}` : "dans ce pays"}`
               : mobileMoneyDisabled
                 ? "Bientôt disponible"
@@ -123,9 +131,19 @@ export function PaymentMethods({
         )}
       </button>
 
+      {wrongCurrency && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+          <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">
+            Le Mobile Money règle en francs CFA (XOF). Cette boutique vend en{" "}
+            {shopCurrency} : le paiement par carte bancaire fonctionne normalement.
+          </p>
+        </div>
+      )}
+
       {/* Pays hors couverture : on explique, plutôt que de laisser une option
           grisée sans raison. */}
-      {outOfCoverage && (
+      {!wrongCurrency && outOfCoverage && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
           <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
