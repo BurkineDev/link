@@ -38,7 +38,7 @@ export const useCart = create<CartStore>()(
         set((state) => {
           // Cart is per-shop — clear if switching shops
           if (state.shopId && state.shopId !== item.shopId) {
-            return { items: [{ ...item, quantity: 1 }], shopId: item.shopId };
+            return { items: [{ ...item }], shopId: item.shopId };
           }
 
           const existing = state.items.find(
