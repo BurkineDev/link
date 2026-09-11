@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { BIO_THEME_IDS } from "@/lib/bio-themes";
+import {
+  Examples,
+  FeatureStrip,
+  FinalBand,
+  Hero,
+  Momentum,
+  Showcase,
+} from "@/components/home/sections";
 import { MOBILE_MONEY_PROVIDERS } from "@/lib/constants";
 import { PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
 import {
@@ -83,66 +88,6 @@ const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
  * la base (`^[a-z0-9_-]{3,30}$`) pour qu'on ne propose jamais une adresse que
  * l'inscription refusera ensuite.
  */
-function ClaimField({ dark = false }: { dark?: boolean }) {
-  const [username, setUsername] = useState("");
-  const router = useRouter();
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = username
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, "")
-      .slice(0, 30);
-    router.push(
-      clean.length >= 3 ? `/register?username=${encodeURIComponent(clean)}` : "/register",
-    );
-  };
-
-  return (
-    <form
-      onSubmit={submit}
-      className="mx-auto mt-8 flex max-w-[540px] flex-wrap items-stretch justify-center gap-2.5"
-    >
-      <div
-        className="flex min-w-[250px] flex-1 items-center rounded-[var(--r-full)] py-1 pl-5 pr-1.5"
-        style={{
-          background: dark ? "var(--b-ink-2)" : "var(--b-paper)",
-          border: `1px solid ${dark ? "var(--b-line-dark)" : "var(--b-line)"}`,
-        }}
-      >
-        <span
-          className="whitespace-nowrap text-[15.5px] font-semibold"
-          style={{ color: dark ? "var(--b-on-dark-faint)" : "var(--b-faint)" }}
-        >
-          bio-lien.com/
-        </span>
-        <label htmlFor={dark ? "claim-bas" : "claim-haut"} className="sr-only">
-          Ton adresse Bio-Lien
-        </label>
-        <input
-          id={dark ? "claim-bas" : "claim-haut"}
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="tonnom"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="min-w-[60px] flex-1 border-none bg-transparent px-1.5 py-3 text-[15.5px] outline-none"
-          style={{ color: dark ? "var(--b-on-dark)" : "var(--b-ink)" }}
-        />
-      </div>
-      <button
-        type="submit"
-        className="cursor-pointer rounded-[var(--r-full)] px-6.5 py-3.5 text-[15.5px] font-bold transition-colors hover:bg-[var(--b-lime-deep)]"
-        style={{ background: "var(--b-lime)", color: "var(--b-ink)" }}
-      >
-        Réserver ma page
-      </button>
-    </form>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
@@ -154,14 +99,14 @@ const NAV = [
   { label: "FAQ", href: "#faq" },
 ];
 
-function Nav({ dark = false }: { dark?: boolean }) {
+function Nav({ dark = false, hero = false }: { dark?: boolean; hero?: boolean }) {
   const text = dark ? "var(--b-on-dark)" : "var(--b-ink)";
   const hover = dark ? "hover:text-[var(--b-lime)]" : "hover:text-[var(--b-muted)]";
   return (
-    <nav className="flex items-center justify-between gap-3 py-5.5 sm:gap-6">
+    <nav className={`flex items-center gap-3 py-5.5 sm:gap-6 ${hero ? "lg:gap-12" : "justify-between"}`}>
       <Wordmark dark={dark} />
 
-      <div className="hidden gap-7 text-[15px] font-medium md:flex">
+      <div className={`hidden gap-7 text-[15px] font-medium md:flex ${hero ? "md:mr-auto" : ""}`}>
         {NAV.map((item) => (
           <a
             key={item.href}
@@ -174,19 +119,19 @@ function Nav({ dark = false }: { dark?: boolean }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className={`flex items-center gap-2.5 ${hero ? "ml-auto md:ml-0" : ""}`}>
         <Link
           href="/login"
-          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover}`}
-          style={{ color: text }}
+          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover} ${hero ? "lg:text-white lg:hover:text-[var(--b-lime)]" : ""}`}
+          style={hero ? undefined : { color: text }}
         >
           Se connecter
         </Link>
         <Link
           href="/register"
-          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
+          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark || hero ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
           style={
-            dark
+            dark || hero
               ? { background: "var(--b-lime)", color: "var(--b-ink)" }
               : { background: "var(--b-ink)", color: "var(--b-on-dark)" }
           }
@@ -202,146 +147,13 @@ function Nav({ dark = false }: { dark?: boolean }) {
 // Héros
 // ---------------------------------------------------------------------------
 
-/** Miniature floue de la couverture, affichée le temps que la photo arrive. */
-const HERO_BLUR = "data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAAAQBACdASoUAAsAPu1iqU2ppaQiMAgBMB2JYgCdL1yB7/344H5oPl+y4AD+29Tvh8VQtuLjjSodhWibDS6VKoxgL8ZbF873FpAhdObN6WytEAAA";
-
-/**
- * Le héros se pose sur la photo de couverture de la marque : la créatrice à
- * droite, et à gauche un voile vert sombre qui porte le titre, l'accroche et
- * le champ de réservation. Sur mobile, la photo passe derrière le texte avec
- * un voile plus dense : elle reste une ambiance, jamais un obstacle à la lecture.
- */
-function Hero() {
-  return (
-    <section className="relative isolate overflow-hidden" style={{ background: "#07130A" }}>
-      <Image
-        src="/brand/hero.webp"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        placeholder="blur"
-        blurDataURL={HERO_BLUR}
-        className="object-cover object-[70%_center] md:object-[center_center]"
-      />
-      {/* Voile : dense sous le texte, léger sur la créatrice. */}
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(7,19,10,0.92) 0%, rgba(7,19,10,0.78) 40%, rgba(7,19,10,0.35) 62%, rgba(7,19,10,0.05) 100%)",
-        }}
-      />
-      {/* Sur mobile, tout le texte passe sur la photo : voile uniforme en plus. */}
-      <div aria-hidden className="absolute inset-0 md:hidden" style={{ background: "rgba(7,19,10,0.45)" }} />
-      <div
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 h-36"
-        style={{ background: "linear-gradient(0deg, rgba(7,19,10,0.9), transparent)" }}
-      />
-
-      <div className="relative mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
-        <Nav dark />
-
-        <div className="max-w-[640px] pb-20 pt-12 text-center sm:pt-18 md:pb-28 md:text-left">
-          <span
-            className="inline-flex items-center gap-2 whitespace-nowrap rounded-[var(--r-full)] px-4 py-2 text-[12.5px] font-medium sm:text-[13.5px]"
-            style={{
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.18)",
-              color: "var(--b-on-dark)",
-            }}
-          >
-            <span
-              className="size-2 rounded-full"
-              style={{ background: "var(--b-lime)" }}
-              aria-hidden
-            />
-            Orange Money, Wave, MTN, M-Pesa — et la carte
-          </span>
-
-          <h1
-            className="mt-7 text-[clamp(42px,6vw,80px)] font-bold leading-[1.02] tracking-[-0.035em]"
-            style={{ color: "var(--b-on-dark)", textWrap: "balance" }}
-          >
-            Un lien en bio,{" "}
-            <span style={{ color: "var(--b-lime)" }}>toute une boutique.</span>
-          </h1>
-
-          <p
-            className="mx-auto mt-6 max-w-[50ch] text-[18px] leading-[1.6] md:mx-0"
-            style={{ color: "var(--b-on-dark-muted)" }}
-          >
-            Tes liens, ton catalogue et tes paiements Mobile Money sur une page
-            à ton nom. Colle-la dans ta bio TikTok, Instagram ou WhatsApp — et
-            vends pendant que tu crées.
-          </p>
-
-          <div className="md:[&>form]:mx-0 md:[&>form]:justify-start">
-            <ClaimField dark />
-          </div>
-
-          <p className="mt-4 text-[13.5px]" style={{ color: "var(--b-on-dark-faint)" }}>
-            Gratuit pour toujours · sans carte bancaire · en ligne en 3 minutes
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Opérateurs
-// ---------------------------------------------------------------------------
-//
-// Les cinq nommés sont bien dans `MOBILE_MONEY_PROVIDERS` — vérifié, pas
-// recopié depuis la maquette.
-
-const OPERATORS = [
-  "Orange Money",
-  "Wave",
-  "MTN MoMo",
-  "Moov Money",
-  "M-Pesa",
-  "Carte bancaire",
-];
-
-function Operators() {
-  return (
-    <section aria-labelledby="ops" className="pb-18 pt-16 text-center">
-      <p
-        id="ops"
-        className="mb-5 text-[13px] font-semibold uppercase tracking-[.1em]"
-        style={{ color: "var(--b-faint)" }}
-      >
-        Tes clients paient comme ils paient vraiment
-      </p>
-      <div className="flex flex-wrap justify-center gap-3 gap-y-3">
-        {OPERATORS.map((name) => (
-          <span
-            key={name}
-            className="rounded-[var(--r-full)] px-5 py-2.5 text-[14.5px] font-semibold"
-            style={{
-              background: "var(--b-paper)",
-              border: "1px solid var(--b-line)",
-            }}
-          >
-            {name}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Fonctions
 // ---------------------------------------------------------------------------
 
 function Features() {
   return (
-    <section id="fonctions" className="pb-18">
+    <section id="fonctions" className="pb-18 pt-8">
       <h2
         className="max-w-[22ch] text-[clamp(30px,3.6vw,48px)] font-bold leading-[1.08] tracking-[-0.03em]"
         style={{ color: "var(--b-ink)", textWrap: "balance" }}
@@ -852,31 +664,6 @@ function Faq() {
 // Appel final
 // ---------------------------------------------------------------------------
 
-function FinalCta() {
-  return (
-    <section className="pb-14">
-      <div
-        className="rounded-[var(--r-2xl)] px-6 py-11 text-center sm:px-14 sm:py-18"
-        style={{ background: "var(--b-ink)", color: "var(--b-on-dark)" }}
-      >
-        <h2
-          className="text-[clamp(32px,4.4vw,56px)] font-bold leading-[1.05] tracking-[-0.03em]"
-          style={{ color: "var(--b-lime)" }}
-        >
-          Ton adresse t&apos;attend.
-        </h2>
-        <p
-          className="mx-auto mt-4.5 max-w-[44ch] text-[16px] leading-[1.6]"
-          style={{ color: "var(--b-on-dark-muted)" }}
-        >
-          La page se monte en trois minutes. La première vente peut tomber ce
-          soir.
-        </p>
-        <ClaimField dark />
-      </div>
-    </section>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Pied de page
@@ -910,6 +697,12 @@ function Footer() {
 // ---------------------------------------------------------------------------
 
 export default function LandingPage() {
+  const facts = [
+    { value: String(OPERATOR_COUNT), label: "opérateurs Mobile Money acceptés" },
+    { value: "0 F", label: "pour ouvrir sa page, sans carte bancaire" },
+    { value: "3 min", label: "pour être en ligne" },
+  ];
+
   return (
     <div
       className="relative min-h-screen font-[family-name:var(--font-brand)]"
@@ -925,15 +718,18 @@ export default function LandingPage() {
 
       <div className="relative z-10">
         <main>
-          <Hero />
+          <Hero nav={<Nav hero />} />
+          <FeatureStrip />
+          <Showcase />
+          <Momentum facts={facts} />
+          <Examples />
           <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
-            <Operators />
-          <Features />
-          <ShareEverywhere />
-          <Pricing />
-          <Faq />
-            <FinalCta />
+            <Features />
+            <ShareEverywhere />
+            <Pricing />
+            <Faq />
           </div>
+          <FinalBand />
         </main>
         <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
           <Footer />
