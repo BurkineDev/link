@@ -108,39 +108,59 @@ const HERO_LINKS: { label: string; Icon: IconLike; color: string; bg: string }[]
   { label: "Contact", Icon: MessageCircle, color: "#25D366", bg: "#E3F8EA" },
 ];
 
-export function Hero() {
+export function Hero({ nav }: { nav: React.ReactNode }) {
   return (
-    <section className="relative isolate overflow-hidden">
-      <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
-        <div className="grid items-center gap-10 pb-16 pt-6 lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:pb-24 lg:pt-10">
-          {/* Colonne texte */}
-          <div className="relative z-10 text-center lg:text-left">
+    <section className="relative isolate overflow-hidden" style={{ background: "#F7F5FD" }}>
+      {/* La photo couvre tout le héros ; le voile clair ne couvre que la zone du texte. */}
+      <Image
+        src="/brand/hero.webp"
+        alt="Une créatrice consulte sa page Bio-Lien sur son téléphone"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover object-[70%_38%] lg:object-[center_38%]"
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 hidden lg:block"
+        style={{
+          background:
+            "linear-gradient(90deg, #F7F5FD 0%, #F7F5FD 30%, rgba(247,245,253,0.9) 42%, rgba(247,245,253,0) 54%)",
+        }}
+      />
+      {/* Sous lg, tout le texte passe sur la photo : voile clair uniforme. */}
+      <div aria-hidden className="absolute inset-0 lg:hidden" style={{ background: "rgba(247,245,253,0.88)" }} />
+      <div
+        aria-hidden
+        className="absolute -bottom-56 -left-32 size-[520px] rounded-full opacity-40 blur-[2px]"
+        style={{ background: "radial-gradient(circle at 30% 30%, #D9CFFF, #B7A3F5)" }}
+      />
+
+      <div className="relative mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
+        {nav}
+
+        <div className="grid items-start gap-10 pb-16 pt-10 lg:min-h-[640px] lg:grid-cols-2 lg:gap-10 lg:pb-0 lg:pt-14">
+          <div className="flex max-w-[560px] flex-col gap-[22px] text-center lg:text-left">
             <h1
-              className="text-[clamp(38px,5.2vw,64px)] font-bold leading-[1.04] tracking-[-0.035em]"
+              className="text-[clamp(38px,5vw,58px)] font-extrabold leading-[1.06] tracking-[-0.03em]"
               style={{ color: "var(--b-ink)", textWrap: "balance" }}
             >
               Un lien en bio,
               <br />
-              toutes vos{" "}
-              <span style={{ color: "var(--b-violet)" }}>possibilités.</span>
+              toutes vos <span style={{ color: "var(--b-violet)" }}>possibilités.</span>
             </h1>
-            <p
-              className="mx-auto mt-5 max-w-[46ch] text-[17px] leading-[1.6] lg:mx-0"
-              style={{ color: "var(--b-muted)" }}
-            >
+            <p className="mx-auto max-w-[470px] text-[17px] leading-[1.6] lg:mx-0" style={{ color: "var(--b-muted)" }}>
               Regroupez vos liens, vendez vos produits, recevez vos paiements
               Mobile Money et développez votre audience — le tout sur une seule
               page, à votre image.
             </p>
-
-            <div className="mt-8 flex flex-col items-center gap-4 lg:items-start">
+            <div className="flex justify-center lg:justify-start">
               <CtaButton href="/register">Créer ma page gratuitement</CtaButton>
-              <p className="text-[13.5px]" style={{ color: "var(--b-faint)" }}>
-                Gratuit pour toujours · sans carte bancaire · en ligne en 3 minutes
-              </p>
             </div>
-
-            <div className="mt-10 hidden justify-center lg:flex lg:justify-start lg:pl-40">
+            <p className="text-[13.5px]" style={{ color: "var(--b-faint)" }}>
+              Gratuit pour toujours · sans carte bancaire · en ligne en 3 minutes
+            </p>
+            <div className="mt-2 hidden lg:block lg:pl-[150px]">
               <Handwritten className="-rotate-6">
                 Plus qu&apos;un lien,
                 <br />
@@ -149,63 +169,33 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Colonne visuelle : photo, cartes de liens, carte de commande */}
-          <div className="relative mx-auto w-full max-w-[560px] lg:max-w-none">
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] sm:aspect-[5/4]">
-              <Image
-                src="/brand/hero.webp"
-                alt="Une créatrice consulte sa page Bio-Lien sur son téléphone"
-                fill
-                priority
-                sizes="(min-width: 1024px) 560px, 100vw"
-                className="object-cover object-[68%_center]"
-              />
-              {/* Fondu vers le fond clair, côté texte. */}
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(90deg, var(--b-paper) 0%, rgba(255,255,255,0.55) 22%, rgba(255,255,255,0) 48%)",
-                }}
-              />
-            </div>
-
-            {/* Cartes de liens flottantes */}
-            <ul className="absolute left-3 top-6 flex w-[46%] max-w-[210px] flex-col gap-2.5 sm:left-5 sm:top-8">
+          {/* Cartes de liens à gauche du visage, carte statistiques à droite, sous la ligne du regard. */}
+          <div className="relative hidden h-[470px] lg:block">
+            <ul className="absolute -left-10 top-2.5 flex w-[196px] flex-col gap-2.5">
               {HERO_LINKS.map(({ label, Icon, color, bg }, i) => (
                 <li
                   key={label}
-                  className="flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-semibold shadow-[0_10px_30px_-12px_rgba(21,16,32,0.35)]"
-                  style={{
-                    background: "var(--b-paper)",
-                    color: "var(--b-ink)",
-                    transform: `translateX(${i % 2 === 0 ? 0 : 6}px)`,
-                  }}
+                  className="flex items-center gap-3 rounded-[14px] px-3.5 py-3 text-[14px] font-semibold shadow-[0_12px_30px_-14px_rgba(21,16,32,0.45)]"
+                  style={{ background: "var(--b-paper)", color: "var(--b-ink)", marginLeft: i % 2 === 0 ? 0 : 8 }}
                 >
-                  <span
-                    className="grid size-7 shrink-0 place-items-center rounded-[8px]"
-                    style={{ background: bg, color }}
-                  >
+                  <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px]" style={{ background: bg, color }}>
                     <Icon className="size-4" aria-hidden />
                   </span>
                   {label}
                 </li>
               ))}
             </ul>
-
-            {/* Carte statistiques du pack (barres + flèche), titre posé en HTML */}
-            <div className="absolute -bottom-4 right-3 hidden w-[200px] sm:right-5 sm:block sm:w-[220px]">
+            <div className="absolute -right-2.5 top-[300px] w-[220px]">
               <Image src="/brand/cards/stats.png" alt="" width={720} height={540} className="h-auto w-full drop-shadow-[0_18px_30px_rgba(21,16,32,0.25)]" />
-              <div className="absolute left-[9%] top-[12%]">
-                <p className="text-[11px] font-semibold uppercase tracking-[.08em]" style={{ color: "var(--b-faint)" }}>
+              <div className="absolute left-[22px] top-[22px] flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[.08em]" style={{ color: "var(--b-faint)" }}>
                   Statistiques
-                </p>
-                <p className="mt-0.5 text-[15px] font-bold leading-tight" style={{ color: "var(--b-ink)" }}>
+                </span>
+                <span className="text-[15px] font-bold leading-[1.2]" style={{ color: "var(--b-ink)" }}>
                   Visites, clics,
                   <br />
                   commandes
-                </p>
+                </span>
               </div>
             </div>
           </div>

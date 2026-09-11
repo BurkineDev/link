@@ -99,14 +99,14 @@ const NAV = [
   { label: "FAQ", href: "#faq" },
 ];
 
-function Nav({ dark = false }: { dark?: boolean }) {
+function Nav({ dark = false, hero = false }: { dark?: boolean; hero?: boolean }) {
   const text = dark ? "var(--b-on-dark)" : "var(--b-ink)";
   const hover = dark ? "hover:text-[var(--b-lime)]" : "hover:text-[var(--b-muted)]";
   return (
-    <nav className="flex items-center justify-between gap-3 py-5.5 sm:gap-6">
+    <nav className={`flex items-center gap-3 py-5.5 sm:gap-6 ${hero ? "lg:gap-12" : "justify-between"}`}>
       <Wordmark dark={dark} />
 
-      <div className="hidden gap-7 text-[15px] font-medium md:flex">
+      <div className={`hidden gap-7 text-[15px] font-medium md:flex ${hero ? "md:mr-auto" : ""}`}>
         {NAV.map((item) => (
           <a
             key={item.href}
@@ -119,19 +119,19 @@ function Nav({ dark = false }: { dark?: boolean }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className={`flex items-center gap-2.5 ${hero ? "ml-auto md:ml-0" : ""}`}>
         <Link
           href="/login"
-          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover}`}
-          style={{ color: text }}
+          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover} ${hero ? "lg:text-white lg:hover:text-[var(--b-lime)]" : ""}`}
+          style={hero ? undefined : { color: text }}
         >
           Se connecter
         </Link>
         <Link
           href="/register"
-          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
+          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark || hero ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
           style={
-            dark
+            dark || hero
               ? { background: "var(--b-lime)", color: "var(--b-ink)" }
               : { background: "var(--b-ink)", color: "var(--b-on-dark)" }
           }
@@ -717,11 +717,8 @@ export default function LandingPage() {
       <BrandBackdrop variant="full" />
 
       <div className="relative z-10">
-        <div className="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-14">
-          <Nav />
-        </div>
         <main>
-          <Hero />
+          <Hero nav={<Nav hero />} />
           <FeatureStrip />
           <Showcase />
           <Momentum facts={facts} />
