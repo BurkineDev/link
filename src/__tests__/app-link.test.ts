@@ -1,6 +1,8 @@
 import {
   getAppLinkDestination,
   isMobileBrowser,
+  toAndroidIntentUrl,
+  isAndroid,
 } from "@/lib/links/app-link";
 import { APP_PLATFORMS, SUPPORTED_APP_COUNT } from "@/lib/links/platforms";
 
@@ -22,6 +24,7 @@ describe("getAppLinkDestination", () => {
       nativeUrl: "instagram://user?username=amy.creator",
       appName: "Instagram",
       opensInApp: true,
+      androidPackage: "com.instagram.android",
     });
   });
 
@@ -99,3 +102,55 @@ describe("isMobileBrowser", () => {
     ).toBe(true);
   });
 });
+
+describe("Android : lien intent:// avec repli", () => {
+  it("convertit un schéma natif en intent:// avec paquet et URL de repli", () => {
+    const url = toAndroidIntentUrl(
+      "instagram://user?username=bio.lien",
+      "https://www.instagram.com/bio.lien/",
+      "com.instagram.android",
+    );
+    expect(url).toBe(
+      "intent://user?username=bio.lien#Intent;scheme=instagram;package=com.instagram.android;S.browser_fallback_url=https%3A%2F%2Fwww.instagram.com%2Fbio.lien%2F;end",
+    );
+  });
+
+  it("gère un schéma sans « // » (spotify:) et un schéma sans paquet connu", () => {
+    expect(toAndroidIntentUrl("spotify:track:abc", "https://open.spotify.com/track/abc", "com.spotify.music")).toBe(
+      "intent://track:abc#Intent;scheme=spotify;package=com.spotify.music;S.browser_fallback_url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2Fabc;end",
+    );
+    expect(toAndroidIntentUrl("waze://?ll=1,2", "https://waze.com/ul?ll=1,2", null)).toBe(
+      "intent://?ll=1,2#Intent;scheme=waze;S.browser_fallback_url=https%3A%2F%2Fwaze.com%2Ful%3Fll%3D1%2C2;end",
+    );
+  });
+
+  it("refuse de transformer une URL http(s) : ce n'est pas un schéma d'app", () => {
+    expect(toAndroidIntentUrl("https://example.com", "https://example.com", null)).toBeNull();
+  });
+
+  it("chaque app avec schéma natif connaît son paquet Android", () => {
+    const samples: Record<string, string> = {
+      instagram: "https://instagram.com/bio.lien",
+      whatsapp: "https://wa.me/22670123456",
+      telegram: "https://t.me/biolien",
+      youtube: "https://youtu.be/dQw4w9WgXcQ",
+      spotify: "https://open.spotify.com/track/abc",
+      x: "https://x.com/biolien",
+      snapchat: "https://snapchat.com/add/biolien",
+      waze: "https://waze.com/ul?ll=1,2",
+    };
+    for (const [id, href] of Object.entries(samples)) {
+      const d = getAppLinkDestination(href);
+      expect(d.nativeUrl).not.toBeNull();
+      expect(d.androidPackage).not.toBeNull();
+      void id;
+    }
+    expect(isAndroid("Mozilla/5.0 (Linux; Android 13; TECNO) Chrome")).toBe(true);
+    expect(isAndroid("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari")).toBe(false);
+  });
+
+  it("ne renseigne pas de paquet quand il n'y a pas de schéma natif", () => {
+    expect(getAppLinkDestination("https://www.linkedin.com/in/biolien").androidPackage).toBeNull();
+  });
+});
+
