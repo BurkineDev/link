@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidateShop(shop_id);
     return NextResponse.json({ block: serializePageBlock(block) }, { status: 201 });
   } catch (error) {
     console.error("[api/blocks POST]", error);
@@ -162,6 +164,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     await reorderPageBlocks(parsed.data.shop_id, parsed.data.block_ids);
+    await revalidateShop(parsed.data.shop_id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[api/blocks PATCH]", error);

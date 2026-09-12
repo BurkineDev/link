@@ -108,7 +108,7 @@ function toPrismaData(body: PatchBody): Prisma.ShopUpdateInput {
 async function findOwnedShop(shopId: string, userId: string) {
   return prisma.shop.findFirst({
     where: { id: shopId, ownerId: userId },
-    select: { id: true },
+    select: { id: true, slug: true },
   });
 }
 
@@ -153,6 +153,9 @@ export async function PATCH(
       data: toPrismaData(parsed.data),
     });
 
+    // Ancien ET nouveau slug : en cas de renommage, l'ancienne adresse doit
+    // cesser de servir la page en cache.
+    revalidateShopSlug(owned.slug, shop.slug);
     return NextResponse.json({ shop: serializeShop(shop) });
   } catch (error) {
     if (
@@ -186,6 +189,7 @@ export async function DELETE(
     // `orders` est en `onDelete: Restrict` : une boutique qui a vendu ne se
     // supprime pas — les commandes (et la comptabilité) doivent survivre.
     await prisma.shop.delete({ where: { id } });
+    revalidateShopSlug(owned.slug);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     if (
