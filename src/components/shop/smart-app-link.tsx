@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ComponentPropsWithoutRef, type MouseEvent } from "react";
+import { useEffect, useMemo, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import {
   getAppLinkDestination,
   isAndroid,
@@ -10,10 +10,11 @@ import {
 
 type SmartAppLinkProps = ComponentPropsWithoutRef<"a"> & {
   /**
-   * Route serveur `/go/<id>` à mettre dans l'ancre à la place de l'URL web :
-   * sans JavaScript (ou avant qu'il ne soit chargé), c'est le serveur qui
-   * décide app ou web et qui compte le clic. `href` reste la vraie
-   * destination, utilisée pour reconnaître l'app et pour le tap intercepté.
+   * Route serveur `/go/<id>`, posée en `data-go` sur l'ancre. L'ancre garde
+   * la vraie URL (les Universal Links iOS et App Links Android ne se
+   * déclenchent que sur l'URL tapée) ; le script inline de la BioPage
+   * (`AndroidGoScript`) envoie vers `/go` les taps Android tant que la page
+   * n'est pas hydratée, pour que le serveur décide app ou web.
    */
   goHref?: string;
   /** Appelé quand le tap est intercepté côté client (l'ancre n'est pas suivie). */
@@ -23,8 +24,7 @@ type SmartAppLinkProps = ComponentPropsWithoutRef<"a"> & {
 /**
  * Lien sortant qui laisse iOS/Android ouvrir l'application associée.
  *
- * L'ancre garde toujours une URL valide pour fonctionner sans JavaScript :
- * l'URL web, ou la route serveur `/go/<id>` quand elle est fournie. Sur
+ * L'ancre garde toujours l'URL web pour fonctionner sans JavaScript. Sur
  * mobile, les destinations disposant d'un schéma natif sont tentées lors du
  * tap ; sur Android, une app sans schéma mais au paquet connu (TikTok,
  * Facebook, Messenger…) est forcée par intent HTTPS ; les autres utilisent
@@ -44,6 +44,12 @@ export function SmartAppLink({
     () => getAppLinkDestination(rawHref),
     [rawHref],
   );
+
+  // Signale au script inline que React a pris la main : à partir de là,
+  // c'est ce composant qui intercepte les taps, plus la route /go.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-hydrated", "");
+  }, []);
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
@@ -74,7 +80,8 @@ export function SmartAppLink({
   return (
     <a
       {...props}
-      href={rawHref ? (goHref ?? destination.webUrl) : undefined}
+      href={rawHref ? destination.webUrl : undefined}
+      data-go={goHref}
       // target=_blank is precisely what traps visitors in many in-app
       // browsers. Known app links stay in the current browsing context.
       target={destination.opensInApp ? undefined : target}

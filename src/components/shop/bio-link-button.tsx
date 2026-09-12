@@ -109,9 +109,9 @@ export function BioLinkButton({
 
   const Icon = ICONS[link.icon] ?? ICONS.custom;
   const external = isExternal(link.url);
-  // Les liens web passent par la route serveur : décision app/web avant
-  // hydratation et clic compté côté serveur. mailto: et tel: n'en ont pas
-  // besoin et gardent le comptage côté client.
+  // Les liens web portent leur route serveur /go/<id> : sur Android, avant
+  // hydratation, le script inline y envoie le tap (décision app/web et clic
+  // comptés côté serveur). Une fois hydraté, tout se passe ici.
   const viaGo = /^https?:/i.test(link.url);
 
   const surfaceStyle: React.CSSProperties = (() => {
@@ -209,10 +209,10 @@ export function BioLinkButton({
           goHref={viaGo ? blockGoHref(link.id) : undefined}
           target="_blank"
           rel="noopener noreferrer"
-          // Tap intercepté (deep link direct) : l'ancre n'est pas suivie, le
-          // serveur ne voit rien, on compte ici. Ancre suivie : /go compte.
-          onNativeOpen={() => trackClick(endpoint)}
-          onClick={viaGo ? undefined : () => trackClick(endpoint)}
+          // Une fois hydraté, l'ancre directe ou le tap intercepté passent
+          // ici : on compte côté client. Avant hydratation, le script inline
+          // envoie vers /go, qui compte côté serveur.
+          onClick={() => trackClick(endpoint)}
           className={sharedClasses}
           style={focusRing}
         >

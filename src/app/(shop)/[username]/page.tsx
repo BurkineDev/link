@@ -21,6 +21,7 @@ import { JsonLd, storeJsonLd } from "@/lib/seo/json-ld";
 import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
 import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
+import { AndroidGoScript } from "@/components/shop/android-go-script";
 
 interface Props {
   params: Promise<{ username: string }>;
@@ -181,6 +182,7 @@ export default async function Page({ params }: Props) {
   return (
     <>
       <JsonLd data={storeJsonLd({ shop, url: pageUrl })} />
+      <AndroidGoScript />
       <ShopPage
         shop={shop}
         products={products}

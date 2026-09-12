@@ -6,9 +6,10 @@ import { NextRequest } from "next/server";
 
 let _link: { url: string } | null = null;
 let _block: { config: unknown } | null = null;
+const SHOP = { slug: "wax" };
 const mockPrisma = {
-  shopLink: { findFirst: jest.fn(async () => _link) },
-  pageBlock: { findFirst: jest.fn(async () => _block) },
+  shopLink: { findFirst: jest.fn(async () => (_link ? { ..._link, shop: SHOP } : null)) },
+  pageBlock: { findFirst: jest.fn(async () => (_block ? { ..._block, shop: SHOP } : null)) },
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
@@ -38,11 +39,16 @@ const ANDROID = "Mozilla/5.0 (Linux; Android 12; Infinix X6816) Chrome/120 Mobil
 const IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari";
 const DESKTOP = "Mozilla/5.0 (Macintosh) Chrome/120";
 
-function get(id: string, userAgent = DESKTOP) {
-  return GET(new NextRequest(`http://localhost:3000/go/${id}`, { headers: { "user-agent": userAgent } }), {
-    params: Promise.resolve({ lien: id }),
-  });
+function get(id: string, userAgent = DESKTOP, extra: { method?: string; headers?: Record<string, string> } = {}) {
+  return GET(
+    new NextRequest(`http://localhost:3000/go/${id}`, {
+      method: extra.method ?? "GET",
+      headers: { "user-agent": userAgent, ...(extra.headers ?? {}) },
+    }),
+    { params: Promise.resolve({ lien: id }) },
+  );
 }
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   _link = null;
@@ -68,7 +74,7 @@ describe("GET /go/[lien]", () => {
     expect(res.headers.get("location")).toBe("https://www.tiktok.com/@amy.creator");
     expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect(res.headers.get("x-robots-tag")).toBe("noindex");
-    await new Promise((r) => setTimeout(r, 0));
+    await flush();
     expect(tracked).toEqual([`link:${ID}`]);
   });
 
@@ -77,7 +83,7 @@ describe("GET /go/[lien]", () => {
     const res = await get(ID, ANDROID);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toMatch(/^intent:\/\/user\?username=amy\.creator#Intent;scheme=instagram;package=com\.instagram\.android;/);
-    await new Promise((r) => setTimeout(r, 0));
+    await flush();
     expect(tracked).toEqual([`block:${ID}`]);
   });
 
@@ -89,14 +95,49 @@ describe("GET /go/[lien]", () => {
     );
   });
 
-  test("iOS + Facebook : page-pont HTML, pas de redirection", async () => {
+  test("iOS + Facebook : page-pont HTML sous CSP à nonce, retour vers la boutique", async () => {
     _link = { url: "https://www.facebook.com/wax.and.co" };
     const res = await get(ID, IOS);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    const nonce = /script-src 'nonce-([a-f0-9]+)'/.exec(csp)?.[1];
+    expect(nonce).toBeTruthy();
     const html = await res.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
     expect(html).toContain("fb://facewebmodal/f?href=");
-    expect(html).toContain("https://www.facebook.com/wax.and.co");
+    expect(html).toContain('href="/wax">Retour à la boutique');
+  });
+
+  test("URL avec emoji ou alphabet non latin : encodée, jamais de 500", async () => {
+    _link = { url: "https://wa.me/22670000000?text=Salut 👋" };
+    const desktop = await get(ID);
+    expect(desktop.status).toBe(302);
+    expect(desktop.headers.get("location")).toBe("https://wa.me/22670000000?text=Salut%20%F0%9F%91%8B");
+
+    _link = { url: "https://www.tiktok.com/@名前" };
+    const android = await get(ID, ANDROID);
+    expect(android.status).toBe(302);
+    expect(android.headers.get("location")).toMatch(/^intent:\/\/www\.tiktok\.com\/@%E5%90%8D%E5%89%8D#Intent;scheme=https;/);
+
+    _link = { url: "https://ex.com/a\nb" };
+    expect((await get(ID)).headers.get("location")).toBe("https://ex.com/ab");
+  });
+
+  test("robots, aperçus, HEAD et préchargements : servis mais jamais comptés", async () => {
+    _link = { url: "https://www.tiktok.com/@amy.creator" };
+    const googlebot = "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X) (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+    expect((await get(ID, googlebot)).headers.get("location")).toBe("https://www.tiktok.com/@amy.creator");
+    expect((await get(ID, "facebookexternalhit/1.1")).status).toBe(302);
+    expect((await get(ID, DESKTOP, { method: "HEAD" })).status).toBe(302);
+    expect((await get(ID, DESKTOP, { headers: { "sec-fetch-mode": "no-cors" } })).status).toBe(302);
+    expect((await get(ID, DESKTOP, { headers: { "sec-purpose": "prefetch" } })).status).toBe(302);
+    await flush();
+    expect(tracked).toEqual([]);
+
+    expect((await get(ID, DESKTOP, { headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } })).status).toBe(302);
+    await flush();
+    expect(tracked).toEqual([`link:${ID}`]);
   });
 
   test("une URL non http(s)/mailto/tel enregistrée par erreur n'est jamais suivie", async () => {
@@ -111,7 +152,7 @@ describe("GET /go/[lien]", () => {
     _limited = true;
     const res = await get(ID);
     expect(res.status).toBe(302);
-    await new Promise((r) => setTimeout(r, 0));
+    await flush();
     expect(tracked).toEqual([]);
   });
 });

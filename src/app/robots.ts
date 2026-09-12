@@ -21,6 +21,8 @@ export default function robots(): MetadataRoute.Robots {
           "/reset-password",
           "/checkout",
           "/checkout/",
+          // Redirections de liens : rien à indexer, et chaque passage compterait un clic.
+          "/go/",
         ],
       },
     ],
