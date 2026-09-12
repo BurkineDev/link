@@ -33,16 +33,25 @@ If the Upstash variables are absent (e.g. local dev) only the in-memory layer
 applies, so **production must set them** for the distributed limits and budget
 cap to take effect.
 
-### Base de données : jamais la production en local
+### Base de données : chaque environnement sur sa branche Neon
 
 `src/lib/db/database-guard.ts` connaît l'endpoint Neon de la branche de
-production. Hors d'un vrai déploiement Vercel Production, le serveur
-(`next dev`, `next start`, previews) et le CLI Prisma (`migrate`, `db push`,
-`studio`, `generate`) refusent de démarrer si `DATABASE_URL` ou `DIRECT_URL`
-le visent. Le développement local et les previews Vercel utilisent la branche
-Neon `development`, créée en mode schéma seul. Ne tirez jamais le scope
-production avec `vercel env pull`. Pour une opération de maintenance assumée
-sur la production : `ALLOW_PRODUCTION_DATABASE=1`.
+production et vérifie les deux sens, au démarrage du serveur (`next dev`,
+`next start`, previews) comme au lancement du CLI Prisma (`migrate`,
+`db push`, `studio`, `generate`) :
+
+- hors d'un vrai déploiement Vercel Production, `DATABASE_URL` et
+  `DIRECT_URL` ne doivent pas viser la production (dérogation assumée pour
+  une maintenance : `ALLOW_PRODUCTION_DATABASE=1`) ;
+- sur Vercel Production, elles doivent viser l'endpoint de production, sans
+  dérogation : le build échoue et l'ancien déploiement reste en ligne. Pour
+  changer de base de production, ajouter le nouvel endpoint à
+  `PRODUCTION_DATABASE_HOST`.
+
+Le développement local et les previews Vercel utilisent la branche Neon
+`development`, créée en mode schéma seul. Ne tirez jamais le scope production
+avec `vercel env pull`, et ne collez jamais les URL de `development` dans
+Vercel Production.
 
 ## Notifications WhatsApp du vendeur
 

@@ -7,15 +7,16 @@ const vercelEnvFromProcess = process.env.VERCEL_ENV;
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 import { defineConfig } from "prisma/config";
-import { assertNotProductionDatabase } from "./src/lib/db/database-guard";
+import { assertDatabaseTarget } from "./src/lib/db/database-guard";
 
 // Neon exposes a pooled URL for the runtime and a direct URL for schema
 // changes. Prisma CLI must use the direct connection when available.
 const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
 
 // Hors Vercel Production, le CLI (migrate, db push, studio, generate…) ne
-// doit jamais toucher la base de production : voir src/lib/db/database-guard.ts.
-assertNotProductionDatabase(
+// doit jamais toucher la base de production ; sur Vercel Production, il ne
+// doit viser qu'elle (le build échoue sinon) : voir src/lib/db/database-guard.ts.
+assertDatabaseTarget(
   [
     { name: "DIRECT_URL", url: process.env.DIRECT_URL },
     { name: "DATABASE_URL", url: process.env.DATABASE_URL },
