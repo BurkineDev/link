@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShop } from "@/lib/db/serialize";
 import { RESERVED_SLUGS } from "@/lib/constants";
+import { revalidateShopSlug } from "@/lib/shops/revalidate";
 import { Prisma } from "../../../../../prisma/generated/client/client";
 
 /**
