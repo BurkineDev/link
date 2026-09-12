@@ -3,7 +3,13 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 /**
- * Rate limiting for the public, unauthenticated AI tools under /api/outils/*.
+ * Rate limiting des points d'entrée publics.
+ *
+ * Deux usages :
+ *   - `enforceAiLimits` : les outils IA gratuits sous /api/outils/* (budget
+ *     partagé, plafond global journalier).
+ *   - `enforceLimits` : règles génériques par IP ou par boutique pour le
+ *     passage en caisse, la vérification de paiement et les codes promo.
  *
  * Three layers, cheapest first:
  *   1. In-memory per-IP burst — instant, per-instance, absorbs bursts for free.
@@ -87,10 +93,12 @@ interface Limiters {
 }
 
 let cached: Limiters | null | undefined;
+let redisClient: Redis | null | undefined;
 let warned = false;
 
-function getLimiters(): Limiters | null {
-  if (cached !== undefined) return cached;
+/** Client Upstash partagé par tous les limiteurs ; null si non configuré. */
+function getRedis(): Redis | null {
+  if (redisClient !== undefined) return redisClient;
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -103,11 +111,23 @@ function getLimiters(): Limiters | null {
       );
       warned = true;
     }
+    redisClient = null;
+    return null;
+  }
+
+  redisClient = new Redis({ url, token });
+  return redisClient;
+}
+
+function getLimiters(): Limiters | null {
+  if (cached !== undefined) return cached;
+
+  const redis = getRedis();
+  if (!redis) {
     cached = null;
     return null;
   }
 
-  const redis = new Redis({ url, token });
   cached = {
     ipBurst: new Ratelimit({
       redis,
@@ -158,6 +178,85 @@ function budgetExhausted(resetAt: number): NextResponse {
     },
     { status: 503, headers: { "Retry-After": String(retryAfter) } },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Règles génériques (passage en caisse, vérification, codes promo)
+// ---------------------------------------------------------------------------
+
+export interface LimitRule {
+  /**
+   * Nom stable de la règle (`checkout:ip`, `promo:shop`…) : il préfixe les
+   * clés Redis, donc deux règles de nom différent ne se comptent pas ensemble.
+   */
+  name: string;
+  /** Sujet compté : adresse IP, identifiant de boutique… */
+  key: string;
+  /** Nombre de requêtes admises par fenêtre. */
+  limit: number;
+  /** Largeur de la fenêtre glissante, en secondes. */
+  windowSeconds: number;
+}
+
+const ruleLimiters = new Map<string, Ratelimit>();
+
+function getRuleLimiter(redis: Redis, rule: LimitRule): Ratelimit {
+  const id = `${rule.name}:${rule.limit}:${rule.windowSeconds}`;
+  let limiter = ruleLimiters.get(id);
+  if (!limiter) {
+    limiter = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(rule.limit, `${rule.windowSeconds} s`),
+      prefix: `rl:${rule.name}`,
+    });
+    ruleLimiters.set(id, limiter);
+  }
+  return limiter;
+}
+
+/**
+ * Applique une liste de règles, dans l'ordre. Retourne la réponse 429 prête
+ * à envoyer dès qu'une règle bloque, null si tout passe.
+ *
+ * Couche mémoire d'abord (par instance, instantanée), puis Upstash (partagé
+ * entre toutes les instances) quand il est configuré. Une panne Upstash ne
+ * bloque jamais la requête : on ne refuse pas un achat parce que Redis est
+ * injoignable, la couche mémoire reste seule active.
+ */
+export async function enforceLimits(
+  rules: LimitRule[],
+): Promise<NextResponse | null> {
+  for (const rule of rules) {
+    const mem = rateLimit(`${rule.name}:${rule.key}`, {
+      limit: rule.limit,
+      windowMs: rule.windowSeconds * 1000,
+    });
+    if (!mem.success) return tooManyRequests(mem.resetAt);
+  }
+
+  const redis = getRedis();
+  if (!redis) return null;
+
+  for (const rule of rules) {
+    try {
+      const res = await getRuleLimiter(redis, rule).limit(rule.key);
+      if (!res.success) return tooManyRequests(res.reset);
+    } catch (error) {
+      console.warn(`[rate-limit] Upstash indisponible (${rule.name}) :`, error);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/** Réinitialise l'état en mémoire — tests uniquement. */
+export function _resetRateLimitState(): void {
+  buckets.clear();
+  ruleLimiters.clear();
+  redisClient = undefined;
+  cached = undefined;
+  warned = false;
 }
 
 // ---------------------------------------------------------------------------

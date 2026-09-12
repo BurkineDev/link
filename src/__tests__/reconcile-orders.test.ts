@@ -44,10 +44,13 @@ const toRow = (o: Record<string, unknown>) => ({
 
 const mockPrisma = {
   order: {
-    findMany: jest.fn(async (args: { where?: { shopId?: string } }) => {
-      if (args?.where?.shopId) _selectFilters.shop_id = args.where.shopId;
-      return _orders.map(toRow);
-    }),
+    findMany: jest.fn(
+      async (args: { where?: { shopId?: string; createdAt?: { lt?: Date } } }) => {
+        if (args?.where?.shopId) _selectFilters.shop_id = args.where.shopId;
+        if (args?.where?.createdAt?.lt) _selectFilters.created_before = args.where.createdAt.lt;
+        return _orders.map(toRow);
+      },
+    ),
   },
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
@@ -212,9 +215,9 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(_released).toHaveLength(0);
   });
 
-  test("libère le stock d'un panier abandonné depuis plus de 24 h", async () => {
+  test("libère le stock d'un panier abandonné depuis plus de 2 h", async () => {
     _orders = [
-      order({ created_at: new Date(Date.now() - 30 * HOUR).toISOString() }),
+      order({ created_at: new Date(Date.now() - 3 * HOUR).toISOString() }),
     ];
     _payment = payment({ status: "pending" });
 
@@ -222,6 +225,40 @@ describe("reconcilePendingGeniusPayOrders", () => {
 
     expect(res.failed).toBe(1);
     expect(_released).toHaveLength(1);
+  });
+
+  test("laisse à l'acheteur le temps de payer : un panier d'une heure n'est pas annulé", async () => {
+    _orders = [
+      order({ created_at: new Date(Date.now() - 1 * HOUR).toISOString() }),
+    ];
+    _payment = payment({ status: "pending" });
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res.stillPending).toBe(1);
+    expect(_released).toHaveLength(0);
+  });
+
+  test("onlyStale : ne relit que les commandes déjà abandonnées (plus de 2 h)", async () => {
+    _orders = [];
+
+    await reconcilePendingGeniusPayOrders({ shopId: "shop-1", onlyStale: true });
+
+    const before = _selectFilters.created_before as Date;
+    const age = Date.now() - before.getTime();
+    expect(age).toBeGreaterThanOrEqual(2 * HOUR - 1000);
+    expect(age).toBeLessThan(2 * HOUR + 5000);
+    expect(_selectFilters.shop_id).toBe("shop-1");
+  });
+
+  test("sans onlyStale : relit dès la première minute pour rattraper un webhook manqué", async () => {
+    _orders = [];
+
+    await reconcilePendingGeniusPayOrders();
+
+    const before = _selectFilters.created_before as Date;
+    const age = Date.now() - before.getTime();
+    expect(age).toBeLessThan(2 * 60_000);
   });
 
   test("une panne Genius Pay ne fait pas échouer le lot entier", async () => {

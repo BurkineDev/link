@@ -111,6 +111,21 @@ jest.mock("@/lib/order-notifications", () => ({
   notifyPaidOrder: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Limitation de débit : laissée passante par défaut, un test la fait bloquer.
+let _blockedResponse: Response | null = null;
+jest.mock("@/lib/rate-limit", () => ({
+  enforceLimits: jest.fn(async () => _blockedResponse),
+  getClientIp: jest.fn(() => "203.0.113.7"),
+}));
+
+// Réconciliation des paniers Mobile Money abandonnés, appelée quand le stock
+// manque : par défaut elle ne libère rien.
+let _reconcileResult = { checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 0 };
+const mockReconcile = jest.fn<Promise<typeof _reconcileResult>, [unknown?]>(async () => _reconcileResult);
+jest.mock("@/lib/orders/reconcile", () => ({
+  reconcilePendingGeniusPayOrders: (opts?: unknown) => mockReconcile(opts),
+}));
+
 import { POST } from "@/app/api/checkout/route";
 
 // ---------------------------------------------------------------------------
@@ -218,6 +233,9 @@ function mockStripeMissingUrl() {
 
 beforeEach(() => {
   setup(); // reset to defaults
+  _blockedResponse = null;
+  _reconcileResult = { checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 0 };
+  mockReconcile.mockClear();
   mockCreateSession.mockReset();
   mockCreateCoupon.mockReset();
   mockCreateCoupon.mockResolvedValue({ id: "coupon_order_123" });
@@ -473,5 +491,54 @@ describe("POST /api/checkout", () => {
     });
     const res = await POST(req);
     expect([400, 422, 500]).toContain(res.status);
+  });
+
+  // TC-12d — stock insuffisant, mais des paniers Mobile Money abandonnés
+  // retiennent l'article : on rend leur stock et on réessaie une fois.
+  test("TC-12d: insufficient stock retries after releasing abandoned Mobile Money holds", async () => {
+    const reserve = (jest.requireMock("@/lib/db/stock") as { reserveStock: jest.Mock }).reserveStock;
+    reserve.mockClear();
+    reserve
+      .mockResolvedValueOnce({ ok: false, reason: "insufficient_stock", product_name: "Tissu wax", available: 0 })
+      .mockResolvedValueOnce({ ok: true });
+    _reconcileResult = { checked: 2, paid: 0, failed: 1, stillPending: 1, errors: 0 };
+    mockCreateSession.mockResolvedValue({ id: "cs_test_retry", url: "https://checkout.stripe.com/pay/cs_test_retry" });
+
+    const res = await POST(makeRequest(validPayload()));
+    const json = await res.json();
+
+    expect(mockReconcile).toHaveBeenCalledWith({ shopId: SHOP_ID, limit: 5, onlyStale: true });
+    expect(reserve).toHaveBeenCalledTimes(2);
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ orderId: ORDER_ID, paymentLink: "https://checkout.stripe.com/pay/cs_test_retry" });
+  });
+
+  // TC-12e — rien à libérer : une seule tentative, refus 409.
+  test("TC-12e: insufficient stock without abandoned holds stays a 409", async () => {
+    const reserve = (jest.requireMock("@/lib/db/stock") as { reserveStock: jest.Mock }).reserveStock;
+    reserve.mockClear();
+    setup({ reserveResult: { ok: false, reason: "insufficient_stock", product_name: "Tissu wax", available: 0 } });
+
+    const res = await POST(makeRequest(validPayload()));
+
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(409);
+  });
+
+  // TC-RL — limitation de débit : refus avant toute lecture en base.
+  test("TC-RL: rate limited request returns the 429 before touching the database", async () => {
+    const { NextResponse } = jest.requireActual("next/server") as typeof import("next/server");
+    _blockedResponse = NextResponse.json(
+      { error: "Trop de requêtes." },
+      { status: 429, headers: { "Retry-After": "42" } },
+    );
+    mockPrisma.shop.findUnique.mockClear();
+
+    const res = await POST(makeRequest(validPayload()));
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("42");
+    expect(mockPrisma.shop.findUnique).not.toHaveBeenCalled();
   });
 });

@@ -86,6 +86,12 @@ jest.mock("@/lib/stripe", () => ({
   },
 }));
 
+let _blockedResponse: Response | null = null;
+jest.mock("@/lib/rate-limit", () => ({
+  enforceLimits: jest.fn(async () => _blockedResponse),
+  getClientIp: jest.fn(() => "203.0.113.7"),
+}));
+
 jest.mock("@/lib/order-notifications", () => ({
   notifyPaidOrder: jest.fn().mockResolvedValue(undefined),
 }));
@@ -121,6 +127,7 @@ function mockStripeSession(s: {
 
 beforeEach(() => {
   _order = BASE_ORDER_DEFAULT();
+  _blockedResponse = null;
   mockRetrieveSession.mockReset();
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
 });
@@ -216,5 +223,16 @@ describe("GET /api/checkout/verify", () => {
     } else {
       expect(res.status).toBe(400);
     }
+  });
+  test("TC-RL: rate limited request returns the 429 before reading the order", async () => {
+    const { NextResponse } = jest.requireActual("next/server") as typeof import("next/server");
+    _blockedResponse = NextResponse.json({ error: "Trop de requêtes." }, { status: 429 });
+    mockPrisma.order.findFirst.mockClear();
+
+    const res = await GET(makeRequest("cs_test_123"));
+
+    expect(res.status).toBe(429);
+    expect(mockPrisma.order.findFirst).not.toHaveBeenCalled();
+    expect(mockRetrieveSession).not.toHaveBeenCalled();
   });
 });
