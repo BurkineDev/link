@@ -77,6 +77,7 @@ export function WhatsAppNumberField({
   help = "C'est ici que les commandes arrivent.",
   className,
   inputClassName,
+  testLink = true,
 }: {
   id?: string;
   /** Numéro composé stocké (chiffres seuls, ex. « 22670123456 »), ou "". */
@@ -89,6 +90,8 @@ export function WhatsAppNumberField({
   help?: string;
   className?: string;
   inputClassName?: string;
+  /** Lien « Tester sur WhatsApp » : à désactiver quand le numéro sert à autre chose (Mobile Money). */
+  testLink?: boolean;
 }) {
   const fallback = defaultIso2ForCurrency(currency);
   const [iso2, setIso2] = useState(() => guessIso2(value, fallback));
@@ -149,15 +152,19 @@ export function WhatsAppNumberField({
         {composed ? (
           <>
             Numéro utilisé : <span className="font-medium text-foreground">{composed}</span>
-            {" · "}
-            <a
-              href={`https://wa.me/${composed.slice(1)}?text=${encodeURIComponent("Test Bio-Lien : ce numéro reçoit bien les commandes.")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 underline underline-offset-2"
-            >
-              Tester sur WhatsApp <ExternalLink className="size-3" aria-hidden />
-            </a>
+            {testLink ? (
+              <>
+                {" · "}
+                <a
+                  href={`https://wa.me/${composed.slice(1)}?text=${encodeURIComponent("Test Bio-Lien : ce numéro reçoit bien les commandes.")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline underline-offset-2"
+                >
+                  Tester sur WhatsApp <ExternalLink className="size-3" aria-hidden />
+                </a>
+              </>
+            ) : null}
           </>
         ) : touched ? (
           `Numéro invalide pour ${dialCode} : ${hint ?? "vérifie le nombre de chiffres"}.`

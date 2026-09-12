@@ -657,9 +657,14 @@ model Payout {
   shopId      String       @map("shop_id") @db.Uuid
   amount      Decimal      @db.Decimal(14, 2)
   currency    CurrencyCode
-  status      String       @default("pending")
+  /// requested → processing → paid | failed (voir src/lib/payouts/config.ts)
+  status      String       @default("requested")
   provider    String
   reference   String?      @unique
+  /// Compte de reversement tel qu'il était au moment de la demande.
+  destination Json?
+  /// Note de l'équipe (référence du transfert, motif de refus…).
+  note        String?
   periodStart DateTime?    @map("period_start")
   periodEnd   DateTime?    @map("period_end")
   paidAt      DateTime?    @map("paid_at")
@@ -668,6 +673,7 @@ model Payout {
   shop        Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId, createdAt])
+  @@index([status, createdAt])
   @@map("payouts")
 }
 

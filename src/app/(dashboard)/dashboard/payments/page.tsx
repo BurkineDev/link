@@ -14,6 +14,10 @@ import { CreditCardIcon, SmartphoneIcon, WalletIcon } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { formatDate } from "@/lib/utils/format";
 import type { Currency, OrderRow } from "@/lib/types/database";
+import { PayoutsSection } from "@/components/dashboard/payouts-section";
+import { loadBalance } from "@/lib/payouts/balance-db";
+import { minimumPayout } from "@/lib/payouts/config";
+import { serializePayout } from "@/lib/payouts/serialize";
 
 export const metadata = { title: "Paiements" };
 
@@ -64,6 +68,16 @@ export default async function PaymentsPage() {
   if (!shop) redirect("/dashboard");
 
   const currency = shop.currency as Currency;
+
+  const [balance, payoutAccount, payoutRows] = await Promise.all([
+    loadBalance(shop.id, shop.currency),
+    prisma.payoutAccount.findUnique({ where: { shopId: shop.id } }),
+    prisma.payout.findMany({
+      where: { shopId: shop.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+  ]);
 
   const rows = await prisma.order.findMany({
     where: { shopId: shop.id },
@@ -119,7 +133,38 @@ export default async function PaymentsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Paiements</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Ce que tu as encaissé, et ce qui reste à encaisser.
+          Ce que tu as encaissé, ce qui te revient, et ce qui t&apos;a été versé.
+        </p>
+      </div>
+
+      <PayoutsSection
+        balance={{
+          currency: balance.currency,
+          available: balance.available,
+          maturing: balance.maturing,
+          reserved: balance.reserved,
+          paidOut: balance.paidOut,
+          minimum: minimumPayout(shop.currency),
+          nextMaturityAt: balance.nextMaturityAt?.toISOString() ?? null,
+        }}
+        account={
+          payoutAccount
+            ? {
+                provider: payoutAccount.provider,
+                account_name: payoutAccount.accountName,
+                account_identifier: payoutAccount.accountIdentifier,
+                country: payoutAccount.country,
+                is_verified: payoutAccount.isVerified,
+              }
+            : null
+        }
+        payouts={payoutRows.map(serializePayout)}
+      />
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Encaissements</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ce que tes clients ont payé, commande par commande.
         </p>
       </div>
 

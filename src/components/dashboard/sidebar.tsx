@@ -17,6 +17,7 @@ import {
   LayoutPanelLeftIcon,
   MoreHorizontalIcon,
   UsersIcon,
+  BanknoteIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 
@@ -94,9 +95,18 @@ function NavIcon({
 interface SidebarProps {
   shopSlug?: string | null;
   shopName?: string | null;
+  /** Membre de l'équipe Bio-Lien (ADMIN_EMAILS) : voit les écrans de traitement. */
+  isAdmin?: boolean;
 }
 
-export function Sidebar({ shopSlug, shopName }: SidebarProps) {
+const ADMIN_GROUP: { label: string; items: NavItemDef[] } = {
+  label: "Équipe",
+  items: [
+    { label: "Reversements", href: "/dashboard/admin/payouts", icon: BanknoteIcon },
+  ],
+};
+
+export function Sidebar({ shopSlug, shopName, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -119,7 +129,7 @@ export function Sidebar({ shopSlug, shopName }: SidebarProps) {
       </div>
 
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3.5 py-4">
-        {NAV_GROUPS.map((group) => (
+        {(isAdmin ? [...NAV_GROUPS, ADMIN_GROUP] : NAV_GROUPS).map((group) => (
           <div key={group.label} className="space-y-1">
             <p
               className="mb-2 select-none px-3 text-[9px] font-bold uppercase tracking-[0.14em]"
