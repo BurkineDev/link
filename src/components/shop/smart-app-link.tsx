@@ -45,7 +45,10 @@ export function SmartAppLink({
     }
 
     event.preventDefault();
-    openNativeApp(destination.nativeUrl, destination.webUrl);
+    openNativeApp(destination.nativeUrl, destination.webUrl, {
+      androidPackage: destination.androidPackage,
+      userAgent: navigator.userAgent,
+    });
   };
 
   return (
