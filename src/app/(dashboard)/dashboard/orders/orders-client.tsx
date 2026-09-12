@@ -115,6 +115,32 @@ function OrderDetailSheet({
   onStatusUpdated,
 }: OrderDetailSheetProps) {
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
+
+  async function handleMarkPaid() {
+    if (!order) return;
+    setMarkingPaid(true);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/mark-paid`, { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as {
+        order?: OrderRow;
+        error?: string;
+        stock_shortfall?: unknown[];
+      };
+      if (!response.ok || !data.order) {
+        toast.error(data.error ?? "Impossible de marquer la commande payée.");
+        return;
+      }
+      onStatusUpdated(data.order);
+      toast.success(
+        data.stock_shortfall && data.stock_shortfall.length > 0
+          ? "Commande payée, mais le stock ne couvrait pas tout : vérifie le bandeau."
+          : "Commande marquée payée : le stock est prélevé.",
+      );
+    } finally {
+      setMarkingPaid(false);
+    }
+  }
 
   if (!order) return null;
 
@@ -216,10 +242,17 @@ function OrderDetailSheet({
             </h3>
             <div className="rounded-xl border border-border bg-muted/30 p-3 flex flex-col gap-2">
               <p className="font-medium">{order.buyer_name}</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MailIcon className="size-3.5 shrink-0" />
-                <span className="truncate">{order.buyer_email}</span>
-              </div>
+              {order.buyer_email ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MailIcon className="size-3.5 shrink-0" />
+                  <span className="truncate">{order.buyer_email}</span>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Commande passée sur WhatsApp : les coordonnées sont dans la conversation
+                  (référence #{order.id.replace(/-/g, "").slice(0, 6).toUpperCase()}).
+                </p>
+              )}
               {order.buyer_phone && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <PhoneIcon className="size-3.5 shrink-0" />
@@ -307,7 +340,9 @@ function OrderDetailSheet({
               <div className="flex items-center gap-2">
                 <CreditCardIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm capitalize">
-                  {order.payment_provider ?? "Non renseigné"}
+                  {order.payment_provider === "manual"
+                    ? "WhatsApp / hors ligne"
+                    : (order.payment_provider ?? "Non renseigné")}
                 </span>
                 <span
                   className={cn(
@@ -339,6 +374,22 @@ function OrderDetailSheet({
                   {formatCurrency(order.total_amount, order.currency)}
                 </span>
               </div>
+              {order.payment_provider === "manual" && order.payment_status === "pending" && (
+                <div className="border-t border-border pt-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Tu as reçu l&apos;argent (espèces, Mobile Money direct) ? Marque la commande
+                    payée : le stock est prélevé et la commande passe en « Confirmée ».
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={markingPaid}
+                    onClick={handleMarkPaid}
+                  >
+                    {markingPaid ? "Enregistrement…" : "Marquer comme payée"}
+                  </Button>
+                </div>
+              )}
             </div>
           </section>
 

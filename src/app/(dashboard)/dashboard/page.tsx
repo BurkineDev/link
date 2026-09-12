@@ -349,7 +349,7 @@ export default async function DashboardPage() {
                         <td className="px-5 py-3.5 max-w-[140px]">
                           <p className="truncate font-semibold text-sm">{order.buyer_name}</p>
                           <p className="truncate text-[11px] text-muted-foreground mt-0.5">
-                            {order.buyer_email}
+                            {order.buyer_email ?? "Commande WhatsApp"}
                           </p>
                         </td>
                         <td className="px-5 py-3.5 text-right font-black tabular-nums text-sm">

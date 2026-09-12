@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { VariantSelector } from "@/components/shop/variant-selector";
 import { BioProductCard } from "@/components/shop/bio-product-card";
 import { BioShareSheet } from "@/components/shop/bio-share-sheet";
@@ -31,6 +30,7 @@ import {
   withAlpha,
 } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
+import { WhatsAppOrderButton } from "@/components/shop/whatsapp-order-button";
 import type {
   ShopRow,
   ProductRow,
@@ -343,11 +343,19 @@ export function ProductPage({
 
             {/* CTAs */}
             {isWhatsAppMode ? (
-              <SmartAppLink
-                href={isOutOfStock ? undefined : whatsAppUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-disabled={isOutOfStock}
+              <WhatsAppOrderButton
+                order={{
+                  shopId: shop.id,
+                  items: [
+                    {
+                      product_id: product.id,
+                      variant_id: selectedVariant?.id ?? null,
+                      quantity,
+                    },
+                  ],
+                  fallbackUrl: whatsAppUrl,
+                }}
+                disabled={isOutOfStock}
                 className={cn(
                   "flex h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold text-white",
                   "transition-transform active:scale-[0.99]",
@@ -357,7 +365,7 @@ export function ProductPage({
               >
                 <MessageCircle className="size-5" />
                 {isOutOfStock ? "Épuisé" : "Commander sur WhatsApp"}
-              </SmartAppLink>
+              </WhatsAppOrderButton>
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button

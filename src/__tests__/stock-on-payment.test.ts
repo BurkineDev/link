@@ -284,6 +284,16 @@ describe("settlePaidOrder", () => {
     expect(tx.digitalDownload.create).toHaveBeenCalledTimes(1);
   });
 
+  test("commande WhatsApp réglée hors plateforme : stock prélevé, ni registre ni fiche client sans e-mail", async () => {
+    _order = order({ buyerEmail: null, paymentProvider: "manual" });
+    const res = await settlePaidOrder(ORDER, "manual:u1:1", "manual");
+    expect(res).toMatchObject({ settled: true, offline: true, commission: 0, customerId: null, stockShortfall: [] });
+    expect(_products[P1]!.stock).toBe(3);
+    expect(tx.transactionLedger.createMany).not.toHaveBeenCalled();
+    expect(tx.customer.create).not.toHaveBeenCalled();
+    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "confirmed", paymentProvider: "manual" });
+  });
+
   test("commande d'avant le changement (stock déjà réservé) : pas de second prélèvement", async () => {
     _order = order({ stockReservedAt: new Date("2026-09-10T00:00:00Z") });
     const res = await settlePaidOrder(ORDER, "MTX-3", "stripe");

@@ -125,7 +125,7 @@ type OrderRow = {
   id: string;
   shopId: string;
   customerId: string | null;
-  buyerEmail: string;
+  buyerEmail: string | null;
   buyerName: string;
   buyerPhone: string | null;
   status: string;

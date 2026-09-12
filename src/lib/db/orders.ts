@@ -28,11 +28,14 @@ export type SettleResult =
   | { settled: false; reason: "not_found" | "already_paid" | "not_pending" }
   | {
       settled: true;
-      customerId: string;
+      /** Null pour une commande sans e-mail (WhatsApp). */
+      customerId: string | null;
       commission: number;
       plan: "free" | "starter" | "pro";
       /** Articles que le stock ne couvrait plus au moment du paiement. */
       stockShortfall: StockShortfall[];
+      /** Réglée hors plateforme : rien au registre, pas de reversement. */
+      offline: boolean;
     };
 
 /** Taux de commission par plan, identique au `case` de la fonction SQL. */
@@ -87,20 +90,25 @@ export async function settlePaidOrder(
 
     // Fiche client : créée au premier achat, enrichie ensuite. Le SQL utilisait
     // least()/greatest() pour que l'ordre d'arrivée des webhooks ne fausse pas
-    // les bornes ; ici on recalcule explicitement.
-    const email = order.buyerEmail.toLowerCase();
-    const existing = await tx.customer.findUnique({
-      where: { shopId_email: { shopId: order.shopId, email } },
-      select: {
-        id: true,
-        phone: true,
-        firstOrderAt: true,
-        lastOrderAt: true,
-      },
-    });
+    // les bornes ; ici on recalcule explicitement. Une commande WhatsApp n'a
+    // pas d'e-mail : pas de fiche tant que le vendeur ne le renseigne pas.
+    const email = order.buyerEmail?.trim().toLowerCase() || null;
+    const existing = email
+      ? await tx.customer.findUnique({
+          where: { shopId_email: { shopId: order.shopId, email } },
+          select: {
+            id: true,
+            phone: true,
+            firstOrderAt: true,
+            lastOrderAt: true,
+          },
+        })
+      : null;
 
-    let customerId: string;
-    if (existing) {
+    let customerId: string | null;
+    if (!email) {
+      customerId = null;
+    } else if (existing) {
       const updated = await tx.customer.update({
         where: { id: existing.id },
         data: {
@@ -153,6 +161,24 @@ export async function settlePaidOrder(
           : null,
       },
     });
+
+    // Une commande réglée hors plateforme (WhatsApp, espèces, Mobile Money
+    // direct au vendeur) : Bio-Lien n'a touché aucun argent, donc ni
+    // commission ni net à reverser — rien au registre.
+    if (paymentProvider === "manual") {
+      const undeliveredOffline = new Set(
+        stockShortfall.filter((item) => item.taken === 0).map((item) => item.product_id),
+      );
+      await createDigitalDownloads(tx, order.id, order.items, undeliveredOffline);
+      return {
+        settled: true,
+        customerId,
+        commission: 0,
+        plan: "free",
+        stockShortfall,
+        offline: true,
+      } as const;
+    }
 
     // Plan du vendeur au moment de l'encaissement. Un abonnement Mobile Money
     // ne compte que s'il n'est pas expiré — d'où le contrôle sur la période.
@@ -223,7 +249,7 @@ export async function settlePaidOrder(
     );
     await createDigitalDownloads(tx, order.id, order.items, undelivered);
 
-    return { settled: true, customerId, commission: fee, plan, stockShortfall } as const;
+    return { settled: true, customerId, commission: fee, plan, stockShortfall, offline: false } as const;
   });
 }
 

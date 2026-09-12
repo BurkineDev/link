@@ -9,6 +9,7 @@ import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
+import { startWhatsAppOrder } from "@/lib/orders/whatsapp-client";
 import {
   primaryActionColor,
   readableTextOn,
@@ -167,7 +168,11 @@ export function BioProductCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                void startWhatsAppOrder({
+                  shopId,
+                  items: [{ product_id: product.id, variant_id: null, quantity: 1 }],
+                  fallbackUrl: whatsappUrl,
+                });
               }}
               aria-label={`Commander ${product.name} sur WhatsApp`}
               className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform active:scale-95"
