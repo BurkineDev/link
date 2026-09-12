@@ -52,6 +52,8 @@ const toRow = (o: Record<string, unknown>) => ({
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 });
 
+let _downloads: Array<{ token: string; fileName: string | null; expiresAt: Date | null }> = [];
+
 const mockPrisma = {
   order: {
     findUnique: jest.fn(async () => (_order ? toRow(_order) : null)),
@@ -63,6 +65,9 @@ const mockPrisma = {
       slug: "boutique-test",
       whatsappNumber: null,
     })),
+  },
+  digitalDownload: {
+    findMany: jest.fn(async () => _downloads),
   },
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
@@ -149,6 +154,38 @@ describe("GET /api/checkout/verify", () => {
     expect(res.status).toBe(200);
     expect(json.order.payment_status).toBe("paid");
     expect(json.order.status).toBe("confirmed");
+  });
+
+  // TC-13b — la réponse est publique : elle ne doit rien contenir de privé,
+  // et doit porter le suivi + les fichiers une fois payée.
+  test("TC-13b: paid response carries tracking + downloads and no private buyer data", async () => {
+    _downloads = [{ token: "dl-1", fileName: "guide.pdf", expiresAt: new Date("2026-12-31T00:00:00Z") }];
+    mockStripeSession({ payment_status: "paid", status: "complete", amount_total: 5000, currency: "xof" });
+
+    const res = await GET(makeRequest(SESSION_ID));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.order.tracking_token).toBe("tok-001");
+    expect(json.order.downloads).toEqual([
+      { token: "dl-1", file_name: "guide.pdf", expires_at: "2026-12-31T00:00:00.000Z" },
+    ]);
+    for (const privateField of ["buyer_email", "buyer_phone", "shipping_address", "notes", "payment_ref"]) {
+      expect(json.order).not.toHaveProperty(privateField);
+    }
+  });
+
+  test("TC-13c: an unpaid order exposes neither tracking token nor downloads", async () => {
+    _order = { ...BASE_ORDER_DEFAULT(), payment_status: "pending" };
+    mockStripeSession({ payment_status: "unpaid", status: "open", amount_total: 5000, currency: "xof" });
+
+    const res = await GET(makeRequest(SESSION_ID));
+    const json = await res.json();
+
+    // Réponse 202 « en attente » : pas encore payé → rien à emporter.
+    expect(res.status).toBe(202);
+    expect(json.order?.tracking_token ?? null).toBeNull();
+    expect(json.order?.downloads ?? []).toEqual([]);
   });
 
   // TC-14 — idempotence : déjà paid → Stripe non appelé

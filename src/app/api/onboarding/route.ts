@@ -1,3 +1,4 @@
+import { isValidE164 } from "@/lib/phone/dial-codes";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -37,7 +38,14 @@ const bodySchema = z.object({
     description: z.string().trim().max(500).nullable().optional(),
     currency: z.enum(CURRENCIES),
     checkoutMode: z.string().min(1).max(30),
-    whatsappNumber: z.string().max(20).nullable().optional(),
+    whatsappNumber: z
+      .string()
+      .max(20)
+      .nullable()
+      .optional()
+      .refine((v) => !v || isValidE164(v), {
+        message: "Numéro WhatsApp incomplet : indicatif du pays requis.",
+      }),
     bioTheme: z.string().min(1).max(50),
     intentions: z.array(z.string().max(50)).max(20).default([]),
   }),

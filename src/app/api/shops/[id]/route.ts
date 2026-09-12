@@ -1,3 +1,4 @@
+import { isValidE164 } from "@/lib/phone/dial-codes";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -42,7 +43,9 @@ const patchSchema = z
     social_links: z.unknown().optional(),
     tiktok_pixel_id: nullableText(100),
     meta_pixel_id: nullableText(100),
-    whatsapp_number: nullableText(30),
+    whatsapp_number: nullableText(30).refine((v) => !v || isValidE164(v), {
+      message: "Numéro WhatsApp incomplet : indicatif du pays requis.",
+    }),
     checkout_mode: z.string().trim().max(30).optional(),
     intentions: z.array(z.string().max(50)).max(20).optional(),
     show_biolien_badge: z.boolean().optional(),
@@ -105,7 +108,7 @@ function toPrismaData(body: PatchBody): Prisma.ShopUpdateInput {
 async function findOwnedShop(shopId: string, userId: string) {
   return prisma.shop.findFirst({
     where: { id: shopId, ownerId: userId },
-    select: { id: true },
+    select: { id: true, slug: true },
   });
 }
 
@@ -150,6 +153,9 @@ export async function PATCH(
       data: toPrismaData(parsed.data),
     });
 
+    // Ancien ET nouveau slug : en cas de renommage, l'ancienne adresse doit
+    // cesser de servir la page en cache.
+    revalidateShopSlug(owned.slug, shop.slug);
     return NextResponse.json({ shop: serializeShop(shop) });
   } catch (error) {
     if (
@@ -183,6 +189,7 @@ export async function DELETE(
     // `orders` est en `onDelete: Restrict` : une boutique qui a vendu ne se
     // supprime pas — les commandes (et la comptabilité) doivent survivre.
     await prisma.shop.delete({ where: { id } });
+    revalidateShopSlug(owned.slug);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     if (

@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidateShop(parsed.data.shop_id);
     return NextResponse.json({ link: serializeShopLink(link) }, { status: 201 });
   } catch (error) {
     console.error("[api/shop-links POST] insert error", error);

@@ -87,18 +87,50 @@ export async function GET(request: NextRequest) {
 
     const order = serializeOrder(row);
 
+    /**
+     * Réponse PUBLIQUE de la page de succès : cette route est un GET sans
+     * authentification, atteignable par quiconque connaît l'identifiant de
+     * commande. On ne renvoie que ce que la page affiche — jamais l'e-mail,
+     * le téléphone, l'adresse ni les notes de l'acheteur.
+     *
+     * Une fois payée, la commande emporte son lien de suivi et ses fichiers
+     * numériques : avant, tout partait uniquement par e-mail, et l'acheteur
+     * sans e-mail (ou avec une faute de frappe) ne recevait jamais son
+     * fichier ni son suivi.
+     */
     const withShop = async (orderObj: typeof order) => {
-      const shop = await prisma.shop.findUnique({
-        where: { id: orderObj.shop_id },
-        select: { name: true, slug: true, whatsappNumber: true },
-      });
+      const paid = orderObj.payment_status === "paid";
+      const [shop, downloads] = await Promise.all([
+        prisma.shop.findUnique({
+          where: { id: orderObj.shop_id },
+          select: { name: true, slug: true, whatsappNumber: true },
+        }),
+        paid
+          ? prisma.digitalDownload.findMany({
+              where: { orderId: orderObj.id },
+              select: { token: true, fileName: true, expiresAt: true },
+            })
+          : Promise.resolve([]),
+      ]);
       // whatsapp_number is already public (it powers the wa.me CTAs on the
       // shop page); exposing it here lets the buyer relay their confirmation.
       return {
-        ...orderObj,
+        id: orderObj.id,
+        buyer_name: orderObj.buyer_name,
+        total_amount: orderObj.total_amount,
+        currency: orderObj.currency,
+        status: orderObj.status,
+        payment_status: orderObj.payment_status,
+        items: orderObj.items,
         shop_name: shop?.name,
         shop_slug: shop?.slug,
         shop_whatsapp: shop?.whatsappNumber ?? null,
+        tracking_token: paid ? orderObj.tracking_token : null,
+        downloads: downloads.map((d) => ({
+          token: d.token,
+          file_name: d.fileName,
+          expires_at: d.expiresAt?.toISOString() ?? null,
+        })),
       };
     };
 

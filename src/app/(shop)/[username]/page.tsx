@@ -34,6 +34,22 @@ interface Props {
  */
 export const revalidate = 60;
 
+/**
+ * Génération statique à la demande.
+ *
+ * Sans `generateStaticParams`, cette version de Next rend la route
+ * dynamiquement malgré `revalidate` : chaque visite depuis TikTok coûtait
+ * une fonction à Francfort et sept requêtes en base, avec un démarrage à
+ * froid jusqu'à 2,4 s avant le premier octet. Un tableau vide suffit : la
+ * page est rendue à la première visite, puis servie depuis le cache et
+ * régénérée en arrière-plan (`revalidate`) ou dès qu'un vendeur modifie sa
+ * boutique (`revalidateShop`).
+ */
+export async function generateStaticParams() {
+  return [];
+}
+export const dynamicParams = true;
+
 // ---------------------------------------------------------------------------
 // Metadata
 // ---------------------------------------------------------------------------
