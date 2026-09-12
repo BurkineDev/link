@@ -2,13 +2,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-Create a local environment file with the app, Supabase, Stripe, and Anthropic values:
+Create a local environment file (`.env.local`, see `.env.example`) with the
+app, Neon, Stripe, and Anthropic values:
 
 ```bash
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
+# Branche Neon « development » (schéma seul, sans données de production) :
+#   npx neonctl connection-string development --project-id <projet> --pooled
+DATABASE_URL=postgresql://...-pooler.<region>.aws.neon.tech/neondb?sslmode=require
+DIRECT_URL=postgresql://...<region>.aws.neon.tech/neondb?sslmode=require
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 # Required by the free AI tools under /api/outils/* (product descriptions, WhatsApp messages)
@@ -30,6 +32,17 @@ protected in three layers (see `src/lib/rate-limit.ts`):
 If the Upstash variables are absent (e.g. local dev) only the in-memory layer
 applies, so **production must set them** for the distributed limits and budget
 cap to take effect.
+
+### Base de données : jamais la production en local
+
+`src/lib/db/database-guard.ts` connaît l'endpoint Neon de la branche de
+production. Hors d'un vrai déploiement Vercel Production, le serveur
+(`next dev`, `next start`, previews) et le CLI Prisma (`migrate`, `db push`,
+`studio`, `generate`) refusent de démarrer si `DATABASE_URL` ou `DIRECT_URL`
+le visent. Le développement local et les previews Vercel utilisent la branche
+Neon `development`, créée en mode schéma seul. Ne tirez jamais le scope
+production avec `vercel env pull`. Pour une opération de maintenance assumée
+sur la production : `ALLOW_PRODUCTION_DATABASE=1`.
 
 ## Notifications WhatsApp du vendeur
 

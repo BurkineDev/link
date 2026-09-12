@@ -16,8 +16,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio",
-    "db:migrate:data": "node scripts/migrate-supabase-to-neon.mjs"
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",

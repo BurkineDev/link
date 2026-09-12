@@ -26,6 +26,10 @@ const config: Config = {
     ],
   },
   testMatch: ["**/__tests__/**/*.test.(ts|tsx)"],
+  // Les arbres de travail parallèles (.claude/worktrees) et le build Next
+  // contiennent une copie des sources : ne pas les compter deux fois.
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/.claude/", "<rootDir>/.next/"],
+  modulePathIgnorePatterns: ["<rootDir>/.claude/", "<rootDir>/.next/"],
 };
 
 export default config;
