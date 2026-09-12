@@ -2,12 +2,20 @@
  * Garde-fou : la base de production n'est joignable que depuis Vercel
  * Production.
  *
- * Le serveur de développement local a longtemps été branché sur la base de
- * production : un `prisma migrate reset`, un `db push` ou un simple essai
- * d'inscription sur localhost écrivait chez les vrais vendeurs. Depuis la
- * branche Neon `development`, tout ce qui n'est pas Vercel Production doit
- * viser cette branche — et ce module refuse le contraire, au démarrage du
- * serveur comme au lancement du CLI Prisma.
+ * Deux sens, tous deux refusés au démarrage du serveur comme au lancement
+ * du CLI Prisma :
+ *
+ *   - dev / preview → production. Le serveur de développement local a
+ *     longtemps été branché sur la base de production : un `migrate reset`,
+ *     un `db push` ou un essai d'inscription sur localhost écrivait chez
+ *     les vrais vendeurs. Depuis la branche Neon `development`, tout ce qui
+ *     n'est pas Vercel Production doit viser cette branche.
+ *   - production → autre chose. Le 2026-09-12, les URL de la branche
+ *     `development` ont été collées dans Vercel Production : au déploiement
+ *     suivant, www.bio-lien.com a servi une base vide pendant six minutes.
+ *     Sur Vercel Production, `DATABASE_URL` et `DIRECT_URL` doivent viser
+ *     l'endpoint de production, sinon le build échoue et l'ancien
+ *     déploiement reste en ligne.
  *
  * Identification de la production : l'identifiant d'endpoint Neon de la
  * branche `production` (`ep-…`), connu d'office ci-dessous (ce n'est pas un
@@ -142,17 +150,35 @@ export function isVercelProduction(
 }
 
 /**
- * Lève si l'une des URL vise la production alors que le code ne tourne pas
- * sur Vercel Production. `context` nomme l'appelant dans le message
- * (« Le serveur applicatif », « Le CLI Prisma »).
+ * Vérifie que la base visée correspond à l'environnement. `context` nomme
+ * l'appelant dans le message (« Le serveur applicatif », « Le CLI Prisma »).
+ *
+ *   - Vercel Production : chaque URL renseignée doit être un endpoint de
+ *     production, sans dérogation possible (pour changer de base de
+ *     production, ajouter le nouvel endpoint à `PRODUCTION_DATABASE_HOST`).
+ *   - Ailleurs : aucune URL ne doit viser la production, sauf
+ *     `ALLOW_PRODUCTION_DATABASE=1`.
  */
-export function assertNotProductionDatabase(
+export function assertDatabaseTarget(
   sources: DatabaseUrlSource[],
   context: string,
   options: DatabaseGuardOptions = {},
 ): void {
   const env = options.env ?? (process.env as DatabaseGuardEnv);
-  if (isVercelProduction(env, options.hasLocalEnvFile)) return;
+
+  if (isVercelProduction(env, options.hasLocalEnvFile)) {
+    const stray = sources.find(
+      (source) => databaseHostname(source.url) !== null && !isProductionDatabaseUrl(source.url, env),
+    );
+    if (!stray) return;
+    throw new Error(
+      `[garde-fou] ${context} tourne sur Vercel Production mais ${stray.name} vise une autre base ` +
+        `(${databaseHostname(stray.url)}) : la production servirait une base vide ou de test.\n` +
+        "Sur Vercel Production, DATABASE_URL et DIRECT_URL doivent viser l'endpoint de la branche " +
+        `Neon « production » (${productionEndpointIds(env).join(", ")}).\n` +
+        "Pour changer de base de production, ajouter le nouvel endpoint à PRODUCTION_DATABASE_HOST.",
+    );
+  }
 
   const offending = sources.find((source) => isProductionDatabaseUrl(source.url, env));
   if (!offending) return;
@@ -175,3 +201,6 @@ export function assertNotProductionDatabase(
       "Pour une opération de maintenance assumée : ALLOW_PRODUCTION_DATABASE=1.",
   );
 }
+
+/** Ancien nom, conservé pour les appels existants. */
+export const assertNotProductionDatabase = assertDatabaseTarget;

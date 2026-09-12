@@ -7,6 +7,7 @@
 
 import {
   DEFAULT_PRODUCTION_ENDPOINTS,
+  assertDatabaseTarget,
   assertNotProductionDatabase,
   databaseHostname,
   endpointId,
@@ -103,7 +104,7 @@ describe("isVercelProduction", () => {
   });
 });
 
-describe("assertNotProductionDatabase", () => {
+describe("assertDatabaseTarget — hors Vercel Production", () => {
   const sources = (url: string, name = "DATABASE_URL") => [{ name, url }];
 
   test("refuse la production hors Vercel, en nommant la variable et en disant quoi faire", () => {
@@ -193,5 +194,71 @@ describe("assertNotProductionDatabase", () => {
         hasLocalEnvFile: withEnvFile,
       }),
     ).toThrow(/PRODUCTION/);
+  });
+});
+
+describe("assertDatabaseTarget — sur Vercel Production (sens inverse)", () => {
+  const prodEnv = { VERCEL_ENV: "production" };
+
+  test("refuse une URL de la branche de développement, en nommant la variable, sans dérogation possible", () => {
+    expect(() =>
+      assertDatabaseTarget(
+        [
+          { name: "DATABASE_URL", url: prodPooled },
+          { name: "DIRECT_URL", url: devPooled },
+        ],
+        "Le CLI Prisma",
+        { env: { ...prodEnv, ALLOW_PRODUCTION_DATABASE: "1" }, hasLocalEnvFile: noEnvFile },
+      ),
+    ).toThrow(/Vercel Production mais DIRECT_URL vise une autre base \(ep-orange-snow[\s\S]*PRODUCTION_DATABASE_HOST/);
+  });
+
+  test("laisse passer les deux endpoints de production (direct et pooler)", () => {
+    expect(() =>
+      assertDatabaseTarget(
+        [
+          { name: "DATABASE_URL", url: prodPooled },
+          { name: "DIRECT_URL", url: prodDirect },
+        ],
+        "Le serveur applicatif",
+        { env: prodEnv, hasLocalEnvFile: noEnvFile },
+      ),
+    ).not.toThrow();
+  });
+
+  test("une variable absente ou vide n'est pas jugée (c'est le pool qui échouera)", () => {
+    expect(() =>
+      assertDatabaseTarget(
+        [
+          { name: "DATABASE_URL", url: prodPooled },
+          { name: "DIRECT_URL", url: undefined },
+          { name: "AUTRE", url: "" },
+        ],
+        "Le serveur applicatif",
+        { env: prodEnv, hasLocalEnvFile: noEnvFile },
+      ),
+    ).not.toThrow();
+  });
+
+  test("un nouvel endpoint de production déclaré via PRODUCTION_DATABASE_HOST est accepté", () => {
+    expect(() =>
+      assertDatabaseTarget([{ name: "DATABASE_URL", url: devPooled }], "Le serveur applicatif", {
+        env: { ...prodEnv, PRODUCTION_DATABASE_HOST: "ep-orange-snow-b2pptfmo" },
+        hasLocalEnvFile: noEnvFile,
+      }),
+    ).not.toThrow();
+  });
+
+  test("VERCEL_ENV=production tiré d'un fichier local n'active pas le sens inverse (la règle locale s'applique)", () => {
+    expect(() =>
+      assertDatabaseTarget([{ name: "DATABASE_URL", url: devPooled }], "Le serveur applicatif", {
+        env: prodEnv,
+        hasLocalEnvFile: withEnvFile,
+      }),
+    ).not.toThrow();
+  });
+
+  test("l'ancien nom reste disponible", () => {
+    expect(assertNotProductionDatabase).toBe(assertDatabaseTarget);
   });
 });
