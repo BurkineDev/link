@@ -18,7 +18,17 @@ interface LedgerRow {
   currency: string;
 }
 
-let _order: { id: string; shopId: string; totalAmount: number; currency: string; paymentStatus: string } | null = null;
+let _order: {
+  id: string;
+  shopId: string;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: string;
+  items?: unknown;
+  stockReservedAt?: Date | null;
+  stockShortfall?: unknown;
+} | null = null;
+let _restored: Array<{ id: string; increment: number }> = [];
 let _ledger: LedgerRow[] = [];
 let _updates: Array<Record<string, unknown>> = [];
 let _events: Array<Record<string, unknown>> = [];
@@ -45,6 +55,13 @@ const tx = {
     }),
   },
   orderStatusEvent: { create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => { _events.push(data); return data; }) },
+  product: {
+    updateMany: jest.fn(async ({ where, data }: { where: { id: string }; data: { stockQuantity: { increment: number } } }) => {
+      _restored.push({ id: where.id, increment: data.stockQuantity.increment });
+      return { count: 1 };
+    }),
+  },
+  productVariant: { updateMany: jest.fn(async () => ({ count: 0 })) },
 };
 
 jest.mock("@/lib/prisma", () => ({
@@ -54,7 +71,17 @@ jest.mock("@/lib/prisma", () => ({
 import { recordOrderRefund, reverseChargeback } from "@/lib/db/orders";
 
 beforeEach(() => {
-  _order = { id: ORDER_ID, shopId: SHOP_ID, totalAmount: 20_000, currency: "XOF", paymentStatus: "paid" };
+  _restored = [];
+  _order = {
+    id: ORDER_ID,
+    shopId: SHOP_ID,
+    totalAmount: 20_000,
+    currency: "XOF",
+    paymentStatus: "paid",
+    items: [{ product_id: "p-wax", variant_id: null, quantity: 2 }],
+    stockReservedAt: new Date("2026-09-12T10:00:00Z"),
+    stockShortfall: null,
+  };
   _ledger = [
     { type: "gross", amount: 20_000, reference: "MTX-1", metadata: null, shopId: SHOP_ID, currency: "XOF" },
     { type: "platform_fee", amount: -1_000, reference: "MTX-1", metadata: null, shopId: SHOP_ID, currency: "XOF" },
@@ -73,14 +100,29 @@ describe("recordOrderRefund", () => {
     expect(adjustments()).toEqual([
       expect.objectContaining({ type: "refund", amount: -19_000, reference: "MTX-1:refund", metadata: { refundedAmount: 20_000, kind: "refund" } }),
     ]);
-    expect(_updates[0]).toEqual({ paymentStatus: "refunded", status: "refunded" });
+    expect(_updates[0]).toEqual({ paymentStatus: "refunded", status: "refunded", stockReservedAt: null });
+    expect(_restored).toEqual([{ id: "p-wax", increment: 2 }]);
     expect(_events[0]).toMatchObject({ status: "refunded" });
+  });
+
+  test("remboursement total : le stock prélevé revient en vente, manque déduit", async () => {
+    _order = { ..._order!, stockShortfall: [{ product_id: "p-wax", variant_id: null, requested: 2, taken: 1 }] };
+    await recordOrderRefund(ORDER_ID, { amount: 20_000, reference: "r-full", provider: "geniuspay" });
+    expect(_restored).toEqual([{ id: "p-wax", increment: 1 }]);
+    expect(_updates[0]).toMatchObject({ paymentStatus: "refunded", status: "refunded", stockReservedAt: null });
+  });
+
+  test("remboursement total d'une commande jamais prélevée : rien à rendre", async () => {
+    _order = { ..._order!, stockReservedAt: null };
+    await recordOrderRefund(ORDER_ID, { amount: 20_000, reference: "r-full2", provider: "geniuspay" });
+    expect(_restored).toEqual([]);
   });
 
   test("remboursement partiel : part proportionnelle, commande partiellement remboursée", async () => {
     const res = await recordOrderRefund(ORDER_ID, { amount: 5_000, reference: "r1", provider: "stripe" });
     expect(res).toEqual({ recorded: true, clawback: 4_750, refundedTotal: 5_000, full: false });
     expect(_updates[0]).toEqual({ paymentStatus: "partially_refunded" });
+    expect(_restored).toEqual([]);
   });
 
   test("cumul Stripe : seule la différence avec ce qui est déjà enregistré est contre-passée", async () => {

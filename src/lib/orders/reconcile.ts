@@ -3,12 +3,16 @@
  *
  * Le webhook Genius Pay est la voie normale, mais ce n'est pas une garantie :
  * lors du premier paiement réel en production, aucun webhook n'est arrivé et
- * la commande est restée « en attente » indéfiniment — stock réservé, vendeur
- * jamais prévenu, acheteur devant un écran d'échec alors qu'il avait payé.
+ * la commande est restée « en attente » indéfiniment — vendeur jamais
+ * prévenu, acheteur devant un écran d'échec alors qu'il avait payé.
  *
  * Un encaissement ne peut pas dépendre d'un seul canal. On interroge donc
  * Genius Pay nous-mêmes pour les commandes encore en attente, et on tranche :
- * confirmée, échouée (on rend le stock), ou toujours en cours.
+ * confirmée (stock prélevé, vendeur et acheteur prévenus), échouée ou
+ * abandonnée (commande annulée, code promo rendu), ou toujours en cours.
+ * Depuis que le stock est prélevé au règlement, une commande en attente
+ * n'immobilise rien : la réconciliation ne « libère » plus de stock, elle
+ * met de l'ordre.
  *
  * Server-only — ne jamais importer depuis un Client Component.
  */
@@ -32,14 +36,10 @@ const MIN_AGE_MS = 60_000;
 
 /**
  * Au-delà, une commande que Genius Pay dit toujours « en attente » n'a plus
- * aucune chance d'aboutir : l'acheteur a fermé la page sans payer. On rend le
- * stock, sinon un panier abandonné immobilise l'article pour toujours.
- *
- * Deux heures laissent à un acheteur le temps de recharger son compte Mobile
- * Money et de revenir payer. C'est aussi la durée maximale pendant laquelle
- * une commande fantôme, créée sans intention de payer, peut bloquer un
- * article : le passage en caisse appelle cette réconciliation dès qu'un stock
- * manque (voir `onlyStale`).
+ * aucune chance d'aboutir : l'acheteur a fermé la page sans payer. On
+ * l'annule pour qu'elle cesse d'encombrer le tableau de bord et rende son
+ * code promo. Deux heures laissent à un acheteur le temps de recharger son
+ * compte Mobile Money et de revenir payer.
  */
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
@@ -75,21 +75,12 @@ const EMPTY: ReconcileResult = {
  * casser la page qui l'a déclenchée.
  */
 export async function reconcilePendingGeniusPayOrders(
-  opts: {
-    shopId?: string;
-    limit?: number;
-    /**
-     * Ne considérer que les commandes déjà assez anciennes pour être
-     * abandonnées : c'est le mode du passage en caisse, qui cherche à rendre
-     * du stock, pas à confirmer des paiements récents.
-     */
-    onlyStale?: boolean;
-  } = {},
+  opts: { shopId?: string; limit?: number } = {},
 ): Promise<ReconcileResult> {
   if (!isGeniusPayConfigured()) return EMPTY;
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
-  const cutoff = new Date(Date.now() - (opts.onlyStale ? STALE_AFTER_MS : MIN_AGE_MS));
+  const cutoff = new Date(Date.now() - MIN_AGE_MS);
 
   let rows: Array<{
     id: string;
@@ -198,7 +189,7 @@ async function settleOrder(
   const isStale = Date.now() - order.createdAt.getTime() > STALE_AFTER_MS;
 
   if (status === "failed" || isStale) {
-    // Rend le stock et l'usage du code promo, une seule fois.
+    // Annule et rend l'usage du code promo, une seule fois.
     await cancelUnpaidOrder(order.id, order.paymentRef, "geniuspay");
 
     console.info(

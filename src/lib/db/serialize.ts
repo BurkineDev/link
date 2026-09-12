@@ -141,6 +141,7 @@ type OrderRow = {
   promoCode: string | null;
   discountAmount: Prisma.Decimal;
   trackingToken: string;
+  stockShortfall?: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -167,6 +168,7 @@ export function serializeOrder(order: OrderRow) {
     promo_code: order.promoCode,
     discount_amount: decimalToNumber(order.discountAmount),
     tracking_token: order.trackingToken,
+    stock_shortfall: Array.isArray(order.stockShortfall) ? order.stockShortfall : null,
     created_at: dateToIso(order.createdAt),
     updated_at: dateToIso(order.updatedAt),
   };

@@ -342,6 +342,12 @@ model Order {
   promoCode        String?          @map("promo_code")
   discountAmount   Decimal          @default(0) @map("discount_amount") @db.Decimal(14, 2)
   trackingToken    String           @unique @default(uuid()) @map("tracking_token") @db.Uuid
+  /// Date à laquelle le stock a réellement été prélevé (au règlement) ;
+  /// null tant que la commande n'est pas payée, ou si rien n'est suivi.
+  stockReservedAt  DateTime?        @map("stock_reserved_at")
+  /// Articles dont le stock manquait au moment du paiement (vendus par
+  /// deux acheteurs en même temps) : le vendeur doit trancher.
+  stockShortfall   Json?            @map("stock_shortfall")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
   shop             Shop             @relation(fields: [shopId], references: [id], onDelete: Restrict)

@@ -157,6 +157,29 @@ function OrderDetailSheet({
         </SheetHeader>
 
         <div className="flex flex-col gap-6 px-4 pb-6">
+          {/* Stock manquant au moment du paiement : à voir AVANT de préparer */}
+          {order.stock_shortfall && order.stock_shortfall.length > 0 && (
+            <section
+              role="alert"
+              className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+              <p className="font-semibold">Stock insuffisant au moment du paiement</p>
+              <p className="mt-1">
+                Le client a payé, mais deux commandes visaient le même stock. Contacte-le pour
+                livrer plus tard ou remplacer. Pour un remboursement, écris à l&apos;équipe
+                Bio-Lien avec le numéro de commande.
+              </p>
+              <ul className="mt-2 list-disc pl-5">
+                {order.stock_shortfall.map((item) => (
+                  <li key={`${item.product_id}:${item.variant_id ?? ""}`}>
+                    {item.product_name ?? "Article"} : {item.taken} sur {item.requested} disponible
+                    {item.requested > 1 ? "s" : ""}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* Status update */}
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">Statut :</span>
@@ -483,7 +506,17 @@ export function OrdersClient({
                           {formatCurrency(order.total_amount, order.currency)}
                         </td>
                         <td className="px-4 py-3">
-                          <OrderStatusBadge status={order.status} />
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <OrderStatusBadge status={order.status} />
+                            {order.stock_shortfall && order.stock_shortfall.length > 0 ? (
+                              <span
+                                className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                title="Stock insuffisant au moment du paiement"
+                              >
+                                Stock manquant
+                              </span>
+                            ) : null}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground hidden md:table-cell">
                           {new Intl.DateTimeFormat("fr-FR", {

@@ -7,11 +7,12 @@
 
 const ORDER_ID = "0f8a7b6c-1111-4222-8333-444455556666";
 
-type Sent = { to: string; subject: string; text: string; idempotencyKey?: string };
+type Sent = { to: string; subject: string; text: string; html?: string; idempotencyKey?: string };
 const _emails: Sent[] = [];
 let _shop: Record<string, unknown> | null = null;
 let _cloudConfigured = false;
 const _cloud: string[] = [];
+let _stockShortfall: unknown = null;
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
@@ -32,6 +33,7 @@ jest.mock("@/lib/prisma", () => ({
           },
         ],
         trackingToken: "tok-123",
+        stockShortfall: _stockShortfall,
       })),
     },
     shop: { findUnique: jest.fn(async () => _shop) },
@@ -63,6 +65,7 @@ beforeEach(() => {
   _emails.length = 0;
   _cloud.length = 0;
   _cloudConfigured = false;
+  _stockShortfall = null;
   _shop = {
     name: "Boutique Awa",
     whatsappNumber: null,
@@ -122,6 +125,37 @@ describe("notifySellerOfPaidOrder", () => {
     prisma.prisma.order.findUnique.mockResolvedValueOnce(null);
     await notifySellerOfPaidOrder(ORDER_ID);
     expect(_emails).toHaveLength(0);
+  });
+});
+
+describe("notifySellerOfPaidOrder — stock insuffisant au paiement", () => {
+  it("prévient le vendeur dans l'e-mail (texte et HTML) et par WhatsApp en texte, jamais via le template", async () => {
+    _stockShortfall = [{ product_id: "p1", variant_id: null, product_name: "Pagne wax", requested: 2, taken: 1 }];
+    _cloudConfigured = true;
+    _shop = { ..._shop!, whatsappNumber: "221771234567" };
+    const whatsapp = jest.requireMock("@/lib/whatsapp") as { sendCloudApiMessage: jest.Mock; sendOrderTemplate: jest.Mock };
+    whatsapp.sendCloudApiMessage.mockClear();
+    whatsapp.sendOrderTemplate.mockClear();
+
+    await notifySellerOfPaidOrder(ORDER_ID);
+
+    const mail = _emails.find((m) => m.to === "vendeuse@example.com")!;
+    expect(mail.text).toMatch(/stock insuffisant au moment du paiement — Pagne wax : 1 sur 2 disponible/i);
+    expect(mail.text).toMatch(/livrer plus tard ou remplacer/);
+    expect(mail.html).toMatch(/Pagne wax : 1 sur 2/);
+    expect(whatsapp.sendOrderTemplate).not.toHaveBeenCalled();
+    expect(whatsapp.sendCloudApiMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "221771234567", body: expect.stringMatching(/⚠️ Attention : stock insuffisant/) }),
+    );
+  });
+
+  it("sans manque : e-mail sans avertissement, template WhatsApp inchangé", async () => {
+    _cloudConfigured = true;
+    _shop = { ..._shop!, whatsappNumber: "221771234567" };
+    await notifySellerOfPaidOrder(ORDER_ID);
+    const mail = _emails.find((m) => m.to === "vendeuse@example.com")!;
+    expect(mail.text).not.toMatch(/stock insuffisant/i);
+    expect(_cloud).toEqual(["template:221771234567"]);
   });
 });
 
