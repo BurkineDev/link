@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
 /**
  * POST /api/promo-codes/validate
@@ -17,7 +18,22 @@ const schema = z.object({
   orderTotal: z.number().nonnegative(),
 });
 
+/**
+ * Un code promo se devine : la limite par IP freine l'énumération, celle par
+ * boutique plafonne ce qu'un attaquant réparti sur plusieurs adresses peut
+ * essayer contre un même vendeur. Un vrai acheteur tape son code une ou deux
+ * fois.
+ */
+const PROMO_PER_IP = { limit: 20, windowSeconds: 60 };
+const PROMO_PER_SHOP = { limit: 120, windowSeconds: 10 * 60 };
+
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const blockedByIp = await enforceLimits([
+    { name: "promo:ip", key: ip, ...PROMO_PER_IP },
+  ]);
+  if (blockedByIp) return blockedByIp;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -31,6 +47,11 @@ export async function POST(request: NextRequest) {
   }
 
   const { shopId, code, orderTotal } = parsed.data;
+
+  const blockedByShop = await enforceLimits([
+    { name: "promo:shop", key: shopId, ...PROMO_PER_SHOP },
+  ]);
+  if (blockedByShop) return blockedByShop;
 
   const promo = await prisma.promoCode.findUnique({
     where: { shopId_code: { shopId, code: code.toUpperCase() } },

@@ -9,6 +9,14 @@ import {
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { enforceLimits, getClientIp } from "@/lib/rate-limit";
+
+/**
+ * La page de succès interroge cette route toutes les 4 s pendant 150 s, soit
+ * une quarantaine d'appels par paiement ; plusieurs acheteurs peuvent partager
+ * une adresse IP. La limite vise l'énumération de références, pas ce polling.
+ */
+const VERIFY_PER_IP = { limit: 120, windowSeconds: 60 };
 
 // ---------------------------------------------------------------------------
 // GET /api/checkout/verify?session_id=cs_xxx
@@ -29,6 +37,11 @@ import { scheduleAfterResponse } from "@/lib/after-response";
 
 export async function GET(request: NextRequest) {
   try {
+    const blocked = await enforceLimits([
+      { name: "checkout-verify:ip", key: getClientIp(request), ...VERIFY_PER_IP },
+    ]);
+    if (blocked) return blocked;
+
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("session_id");
     const provider = searchParams.get("provider");

@@ -3,16 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
+      // Cloudflare R2 : le sous-domaine public du bucket Bio-Lien, puis le
+      // domaine personnalisé. Uniquement nos hôtes : l'optimiseur d'images
+      // est un proxy public, un joker (`*.r2.dev`) laisserait n'importe qui
+      // faire transiter et mettre en cache ses images par www.bio-lien.com.
+      // (Mettre à jour R2_PUBLIC_URL et cette liste ensemble.)
       {
         protocol: "https",
-        hostname: "*.supabase.co",
-        pathname: "/storage/v1/object/public/**",
-      },
-      // Cloudflare R2 : sous-domaine public r2.dev, ou domaine personnalisé
-      // (mettre à jour R2_PUBLIC_URL et cette liste ensemble).
-      {
-        protocol: "https",
-        hostname: "*.r2.dev",
+        hostname: "pub-f17605c4838541d783c2a15ab5d32472.r2.dev",
       },
       {
         protocol: "https",

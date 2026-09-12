@@ -16,6 +16,23 @@ import type { Prisma } from "../../../../prisma/generated/client/client";
 import type { Currency } from "@/lib/constants";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { enforceLimits, getClientIp } from "@/lib/rate-limit";
+import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
+
+// ---------------------------------------------------------------------------
+// Limitation de débit
+// ---------------------------------------------------------------------------
+
+/**
+ * Par adresse IP uniquement. Les opérateurs mobiles africains partagent une
+ * même adresse publique entre des dizaines d'abonnés : la fenêtre doit laisser
+ * passer une vente en direct sur TikTok, tout en coupant court à un script qui
+ * crée des commandes en boucle pour immobiliser le stock d'un vendeur.
+ *
+ * Pas de plafond par boutique : il donnerait à n'importe qui le moyen de
+ * fermer une boutique en la saturant de commandes fantômes.
+ */
+const CHECKOUT_PER_IP = { limit: 20, windowSeconds: 10 * 60 };
 
 // ---------------------------------------------------------------------------
 // Request body schema
@@ -81,6 +98,11 @@ const checkoutRequestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const blocked = await enforceLimits([
+      { name: "checkout:ip", key: getClientIp(request), ...CHECKOUT_PER_IP },
+    ]);
+    if (blocked) return blocked;
+
     const body: unknown = await request.json();
     const parsed = checkoutRequestSchema.safeParse(body);
 
@@ -394,6 +416,25 @@ export async function POST(request: NextRequest) {
         { error: "Impossible de vérifier le stock. Veuillez réessayer." },
         { status: 500 },
       );
+    }
+
+    if (!reservation.ok && reservation.reason === "insufficient_stock") {
+      // Un panier Mobile Money abandonné garde son stock jusqu'au passage du
+      // cron, une fois par jour. Avant de refuser la vente, on rend le stock
+      // des commandes de cette boutique que Genius Pay dit toujours en attente
+      // depuis trop longtemps, puis on réessaie une fois.
+      const released = await reconcilePendingGeniusPayOrders({
+        shopId,
+        limit: 5,
+        onlyStale: true,
+      });
+      if (released.failed > 0) {
+        try {
+          reservation = await reserveStock(reservePayload);
+        } catch (error) {
+          console.error("[checkout] reserve_stock retry error:", error);
+        }
+      }
     }
 
     if (!reservation.ok) {

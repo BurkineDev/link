@@ -34,8 +34,14 @@ const MIN_AGE_MS = 60_000;
  * Au-delà, une commande que Genius Pay dit toujours « en attente » n'a plus
  * aucune chance d'aboutir : l'acheteur a fermé la page sans payer. On rend le
  * stock, sinon un panier abandonné immobilise l'article pour toujours.
+ *
+ * Deux heures laissent à un acheteur le temps de recharger son compte Mobile
+ * Money et de revenir payer. C'est aussi la durée maximale pendant laquelle
+ * une commande fantôme, créée sans intention de payer, peut bloquer un
+ * article : le passage en caisse appelle cette réconciliation dès qu'un stock
+ * manque (voir `onlyStale`).
  */
-const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 const DEFAULT_LIMIT = 10;
 
@@ -69,12 +75,21 @@ const EMPTY: ReconcileResult = {
  * casser la page qui l'a déclenchée.
  */
 export async function reconcilePendingGeniusPayOrders(
-  opts: { shopId?: string; limit?: number } = {},
+  opts: {
+    shopId?: string;
+    limit?: number;
+    /**
+     * Ne considérer que les commandes déjà assez anciennes pour être
+     * abandonnées : c'est le mode du passage en caisse, qui cherche à rendre
+     * du stock, pas à confirmer des paiements récents.
+     */
+    onlyStale?: boolean;
+  } = {},
 ): Promise<ReconcileResult> {
   if (!isGeniusPayConfigured()) return EMPTY;
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
-  const cutoff = new Date(Date.now() - MIN_AGE_MS);
+  const cutoff = new Date(Date.now() - (opts.onlyStale ? STALE_AFTER_MS : MIN_AGE_MS));
 
   let rows: Array<{
     id: string;
