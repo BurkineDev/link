@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { reserveStock, releaseStock } from "@/lib/db/stock";
+import { checkStockAvailability } from "@/lib/db/stock";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
@@ -17,7 +17,6 @@ import type { Currency } from "@/lib/constants";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
-import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
 
 // ---------------------------------------------------------------------------
 // Limitation de débit
@@ -399,42 +398,26 @@ export async function POST(request: NextRequest) {
       subtotalAmount - discountAmount + shippingAmount,
     );
 
-    // -- Atomically reserve stock ---------------------------------------------
-    const reservePayload = items.map((it) => ({
+    // -- Stock : vérification seule -------------------------------------------
+    // Rien n'est réservé ici : le stock est prélevé au règlement, sous
+    // verrou (settlePaidOrder). Une commande en attente n'immobilise donc
+    // plus rien, quel que soit le nombre de paniers fantômes.
+    const stockPayload = items.map((it) => ({
       product_id: it.product_id,
       variant_id: it.variant_id ?? null,
       quantity: it.quantity,
     }));
 
-    let reservation: Awaited<ReturnType<typeof reserveStock>>;
+    let reservation: Awaited<ReturnType<typeof checkStockAvailability>>;
     try {
-      reservation = await reserveStock(reservePayload);
+      reservation = await checkStockAvailability(stockPayload);
     } catch (error) {
-      console.error("[checkout] reserve_stock error:", error);
+      console.error("[checkout] stock check error:", error);
       await releasePromo();
       return NextResponse.json(
         { error: "Impossible de vérifier le stock. Veuillez réessayer." },
         { status: 500 },
       );
-    }
-
-    if (!reservation.ok && reservation.reason === "insufficient_stock") {
-      // Un panier Mobile Money abandonné garde son stock jusqu'au passage du
-      // cron, une fois par jour. Avant de refuser la vente, on rend le stock
-      // des commandes de cette boutique que Genius Pay dit toujours en attente
-      // depuis trop longtemps, puis on réessaie une fois.
-      const released = await reconcilePendingGeniusPayOrders({
-        shopId,
-        limit: 5,
-        onlyStale: true,
-      });
-      if (released.failed > 0) {
-        try {
-          reservation = await reserveStock(reservePayload);
-        } catch (error) {
-          console.error("[checkout] reserve_stock retry error:", error);
-        }
-      }
     }
 
     if (!reservation.ok) {
@@ -466,7 +449,7 @@ export async function POST(request: NextRequest) {
     // à la main si la seconde échouait.
     //
     // Le montant ne vient pas du client : les prix ont été relus depuis
-    // `products`, la boutique vérifiée publiée, et le stock déjà réservé.
+    // `products`, la boutique vérifiée publiée, et le stock vérifié.
     let order: { id: string };
     try {
       order = await prisma.order.create({
@@ -505,9 +488,6 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       console.error("[checkout] order insert error:", error);
-      await releaseStock(reservePayload).catch((releaseError) =>
-        console.error("[checkout] release_stock error:", releaseError),
-      );
       await releasePromo();
       return NextResponse.json(
         { error: "Impossible de créer la commande." },
@@ -517,7 +497,8 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-    // Annule la commande et rend stock + promo en une seule transaction.
+    // Annule la commande et rend le code promo en une seule transaction
+    // (aucun stock n'a été prélevé à ce stade).
     const rollback = async () => {
       try {
         await cancelUnpaidOrder(order.id, null, paymentProvider);

@@ -477,8 +477,18 @@ export type OrderRow = {
   promo_code: string | null;
   discount_amount: number;
   tracking_token: string;
+  /** Articles que le stock ne couvrait plus au moment du paiement. */
+  stock_shortfall?: StockShortfallItem[] | null;
   created_at: string;
   updated_at: string;
+};
+
+export type StockShortfallItem = {
+  product_id: string;
+  variant_id: string | null;
+  product_name: string | null;
+  requested: number;
+  taken: number;
 };
 
 export type OrderItemRow = {

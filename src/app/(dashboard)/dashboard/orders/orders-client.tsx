@@ -319,6 +319,29 @@ function OrderDetailSheet({
             </div>
           </section>
 
+          {/* Stock manquant au moment du paiement : à trancher avant de préparer */}
+          {order.stock_shortfall && order.stock_shortfall.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Stock insuffisant au paiement
+              </h3>
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                <p>
+                  Le client a payé, mais deux commandes visaient le même stock. Contacte-le pour
+                  livrer plus tard, remplacer ou rembourser.
+                </p>
+                <ul className="mt-2 list-disc pl-5">
+                  {order.stock_shortfall.map((item) => (
+                    <li key={`${item.product_id}:${item.variant_id ?? ""}`}>
+                      {item.product_name ?? "Article"} : {item.taken} sur {item.requested} disponible
+                      {item.requested > 1 ? "s" : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          )}
+
           {/* Notes */}
           {order.notes && (
             <section>

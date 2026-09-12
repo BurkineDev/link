@@ -132,6 +132,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
       buyerEmail: true,
       shippingAddress: true,
       items: true,
+      stockShortfall: true,
     },
   });
 
@@ -169,6 +170,16 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
   const itemCount = items.reduce((sum, it) => sum + it.quantity, 0);
   const totalLabel = formatTotal(order.total_amount, order.currency as Currency);
   const detailUrl = orderUrl(order.id);
+  // Deux acheteurs ont payé le dernier exemplaire : le vendeur doit le savoir
+  // avant de préparer la commande.
+  const shortfall = Array.isArray(orderRow.stockShortfall)
+    ? (orderRow.stockShortfall as unknown as Array<{ product_name: string | null; requested: number; taken: number }>)
+    : [];
+  const stockWarning = shortfall.length
+    ? `Attention : stock insuffisant au moment du paiement — ${shortfall
+        .map((item) => `${item.product_name ?? "article"} : ${item.taken} sur ${item.requested} disponible(s)`)
+        .join(", ")}. Contacte le client pour livrer, remplacer ou rembourser.`
+    : null;
 
   // 1. E-mail au vendeur, toujours. C'est le seul canal qui ne dépend ni
   //    d'un numéro WhatsApp renseigné ni de l'API Cloud : sans lui, une
@@ -187,6 +198,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
           itemCount,
           totalLabel,
           detailUrl,
+          stockWarning,
         })
       : Promise.reject(
           new Error(`shop ${shop.name} has no email (contactEmail/owner) for order ${order.id}`),
@@ -202,6 +214,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
           itemCount,
           totalLabel,
           detailUrl,
+          stockWarning,
         })
       : Promise.resolve(),
   ]);
@@ -225,9 +238,14 @@ async function sendSellerEmail(args: {
   itemCount: number;
   totalLabel: string;
   detailUrl: string;
+  stockWarning?: string | null;
 }): Promise<void> {
   const shortId = args.orderId.slice(0, 8).toUpperCase();
   const address = formatShippingAddress(args.shippingAddress);
+  const warningText = args.stockWarning ? `\n\n${args.stockWarning}` : "";
+  const warningHtml = args.stockWarning
+    ? `<p style="background:#fff3cd;border:1px solid #f0c36d;padding:12px;border-radius:8px"><strong>${escapeEmailHtml(args.stockWarning)}</strong></p>`
+    : "";
   const itemText = args.items
     .map(
       (item) =>
@@ -254,8 +272,8 @@ async function sendSellerEmail(args: {
   await sendTransactionalEmail({
     to: args.to,
     subject: `Nouvelle commande payée — ${args.totalLabel} (${shortId})`,
-    text: `Nouvelle commande payée sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}\n\n${contactText}\n\nVoir la commande : ${args.detailUrl}`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Nouvelle commande payée</h1><p>Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul><p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.</p></div>`,
+    text: `Nouvelle commande payée sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}\n\n${contactText}${warningText}\n\nVoir la commande : ${args.detailUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Nouvelle commande payée</h1><p>Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul>${warningHtml}<p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.</p></div>`,
     idempotencyKey: `order-seller/${args.orderId}`,
   });
 }
@@ -269,15 +287,17 @@ async function sendSellerWhatsApp(args: {
   itemCount: number;
   totalLabel: string;
   detailUrl: string;
+  stockWarning?: string | null;
 }): Promise<void> {
-  const body = formatOrderMessageForSeller({
-    shopName: args.shopName,
-    buyerName: args.buyerName,
-    buyerPhone: args.buyerPhone,
-    totalLabel: args.totalLabel,
-    itemCount: args.itemCount,
-    orderUrl: args.detailUrl,
-  });
+  const body =
+    formatOrderMessageForSeller({
+      shopName: args.shopName,
+      buyerName: args.buyerName,
+      buyerPhone: args.buyerPhone,
+      totalLabel: args.totalLabel,
+      itemCount: args.itemCount,
+      orderUrl: args.detailUrl,
+    }) + (args.stockWarning ? `\n\n⚠️ ${args.stockWarning}` : "");
 
   if (isWhatsAppCloudConfigured()) {
     // Template first: business-initiated messages outside a 24h service

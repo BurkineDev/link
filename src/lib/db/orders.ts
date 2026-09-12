@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { claimStock, type StockShortfall } from "@/lib/db/stock";
 import {
   Prisma,
   type PaymentProvider,
@@ -30,6 +31,8 @@ export type SettleResult =
       customerId: string;
       commission: number;
       plan: "free" | "starter" | "pro";
+      /** Articles que le stock ne couvrait plus au moment du paiement. */
+      stockShortfall: StockShortfall[];
     };
 
 /** Taux de commission par plan, identique au `case` de la fonction SQL. */
@@ -61,6 +64,13 @@ export async function settlePaidOrder(
       return { settled: false, reason: "not_pending" } as const;
     }
 
+    // Le stock n'est prélevé qu'ici, l'argent encaissé : une commande en
+    // attente n'immobilise plus rien. Une commande créée avant ce
+    // changement (stock déjà réservé au passage en caisse) ne l'est pas
+    // deux fois.
+    const stockShortfall =
+      order.stockReservedAt === null ? await claimStock(tx, order.items) : [];
+
     await tx.order.update({
       where: { id: order.id },
       data: {
@@ -68,6 +78,10 @@ export async function settlePaidOrder(
         status: "confirmed",
         paymentRef,
         paymentProvider,
+        stockReservedAt: order.stockReservedAt ?? new Date(),
+        stockShortfall: stockShortfall.length
+          ? (stockShortfall as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
       },
     });
 
@@ -129,6 +143,11 @@ export async function settlePaidOrder(
         status: "confirmed",
         publicMessage:
           "Paiement confirmé. La commande est transmise au vendeur.",
+        note: stockShortfall.length
+          ? `Stock insuffisant au moment du paiement : ${stockShortfall
+              .map((item) => `${item.product_name ?? item.product_id} (${item.taken}/${item.requested})`)
+              .join(", ")}`
+          : null,
       },
     });
 
@@ -195,7 +214,7 @@ export async function settlePaidOrder(
 
     await createDigitalDownloads(tx, order.id, order.items);
 
-    return { settled: true, customerId, commission: fee, plan } as const;
+    return { settled: true, customerId, commission: fee, plan, stockShortfall } as const;
   });
 }
 
@@ -307,7 +326,11 @@ export async function cancelUnpaidOrder(
       return { cancelled: false, reason: "already_settled" } as const;
     }
 
-    await restoreStock(tx, order.items);
+    // Seules les commandes qui avaient réservé leur stock au passage en
+    // caisse (avant le prélèvement au règlement) ont quelque chose à rendre.
+    if (order.stockReservedAt !== null) {
+      await restoreStock(tx, order.items);
+    }
 
     if (order.promoCode !== null) {
       // `greatest(uses_count - 1, 0)` côté SQL : on ne descend jamais sous zéro.
@@ -328,6 +351,8 @@ export async function cancelUnpaidOrder(
         paymentStatus: "failed",
         paymentRef: paymentRef ?? order.paymentRef,
         paymentProvider: paymentProvider ?? order.paymentProvider,
+        // Rendu : plus rien de prélevé.
+        stockReservedAt: null,
       },
     });
 
