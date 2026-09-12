@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { BioPalette } from "@/lib/bio-themes";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
+import { blockGoHref } from "@/lib/blocks/ids";
 
 // Per-link sharing is a rare tap on a page that must paint fast — load the
 // dialog only when someone actually reaches for it.
@@ -108,6 +109,10 @@ export function BioLinkButton({
 
   const Icon = ICONS[link.icon] ?? ICONS.custom;
   const external = isExternal(link.url);
+  // Les liens web portent leur route serveur /go/<id> : sur Android, avant
+  // hydratation, le script inline y envoie le tap (décision app/web et clic
+  // comptés côté serveur). Une fois hydraté, tout se passe ici.
+  const viaGo = /^https?:/i.test(link.url);
 
   const surfaceStyle: React.CSSProperties = (() => {
     switch (palette.buttonVariant) {
@@ -201,8 +206,12 @@ export function BioLinkButton({
       {external ? (
         <SmartAppLink
           href={link.url}
+          goHref={viaGo ? blockGoHref(link.id) : undefined}
           target="_blank"
           rel="noopener noreferrer"
+          // Une fois hydraté, l'ancre directe ou le tap intercepté passent
+          // ici : on compte côté client. Avant hydratation, le script inline
+          // envoie vers /go, qui compte côté serveur.
           onClick={() => trackClick(endpoint)}
           className={sharedClasses}
           style={focusRing}
