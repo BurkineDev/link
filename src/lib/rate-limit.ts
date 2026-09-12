@@ -204,10 +204,14 @@ function getRuleLimiter(redis: Redis, rule: LimitRule): Ratelimit {
   const id = `${rule.name}:${rule.limit}:${rule.windowSeconds}`;
   let limiter = ruleLimiters.get(id);
   if (!limiter) {
+    // Préfixe par environnement Vercel : les essais sur une preview ne
+    // doivent pas consommer les compteurs de la production si les deux
+    // partagent un jour la même base Upstash.
+    const env = process.env.VERCEL_ENV ?? "local";
     limiter = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(rule.limit, `${rule.windowSeconds} s`),
-      prefix: `rl:${rule.name}`,
+      prefix: `rl:${env}:${rule.name}`,
     });
     ruleLimiters.set(id, limiter);
   }
