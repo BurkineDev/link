@@ -50,3 +50,7 @@ prisma/generated
 # Sauvegardes locales d env
 .env.local.bak-*
 prod.env
+
+# Sauvegardes locales des exports Infisical (dev.env.bak-*, prod.env.bak-*)
+dev.env.*
+prod.env.*

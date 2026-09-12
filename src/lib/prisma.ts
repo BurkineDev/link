@@ -3,6 +3,17 @@ import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { PrismaClient } from "../../prisma/generated/client/client";
+import { assertNotProductionDatabase } from "./db/database-guard";
+
+// Un serveur `next dev` ou une preview Vercel ne doit jamais écrire dans la
+// base de production : refus au premier import, avant d'ouvrir le pool.
+assertNotProductionDatabase(
+  [
+    { name: "DATABASE_URL", url: process.env.DATABASE_URL },
+    { name: "DIRECT_URL", url: process.env.DIRECT_URL },
+  ],
+  "Le serveur applicatif",
+);
 
 const globalForDatabase = globalThis as unknown as {
   bioLienPrisma?: PrismaClient;
