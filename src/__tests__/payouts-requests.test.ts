@@ -14,7 +14,11 @@ interface PayoutRow {
   note: string | null;
   destination: unknown;
   paidAt: Date | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
 }
+
+let _updateThrows: unknown = null;
 
 let _shop: { id: string; currency: string } | null = null;
 let _account: Record<string, unknown> | null = null;
@@ -43,9 +47,9 @@ const tx = {
   }),
   payoutAccount: {
     findUnique: jest.fn(async () => _account),
-    updateMany: jest.fn(async ({ where }: { where: { accountIdentifier: string } }) => {
+    updateMany: jest.fn(async ({ where, data }: { where: { accountIdentifier: string }; data: { isVerified: boolean } }) => {
       if (_account && _account.accountIdentifier === where.accountIdentifier) {
-        _account.isVerified = true;
+        _account.isVerified = data.isVerified;
         return { count: 1 };
       }
       return { count: 0 };
@@ -58,7 +62,9 @@ const tx = {
       _payouts.filter((p) => where.status.in.includes(p.status)).map((p) => ({ ...p, amount: decimal(p.amount) }))),
     create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
       const row: PayoutRow = {
-        id: "pppppppp-pppp-4ppp-8ppp-pppppppppppp",
+        id: `pppppppp-pppp-4ppp-8ppp-${String(_payouts.length).padStart(12, "0")}`,
+        periodStart: (data.periodStart as Date | null) ?? null,
+        periodEnd: (data.periodEnd as Date | null) ?? null,
         shopId: data.shopId as string,
         amount: Number(data.amount),
         currency: data.currency as string,
@@ -77,9 +83,15 @@ const tx = {
       if (!row) throw new Error("not found");
       return { ...row, amount: decimal(row.amount) };
     }),
-    findFirst: jest.fn(async ({ where }: { where: { reference: string; id: { not: string } } }) =>
-      _payouts.find((p) => p.reference === where.reference && p.id !== where.id.not) ?? null),
+    findFirst: jest.fn(async ({ where }: { where: { reference?: string; id?: { not: string }; status?: string } }) => {
+      if (where.status === "paid") {
+        const paid = _payouts.filter((p) => p.status === "paid").sort((a, b) => (b.paidAt?.getTime() ?? 0) - (a.paidAt?.getTime() ?? 0))[0];
+        return paid ? { periodEnd: paid.periodEnd ?? null, paidAt: paid.paidAt } : null;
+      }
+      return _payouts.find((p) => p.reference === where.reference && p.id !== where.id?.not) ?? null;
+    }),
     update: jest.fn(async ({ where, data }: { where: { id: string }; data: Partial<PayoutRow> }) => {
+      if (_updateThrows) throw _updateThrows;
       const row = _payouts.find((p) => p.id === where.id)!;
       Object.assign(row, data);
       return row;
@@ -108,7 +120,7 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { markPayoutFailed, markPayoutPaid, markPayoutProcessing, requestPayout } from "@/lib/payouts/requests";
+import { markPayoutBounced, markPayoutFailed, markPayoutPaid, markPayoutProcessing, requestPayout } from "@/lib/payouts/requests";
 
 beforeEach(() => {
   _shop = { id: SHOP_ID, currency: "XOF" };
@@ -117,6 +129,8 @@ beforeEach(() => {
     accountName: "Awa Traoré",
     accountIdentifier: "22670123456",
     country: "BF",
+    isVerified: false,
+    updatedAt: new Date("2026-09-01T00:00:00.000Z"),
   };
   _ledger = [
     { type: "seller_net", amount: 12_000, currency: "XOF", provider: "geniuspay", createdAt: new Date(Date.now() - 5 * DAY) },
@@ -124,6 +138,7 @@ beforeEach(() => {
   ];
   _payouts = [];
   _ledgerWrites = [];
+  _updateThrows = null;
 });
 
 describe("requestPayout", () => {
@@ -135,8 +150,20 @@ describe("requestPayout", () => {
       status: "requested",
       provider: "wave",
       amount: 12_000,
-      destination: { provider: "wave", accountName: "Awa Traoré", accountIdentifier: "22670123456", country: "BF" },
+      destination: { provider: "wave", accountName: "Awa Traoré", accountIdentifier: "22670123456", country: "BF", isVerified: false },
     });
+    expect((_payouts[0]!.destination as { accountUpdatedAt: string }).accountUpdatedAt).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  test("la période d'une nouvelle demande commence à la fin de la précédente versée", async () => {
+    await requestPayout(SHOP_ID);
+    expect(_payouts[0]!.periodStart).toEqual(_ledger[0]!.createdAt);
+    await markPayoutPaid(_payouts[0]!.id, { reference: "W-1" });
+    _ledger.push(..._ledgerWrites.map((w) => ({ type: w.type as string, amount: w.amount as number, currency: "XOF", provider: "wave", createdAt: new Date() })));
+    _ledger.push({ type: "seller_net", amount: 8_000, currency: "XOF", provider: "geniuspay", createdAt: new Date(Date.now() - 3 * DAY) });
+    await requestPayout(SHOP_ID);
+    expect(_payouts[1]!.amount).toBe(8_000);
+    expect(_payouts[1]!.periodStart).toEqual(_payouts[0]!.periodEnd);
   });
 
   test("refuse sans compte de reversement", async () => {
@@ -230,5 +257,32 @@ describe("markPayoutPaid / markPayoutFailed / markPayoutProcessing", () => {
       ok: false,
       reason: "not_found",
     });
+  });
+  test("transfert rejeté après coup : contre-passation, statut bounced, compte plus vérifié, somme redemandable", async () => {
+    await requestPayout(SHOP_ID);
+    const id = _payouts[0]!.id;
+    await markPayoutPaid(id, { reference: "WAVE-1" });
+    expect(_account?.isVerified).toBe(true);
+
+    expect(await markPayoutBounced(id, { note: "Numéro inactif" })).toEqual({ ok: true });
+    expect(_payouts[0]).toMatchObject({ status: "bounced", note: "Numéro inactif" });
+    expect(_ledgerWrites[1]).toEqual(
+      expect.objectContaining({ type: "payout", amount: 12_000, reference: "WAVE-1:rejet", metadata: { payoutId: id, reversalOf: "WAVE-1" } }),
+    );
+    expect(_account?.isVerified).toBe(false);
+
+    // Le solde ne connaît que le registre : versé −12 000 puis +12 000 → tout redevient disponible.
+    _ledger.push(..._ledgerWrites.map((w) => ({ type: w.type as string, amount: w.amount as number, currency: "XOF", provider: "wave", createdAt: new Date() })));
+    const again = await requestPayout(SHOP_ID);
+    expect(again).toMatchObject({ ok: true, amount: 12_000 });
+
+    // Seul un versement peut être signalé rejeté.
+    expect(await markPayoutBounced(_payouts[1]!.id, { note: "x" })).toEqual({ ok: false, reason: "not_paid" });
+  });
+
+  test("référence prise en concurrence (violation unique P2002) → reference_taken, pas de 500", async () => {
+    await requestPayout(SHOP_ID);
+    _updateThrows = Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    expect(await markPayoutPaid(_payouts[0]!.id, { reference: "DUP" })).toEqual({ ok: false, reason: "reference_taken" });
   });
 });

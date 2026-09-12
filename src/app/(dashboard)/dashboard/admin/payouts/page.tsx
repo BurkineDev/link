@@ -32,7 +32,7 @@ export default async function AdminPayoutsPage() {
   });
 
   const recent = await prisma.payout.findMany({
-    where: { status: { in: ["paid", "failed"] } },
+    where: { status: { in: ["paid", "failed", "bounced"] } },
     orderBy: { updatedAt: "desc" },
     take: 30,
     include: { shop: { select: { name: true, slug: true } } },

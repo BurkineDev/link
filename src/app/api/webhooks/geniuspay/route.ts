@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import { cancelUnpaidOrder, recordOrderRefund, settlePaidOrder } from "@/lib/db/orders";
 import { applyBoostPayment, applySubscriptionPayment } from "@/lib/db/subscriptions";
 import {
   mapStatusToPaymentStatus,
@@ -117,17 +117,40 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 200 });
   }
 
+  const incomingStatus = data.status ?? "pending";
+  const nextPaymentStatus = mapStatusToPaymentStatus(incomingStatus);
+
+  // Remboursement d'une commande payée : la part du net vendeur est
+  // contre-passée dans le registre, sinon le vendeur pourrait se faire
+  // verser une vente que Bio-Lien a déjà remboursée. Idempotent sur la
+  // référence.
+  if (
+    nextPaymentStatus === "refunded" &&
+    (order.paymentStatus === "paid" || order.paymentStatus === "partially_refunded")
+  ) {
+    try {
+      const result = await recordOrderRefund(order.id, {
+        amount: typeof data.amount === "number" ? data.amount : Number(order.totalAmount),
+        reference: `${data.reference}:refund`,
+        provider: "geniuspay",
+      });
+      console.info("[geniuspay-webhook] refund on order", order.id, result);
+    } catch (error) {
+      console.error("[geniuspay-webhook] refund error:", error);
+      return new NextResponse(null, { status: 500 });
+    }
+    return new NextResponse(null, { status: 200 });
+  }
+
   // Idempotent — once we've already settled the order, ack and stop.
   if (
     order.paymentStatus === "paid" ||
     order.paymentStatus === "refunded" ||
+    order.paymentStatus === "partially_refunded" ||
     order.paymentStatus === "failed"
   ) {
     return new NextResponse(null, { status: 200 });
   }
-
-  const incomingStatus = data.status ?? "pending";
-  const nextPaymentStatus = mapStatusToPaymentStatus(incomingStatus);
 
   if (nextPaymentStatus === "paid") {
     // Sanity check on amount + currency.

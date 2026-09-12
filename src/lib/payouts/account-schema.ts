@@ -46,11 +46,14 @@ export const payoutAccountSchema = z
         country: iso2FromE164(composed) ?? value.country ?? null,
       };
     }
+    const identifier = value.account_identifier.replace(/\s+/g, "").toUpperCase();
+    // Un IBAN commence par le code pays ; un RIB national n'en dit rien.
+    const ibanCountry = /^[A-Z]{2}[0-9]{2}/.test(identifier) ? identifier.slice(0, 2) : null;
     return {
       provider: value.provider,
       accountName: value.account_name,
-      accountIdentifier: value.account_identifier.replace(/\s+/g, "").toUpperCase(),
-      country: value.country ?? null,
+      accountIdentifier: identifier,
+      country: ibanCountry ?? value.country ?? null,
     };
   });
 

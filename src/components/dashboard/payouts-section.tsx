@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { WhatsAppNumberField, defaultIso2ForCurrency } from "@/components/dashboard/whatsapp-number-field";
+import { WhatsAppNumberField } from "@/components/dashboard/whatsapp-number-field";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import {
   PAYOUT_PROVIDERS,
@@ -69,6 +69,7 @@ const STATUS_CLASS: Record<string, string> = {
   processing: "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-0",
   paid: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-0",
   failed: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-0",
+  bounced: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-0",
 };
 
 function identifierLabel(account: PayoutAccountView) {
@@ -124,7 +125,7 @@ export function PayoutsSection({
         <h2 className="text-lg font-semibold tracking-tight">Reversements</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Ce que Bio-Lien a encaissé pour toi, moins la commission, te revient.
-          Demande le versement quand tu veux : l&apos;équipe l&apos;exécute sous 2 jours ouvrés.
+          Demande le versement quand tu veux : l&apos;équipe l&apos;exécute en général sous 2 jours ouvrés.
         </p>
       </div>
 
@@ -247,7 +248,7 @@ export function PayoutsSection({
                       Demandé le {formatDate(payout.created_at)}
                       {payout.paid_at ? ` · versé le ${formatDate(payout.paid_at)}` : ""}
                       {payout.reference ? ` · réf. ${payout.reference}` : ""}
-                      {payout.status === "failed" && payout.note ? ` · ${payout.note}` : ""}
+                      {(payout.status === "failed" || payout.status === "bounced") && payout.note ? ` · ${payout.note}` : ""}
                     </p>
                   </div>
                   <Badge className={STATUS_CLASS[payout.status] ?? "bg-muted border-0"}>
@@ -323,7 +324,7 @@ export function PayoutAccountForm({
           account_name: accountName,
           // Le numéro composé est déjà international : on l'envoie avec « + ».
           account_identifier: phoneProvider ? `+${phone}` : iban,
-          ...(phoneProvider ? {} : { country: defaultIso2ForCurrency(currency) }),
+
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };

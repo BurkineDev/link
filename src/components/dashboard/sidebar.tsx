@@ -97,6 +97,8 @@ interface SidebarProps {
   shopName?: string | null;
   /** Membre de l'équipe Bio-Lien (ADMIN_EMAILS) : voit les écrans de traitement. */
   isAdmin?: boolean;
+  /** Demandes de reversement en attente, affichées à côté de l'entrée Équipe. */
+  pendingPayouts?: number;
 }
 
 const ADMIN_GROUP: { label: string; items: NavItemDef[] } = {
@@ -106,7 +108,7 @@ const ADMIN_GROUP: { label: string; items: NavItemDef[] } = {
   ],
 };
 
-export function Sidebar({ shopSlug, shopName, isAdmin = false }: SidebarProps) {
+export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 0 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -159,6 +161,15 @@ export function Sidebar({ shopSlug, shopName, isAdmin = false }: SidebarProps) {
                 >
                   <NavIcon icon={Icon} active={active} />
                   <span>{item.label}</span>
+                  {item.href === "/dashboard/admin/payouts" && pendingPayouts > 0 ? (
+                    <span
+                      className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums"
+                      style={{ background: "var(--b-lime)", color: "#111" }}
+                      aria-label={`${pendingPayouts} à traiter`}
+                    >
+                      {pendingPayouts}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

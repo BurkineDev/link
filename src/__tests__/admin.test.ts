@@ -1,7 +1,4 @@
-jest.mock("@/lib/auth", () => ({ getCurrentUser: jest.fn(), requireUser: jest.fn() }));
-jest.mock("next/navigation", () => ({ redirect: jest.fn() }));
-
-import { adminEmails, isAdminEmail } from "@/lib/admin";
+import { adminEmails, isAdminEmail } from "@/lib/admin-emails";
 
 describe("équipe Bio-Lien (ADMIN_EMAILS)", () => {
   test("liste normalisée : espaces, casse, vides", () => {

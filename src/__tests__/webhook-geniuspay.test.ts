@@ -43,7 +43,9 @@ const mockPrisma = {
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
+const mockRecordRefund = jest.fn<Promise<unknown>, unknown[]>(async () => ({ recorded: true, clawback: 9500, refundedTotal: 10000, full: true }));
 jest.mock("@/lib/db/orders", () => ({
+  recordOrderRefund: (...args: unknown[]) => mockRecordRefund(...args),
   settlePaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
     if (_rpcError) throw _rpcError;
     _rpcResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
@@ -105,6 +107,7 @@ beforeEach(() => {
   _rpcError = null;
   _verifyResult = true;
   mockNotifySellerOfPaidOrder.mockClear();
+  mockRecordRefund.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -236,5 +239,32 @@ describe("POST /api/webhooks/geniuspay", () => {
       payment_ref: REF_GP,
       payment_provider: "geniuspay",
     });
+  });
+  // Remboursement d'une commande déjà payée : contre-passation du net vendeur.
+  test("payment.refunded sur une commande payée contre-passe le net vendeur, idempotent", async () => {
+    _order = { ...defaultOrderFixture(), payment_status: "paid" };
+    const payload = validPayload({
+      event: "payment.refunded",
+      data: { reference: REF_GP, status: "refunded", amount: 10000, currency: "XOF", metadata: { orderId: ORDER_ID } },
+    });
+
+    const res = await POST(makeRequest(payload, { "x-webhook-event": "payment.refunded" }));
+
+    expect(res.status).toBe(200);
+    expect(mockRecordRefund).toHaveBeenCalledWith(ORDER_ID, {
+      amount: 10000,
+      reference: `${REF_GP}:refund`,
+      provider: "geniuspay",
+    });
+    expect(_rpcResult).toBeNull(); // ni règlement ni annulation
+  });
+
+  test("payment.refunded sur une commande encore en attente ne contre-passe rien", async () => {
+    const payload = validPayload({
+      data: { reference: REF_GP, status: "refunded", amount: 10000, currency: "XOF", metadata: { orderId: ORDER_ID } },
+    });
+    const res = await POST(makeRequest(payload, { "x-webhook-event": "payment.refunded" }));
+    expect(res.status).toBe(200);
+    expect(mockRecordRefund).not.toHaveBeenCalled();
   });
 });

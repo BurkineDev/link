@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminUser } from "@/lib/admin";
 import { scheduleAfterResponse } from "@/lib/after-response";
-import { markPayoutFailed, markPayoutPaid, markPayoutProcessing } from "@/lib/payouts/requests";
-import { notifyPayoutFailed, notifyPayoutPaid } from "@/lib/payouts/notifications";
+import {
+  markPayoutBounced,
+  markPayoutFailed,
+  markPayoutPaid,
+  markPayoutProcessing,
+} from "@/lib/payouts/requests";
+import { notifyPayoutBounced, notifyPayoutFailed, notifyPayoutPaid } from "@/lib/payouts/notifications";
 
 /**
  * PATCH /api/admin/payouts/[id] — l'équipe fait avancer une demande :
  *   { action: "processing" }                      je m'en occupe
  *   { action: "paid", reference, note? }          transfert exécuté
  *   { action: "failed", note }                    refus motivé
+ *   { action: "bounced", note }                   transfert rejeté après coup par l'opérateur
  */
 
 const schema = z.discriminatedUnion("action", [
@@ -20,6 +26,7 @@ const schema = z.discriminatedUnion("action", [
     note: z.string().trim().max(500).optional(),
   }),
   z.object({ action: z.literal("failed"), note: z.string().trim().min(3).max(500) }),
+  z.object({ action: z.literal("bounced"), note: z.string().trim().min(3).max(500) }),
 ]);
 
 export async function PATCH(
@@ -30,7 +37,7 @@ export async function PATCH(
   if (!admin) return NextResponse.json({ error: "Réservé à l'équipe" }, { status: 403 });
 
   const { id } = await params;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+  if (!z.string().uuid().safeParse(id).success) {
     return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
   }
 
@@ -54,7 +61,9 @@ export async function PATCH(
       ? await markPayoutPaid(id, { reference: input.reference, note: input.note ?? null })
       : input.action === "failed"
         ? await markPayoutFailed(id, { note: input.note })
-        : await markPayoutProcessing(id);
+        : input.action === "bounced"
+          ? await markPayoutBounced(id, { note: input.note })
+          : await markPayoutProcessing(id);
 
   if (!result.ok) {
     const status = result.reason === "not_found" ? 404 : 409;
@@ -63,19 +72,24 @@ export async function PATCH(
         ? "Demande introuvable"
         : result.reason === "reference_taken"
           ? "Cette référence de transfert est déjà utilisée par un autre reversement."
-          : "Cette demande a déjà été traitée.";
+          : result.reason === "not_paid"
+            ? "Seul un reversement marqué versé peut être signalé rejeté."
+            : "Cette demande a déjà été traitée.";
     return NextResponse.json({ error: message, code: result.reason.toUpperCase() }, { status });
   }
 
-  if (input.action === "paid") {
+  const notify =
+    input.action === "paid"
+      ? notifyPayoutPaid
+      : input.action === "failed"
+        ? notifyPayoutFailed
+        : input.action === "bounced"
+          ? notifyPayoutBounced
+          : null;
+  if (notify) {
     scheduleAfterResponse(
-      () => notifyPayoutPaid(id),
-      (error) => console.warn("[payouts] paid notification failed", error),
-    );
-  } else if (input.action === "failed") {
-    scheduleAfterResponse(
-      () => notifyPayoutFailed(id),
-      (error) => console.warn("[payouts] failed notification failed", error),
+      () => notify(id),
+      (error) => console.warn(`[payouts] ${input.action} notification failed`, error),
     );
   }
 

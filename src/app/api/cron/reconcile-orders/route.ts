@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
+import { remindStalePayouts } from "@/lib/payouts/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,15 @@ export async function GET(request: NextRequest) {
   }
 
   const result = await reconcilePendingGeniusPayOrders({ limit: BATCH_LIMIT });
-
   console.info("[cron] réconciliation:", result);
-  return NextResponse.json(result);
+
+  // Même passage quotidien : relance des reversements que l'équipe n'a pas
+  // encore traités (le plan Vercel n'autorise qu'un cron par jour).
+  const payouts = await remindStalePayouts().catch((error) => {
+    console.error("[cron] relance des reversements:", error);
+    return { stale: -1, reminded: 0 };
+  });
+  console.info("[cron] reversements en attente:", payouts);
+
+  return NextResponse.json({ ...result, payouts });
 }

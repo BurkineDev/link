@@ -19,6 +19,10 @@ export interface PayoutDestination {
   accountName: string;
   accountIdentifier: string;
   country: string | null;
+  /** Le compte avait-il déjà reçu un versement au moment de la demande ? */
+  isVerified?: boolean;
+  /** Dernière modification du compte, pour repérer un changement récent. */
+  accountUpdatedAt?: string;
 }
 
 export type RequestPayoutResult =
@@ -64,7 +68,16 @@ export async function requestPayout(shopId: string): Promise<RequestPayoutResult
       accountName: account.accountName,
       accountIdentifier: account.accountIdentifier,
       country: account.country,
+      isVerified: account.isVerified,
+      accountUpdatedAt: account.updatedAt.toISOString(),
     };
+
+    // La période couverte commence là où le dernier versement s'arrêtait.
+    const lastPaid = await tx.payout.findFirst({
+      where: { shopId, status: "paid" },
+      orderBy: { paidAt: "desc" },
+      select: { periodEnd: true, paidAt: true },
+    });
 
     const payout = await tx.payout.create({
       data: {
@@ -74,7 +87,7 @@ export async function requestPayout(shopId: string): Promise<RequestPayoutResult
         status: "requested",
         provider: account.provider,
         destination: { ...destination },
-        periodStart: balance.oldestUnpaidAt,
+        periodStart: lastPaid?.periodEnd ?? lastPaid?.paidAt ?? balance.oldestUnpaidAt,
         periodEnd: new Date(),
       },
       select: { id: true },
@@ -91,13 +104,35 @@ export async function requestPayout(shopId: string): Promise<RequestPayoutResult
 
 export type SettlePayoutResult =
   | { ok: true }
-  | { ok: false; reason: "not_found" | "already_settled" | "reference_taken" };
+  | { ok: false; reason: "not_found" | "already_settled" | "reference_taken" | "not_paid" };
+
+/** Violation de la contrainte unique Prisma (deux références identiques en concurrence). */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
 
 /**
  * L'équipe a exécuté le transfert : on enregistre la référence, la date, et
  * la ligne comptable négative qui solde le net vendeur.
  */
 export async function markPayoutPaid(
+  payoutId: string,
+  input: { reference: string; note?: string | null },
+): Promise<SettlePayoutResult> {
+  try {
+    return await markPayoutPaidInTransaction(payoutId, input);
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, reason: "reference_taken" } as const;
+    throw error;
+  }
+}
+
+async function markPayoutPaidInTransaction(
   payoutId: string,
   input: { reference: string; note?: string | null },
 ): Promise<SettlePayoutResult> {
@@ -182,6 +217,59 @@ export async function markPayoutFailed(
       where: { id: payoutId },
       data: { status: "failed", note: input.note },
     });
+
+    return { ok: true } as const;
+  });
+}
+
+/**
+ * L'opérateur a rejeté le transfert après coup (numéro inactif, plafond) et
+ * recrédité Bio-Lien : la ligne comptable est contre-passée par une ligne
+ * `payout` positive, la demande passe en « bounced » et la somme redevient
+ * disponible. Le compte repasse non vérifié.
+ */
+export async function markPayoutBounced(
+  payoutId: string,
+  input: { note: string },
+): Promise<SettlePayoutResult> {
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      select id from public.payouts where id = ${payoutId}::uuid for update
+    `;
+    if (locked.length === 0) return { ok: false, reason: "not_found" } as const;
+
+    const payout = await tx.payout.findUniqueOrThrow({ where: { id: payoutId } });
+    if (payout.status !== "paid") return { ok: false, reason: "not_paid" } as const;
+
+    await tx.payout.update({
+      where: { id: payoutId },
+      data: { status: "bounced", note: input.note },
+    });
+
+    await tx.transactionLedger.create({
+      data: {
+        shopId: payout.shopId,
+        orderId: null,
+        type: "payout",
+        amount: Number(payout.amount),
+        currency: payout.currency,
+        provider: payout.provider,
+        reference: payout.reference ? `${payout.reference}:rejet` : null,
+        metadata: { payoutId, reversalOf: payout.reference ?? null },
+      },
+    });
+
+    const destination = payout.destination as { accountIdentifier?: string } | null;
+    if (destination?.accountIdentifier) {
+      await tx.payoutAccount.updateMany({
+        where: {
+          shopId: payout.shopId,
+          provider: payout.provider,
+          accountIdentifier: destination.accountIdentifier,
+        },
+        data: { isVerified: false },
+      });
+    }
 
     return { ok: true } as const;
   });

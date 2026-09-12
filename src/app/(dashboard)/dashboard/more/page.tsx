@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { isAdminEmail } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import {
   BarChart3Icon,
@@ -11,6 +12,7 @@ import {
   SettingsIcon,
   UserIcon,
   UsersIcon,
+  BanknoteIcon,
 } from "lucide-react";
 
 export const metadata = { title: "Plus" };
@@ -128,7 +130,23 @@ export default async function MorePage() {
         </a>
       )}
 
-      {SECTIONS.map((section) => (
+      {(isAdminEmail(user.email)
+        ? [
+            {
+              label: "Équipe",
+              items: [
+                {
+                  label: "Reversements à traiter",
+                  href: "/dashboard/admin/payouts",
+                  icon: BanknoteIcon,
+                  description: "Demandes de versement des vendeurs",
+                },
+              ],
+            },
+            ...SECTIONS,
+          ]
+        : SECTIONS
+      ).map((section) => (
         <section key={section.label} className="space-y-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {section.label}

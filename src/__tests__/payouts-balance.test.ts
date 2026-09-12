@@ -8,12 +8,22 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-09-12T12:00:00Z");
 const ago = (days: number) => new Date(NOW.getTime() - days * DAY);
 
-const net = (amount: number, provider: string, daysAgo: number): LedgerRow => ({
+const net = (amount: number, provider: string, daysAgo: number, orderId?: string): LedgerRow => ({
   type: "seller_net",
   amount,
   currency: "XOF",
   provider,
   createdAt: ago(daysAgo),
+  orderId: orderId ?? null,
+});
+
+const adj = (type: string, amount: number, daysAgo: number, orderId: string): LedgerRow => ({
+  type,
+  amount,
+  currency: "XOF",
+  provider: "geniuspay",
+  createdAt: ago(daysAgo),
+  orderId,
 });
 
 describe("computeBalance", () => {
@@ -96,5 +106,37 @@ describe("computeBalance", () => {
     expect(paidAll.oldestUnpaidAt).toBeNull();
     const pending = computeBalance([net(1_000, "geniuspay", 10), net(500, "geniuspay", 4)], [], "XOF", NOW);
     expect(pending.oldestUnpaidAt).toEqual(ago(10));
+  });
+  test("un remboursement sur une vente mûrie retire sa part du disponible", () => {
+    const b = computeBalance([net(19_000, "geniuspay", 10, "o1"), adj("refund", -19_000, 1, "o1"), net(5_000, "geniuspay", 10, "o2")], [], "XOF", NOW);
+    expect(b.available).toBe(5_000);
+    expect(b.maturing).toBe(0);
+  });
+
+  test("un remboursement sur une vente encore en sécurisation s'impute sur « en sécurisation »", () => {
+    const b = computeBalance([net(10_000, "geniuspay", 10, "o1"), net(19_000, "geniuspay", 1, "o2"), adj("refund", -19_000, 0, "o2")], [], "XOF", NOW);
+    expect(b.available).toBe(10_000);
+    expect(b.maturing).toBe(0);
+  });
+
+  test("un litige retient la somme, la levée du litige la rend", () => {
+    const rows = [net(19_000, "geniuspay", 10, "o1"), adj("chargeback", -19_000, 2, "o1")];
+    expect(computeBalance(rows, [], "XOF", NOW).available).toBe(0);
+    expect(computeBalance([...rows, adj("chargeback_reversal", 19_000, 1, "o1")], [], "XOF", NOW).available).toBe(19_000);
+  });
+
+  test("un transfert rejeté (ligne payout positive) annule le versement", () => {
+    const b = computeBalance(
+      [
+        net(10_000, "geniuspay", 10),
+        { type: "payout", amount: -10_000, currency: "XOF", provider: "wave", createdAt: ago(2) },
+        { type: "payout", amount: 10_000, currency: "XOF", provider: "wave", createdAt: ago(1) },
+      ],
+      [],
+      "XOF",
+      NOW,
+    );
+    expect(b.available).toBe(10_000);
+    expect(b.paidOut).toBe(0);
   });
 });

@@ -40,8 +40,8 @@ export function isPhonePayoutProvider(provider: string): boolean {
   return (PHONE_PAYOUT_PROVIDERS as readonly string[]).includes(provider);
 }
 
-/** requested → processing → paid | failed */
-export const PAYOUT_STATUSES = ["requested", "processing", "paid", "failed"] as const;
+/** requested → processing → paid | failed ; paid → bounced si l'opérateur rejette le transfert */
+export const PAYOUT_STATUSES = ["requested", "processing", "paid", "failed", "bounced"] as const;
 export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
 
 /** Demandes qui immobilisent le solde tant que l'équipe n'a pas tranché. */
@@ -52,6 +52,7 @@ export const PAYOUT_STATUS_LABELS: Record<PayoutStatus, string> = {
   processing: "En cours",
   paid: "Versé",
   failed: "Refusé",
+  bounced: "Transfert rejeté",
 };
 
 /**

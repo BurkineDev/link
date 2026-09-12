@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import {
+  cancelUnpaidOrder,
+  recordOrderRefund,
+  reverseChargeback,
+  settlePaidOrder,
+} from "@/lib/db/orders";
 import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
@@ -76,6 +81,15 @@ export async function POST(request: NextRequest) {
         await handleInvoicePaymentFailed(event.data.object);
         break;
       }
+      case "charge.refunded": {
+        await handleChargeRefunded(event.data.object);
+        break;
+      }
+      case "charge.dispute.created":
+      case "charge.dispute.closed": {
+        await handleDispute(event.type, event.data.object, stripe);
+        break;
+      }
       default:
         // Ignore unrelated events.
         break;
@@ -86,6 +100,70 @@ export async function POST(request: NextRequest) {
   }
 
   return new NextResponse(null, { status: 200 });
+}
+
+// ---------------------------------------------------------------------------
+// Remboursements et litiges : contre-passation du net vendeur
+// ---------------------------------------------------------------------------
+
+/**
+ * `charge.refunded` arrive à chaque remboursement, avec `amount_refunded`
+ * cumulé. L'identifiant de commande vient des métadonnées du PaymentIntent,
+ * copiées sur la charge (`payment_intent_data.metadata` au checkout).
+ */
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const orderId = charge.metadata?.orderId;
+  if (!orderId) {
+    console.warn("[stripe-webhook] refund without orderId metadata:", charge.id);
+    return;
+  }
+  const refundedTotal = fromStripeAmount(charge.amount_refunded, charge.currency);
+  if (refundedTotal === null || refundedTotal <= 0) return;
+
+  const result = await recordOrderRefund(orderId, {
+    amount: refundedTotal,
+    cumulative: true,
+    reference: `${charge.id}:refund:${charge.amount_refunded}`,
+    provider: "stripe",
+  });
+  console.info("[stripe-webhook] refund on order", orderId, result);
+}
+
+/**
+ * Litige carte : le montant contesté est retenu sur le net vendeur dès
+ * l'ouverture ; s'il est gagné, la retenue est annulée.
+ */
+async function handleDispute(
+  eventType: "charge.dispute.created" | "charge.dispute.closed",
+  dispute: Stripe.Dispute,
+  stripe: ReturnType<typeof getStripe>,
+) {
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge.id;
+  const charge =
+    typeof dispute.charge === "string" ? await stripe.charges.retrieve(chargeId) : dispute.charge;
+  const orderId = charge.metadata?.orderId;
+  if (!orderId) {
+    console.warn("[stripe-webhook] dispute without orderId metadata:", dispute.id);
+    return;
+  }
+
+  if (eventType === "charge.dispute.created") {
+    const amount = fromStripeAmount(dispute.amount, dispute.currency);
+    if (amount === null || amount <= 0) return;
+    const result = await recordOrderRefund(orderId, {
+      amount,
+      reference: dispute.id,
+      provider: "stripe",
+      kind: "chargeback",
+    });
+    console.info("[stripe-webhook] dispute opened on order", orderId, result);
+    return;
+  }
+
+  if (dispute.status === "won") {
+    const result = await reverseChargeback(orderId, { reference: dispute.id, provider: "stripe" });
+    console.info("[stripe-webhook] dispute won on order", orderId, result);
+  }
 }
 
 // ---------------------------------------------------------------------------

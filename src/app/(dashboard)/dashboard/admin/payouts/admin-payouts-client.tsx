@@ -22,6 +22,23 @@ interface Destination {
   accountName: string;
   accountIdentifier: string;
   country: string | null;
+  isVerified?: boolean;
+  accountUpdatedAt?: string;
+}
+
+const RECENT_ACCOUNT_MS = 7 * 24 * 60 * 60 * 1000;
+
+function accountTrust(destination: Destination | null): { label: string; className: string } {
+  if (!destination) return { label: "Compte inconnu", className: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-0" };
+  if (destination.isVerified) {
+    return { label: "Compte vérifié par un versement précédent", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-0" };
+  }
+  const recent =
+    destination.accountUpdatedAt &&
+    Date.now() - new Date(destination.accountUpdatedAt).getTime() < RECENT_ACCOUNT_MS;
+  return recent
+    ? { label: `Compte renseigné ou modifié le ${formatDate(destination.accountUpdatedAt!)} — jamais vérifié`, className: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-0" }
+    : { label: "Premier versement sur ce compte", className: "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-0" };
 }
 
 export interface AdminPayoutView {
@@ -85,28 +102,66 @@ export function AdminPayoutsClient({
           ) : (
             <ul className="divide-y divide-border">
               {recent.map((payout) => (
-                <li key={payout.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">
-                      {payout.shop.name}{" "}
-                      <span className="text-muted-foreground">· {formatPrice(payout.amount, payout.currency)}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {payout.paid_at ? `Versé le ${formatDate(payout.paid_at)}` : `Demandé le ${formatDate(payout.created_at)}`}
-                      {payout.reference ? ` · réf. ${payout.reference}` : ""}
-                      {payout.note ? ` · ${payout.note}` : ""}
-                    </p>
-                  </div>
-                  <Badge variant="outline">
-                    {PAYOUT_STATUS_LABELS[payout.status as PayoutStatus] ?? payout.status}
-                  </Badge>
-                </li>
+                <RecentRow key={payout.id} payout={payout} />
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function RecentRow({ payout }: { payout: AdminPayoutView }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function bounce() {
+    const note = window.prompt(
+      "Motif du rejet par l'opérateur (numéro inactif, plafond dépassé…) :",
+    );
+    if (!note || note.trim().length < 3) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/payouts/${payout.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bounced", note: note.trim() }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(json.error ?? "Action impossible.");
+        return;
+      }
+      toast.success("Transfert marqué rejeté, somme remise à disposition, vendeur prévenu.");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">
+          {payout.shop.name}{" "}
+          <span className="text-muted-foreground">· {formatPrice(payout.amount, payout.currency)}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {payout.paid_at ? `Versé le ${formatDate(payout.paid_at)}` : `Demandé le ${formatDate(payout.created_at)}`}
+          {payout.reference ? ` · réf. ${payout.reference}` : ""}
+          {payout.note ? ` · ${payout.note}` : ""}
+        </p>
+      </div>
+      {payout.status === "paid" ? (
+        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={bounce}>
+          Transfert rejeté
+        </Button>
+      ) : null}
+      <Badge variant="outline">
+        {PAYOUT_STATUS_LABELS[payout.status as PayoutStatus] ?? payout.status}
+      </Badge>
+    </li>
   );
 }
 
@@ -181,6 +236,7 @@ function PayoutCard({ payout }: { payout: AdminPayoutView }) {
             Au nom de {destination?.accountName ?? "—"}
             {destination?.country ? ` · ${destination.country}` : ""}
           </p>
+          <Badge className={accountTrust(destination).className}>{accountTrust(destination).label}</Badge>
         </div>
 
         <div className="space-y-3">

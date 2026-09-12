@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { computeBalance, type ShopBalance } from "./balance";
+import { BALANCE_LEDGER_TYPES, computeBalance, type ShopBalance } from "./balance";
 import { OPEN_PAYOUT_STATUSES } from "./config";
 
 /**
@@ -16,8 +16,8 @@ export async function loadBalance(
 ): Promise<ShopBalance> {
   const [ledger, open] = await Promise.all([
     db.transactionLedger.findMany({
-      where: { shopId, type: { in: ["seller_net", "payout"] }, status: "posted" },
-      select: { type: true, amount: true, currency: true, provider: true, createdAt: true },
+      where: { shopId, type: { in: [...BALANCE_LEDGER_TYPES] }, status: "posted" },
+      select: { type: true, amount: true, currency: true, provider: true, createdAt: true, orderId: true },
     }),
     db.payout.findMany({
       where: { shopId, status: { in: [...OPEN_PAYOUT_STATUSES] } },

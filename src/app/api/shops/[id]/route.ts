@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { serializeShop } from "@/lib/db/serialize";
 import { RESERVED_SLUGS } from "@/lib/constants";
 import { revalidateShopSlug } from "@/lib/shops/revalidate";
+import { loadBalance } from "@/lib/payouts/balance-db";
+import { formatPrice } from "@/lib/utils/format";
 import { Prisma } from "../../../../../prisma/generated/client/client";
 
 /**
@@ -109,7 +111,7 @@ function toPrismaData(body: PatchBody): Prisma.ShopUpdateInput {
 async function findOwnedShop(shopId: string, userId: string) {
   return prisma.shop.findFirst({
     where: { id: shopId, ownerId: userId },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, currency: true },
   });
 }
 
@@ -147,6 +149,23 @@ export async function PATCH(
     const owned = await findOwnedShop(id, user.id);
     if (!owned) {
       return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+    }
+
+    // Le solde reversable est tenu dans la devise de la boutique : en
+    // changer alors qu'il reste du net vendeur rendrait cet argent invisible
+    // et non demandable. On demande d'abord le reversement.
+    if (parsed.data.currency && parsed.data.currency !== owned.currency) {
+      const balance = await loadBalance(owned.id, owned.currency);
+      const outstanding = balance.available + balance.maturing + balance.reserved;
+      if (outstanding > 0) {
+        return NextResponse.json(
+          {
+            error: `Impossible de changer de devise : ${formatPrice(outstanding, owned.currency)} restent à te reverser en ${owned.currency}. Demande d'abord le reversement dans Paiements → Reversements, puis change de devise une fois versé.`,
+            code: "OUTSTANDING_BALANCE",
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const shop = await prisma.shop.update({
