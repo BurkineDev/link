@@ -7,7 +7,7 @@ export const metadata = {
     "Comment Bio-Lien collecte, utilise et protège vos données personnelles.",
 };
 
-const LAST_UPDATED = "24 mai 2026";
+const LAST_UPDATED = "11 septembre 2026";
 
 export default function PrivacyPage() {
   return (
@@ -39,8 +39,9 @@ export default function PrivacyPage() {
           adresse de livraison, contenu de la commande.
         </li>
         <li>
-          <strong>Données de paiement</strong> : traitées exclusivement par Stripe. Nous
-          ne stockons jamais de numéros de carte bancaire.
+          <strong>Données de paiement</strong> : traitées exclusivement par nos
+          prestataires de paiement (Stripe pour la carte bancaire, Genius Pay pour le
+          Mobile Money). Nous ne stockons jamais de numéros de carte bancaire.
         </li>
         <li>
           <strong>Données techniques</strong> : adresse IP, type d&apos;appareil, navigateur,
@@ -69,14 +70,36 @@ export default function PrivacyPage() {
       <p>Nous partageons certaines données avec des prestataires de confiance :</p>
       <ul>
         <li>
-          <strong>Stripe</strong> — traitement des paiements (commandes et abonnements).
+          <strong>Stripe</strong> — traitement des paiements par carte bancaire
+          (commandes et abonnements).
         </li>
         <li>
-          <strong>Supabase</strong> — hébergement de la base de données et stockage des
-          fichiers.
+          <strong>Genius Pay</strong> (GENIUS GROUPS SAS, Côte d&apos;Ivoire) — traitement
+          des paiements par Mobile Money.
         </li>
         <li>
-          <strong>Vercel</strong> — hébergement de l&apos;application.
+          <strong>Vercel</strong> — hébergement de l&apos;application (Francfort,
+          Allemagne).
+        </li>
+        <li>
+          <strong>Neon</strong> (Databricks) — hébergement de la base de données
+          (Francfort, Allemagne).
+        </li>
+        <li>
+          <strong>Cloudflare</strong> — stockage des fichiers (images, produits
+          numériques) via le service R2.
+        </li>
+        <li>
+          <strong>Resend</strong> — envoi des e-mails transactionnels (commandes,
+          notifications, connexion au compte).
+        </li>
+        <li>
+          <strong>Upstash</strong> — limitation du débit des requêtes et protection
+          contre les abus (adresse IP uniquement).
+        </li>
+        <li>
+          <strong>Anthropic</strong> — génération de textes pour les outils de rédaction
+          assistée, uniquement à partir des contenus que vous saisissez dans ces outils.
         </li>
         <li>
           <strong>Google</strong> — uniquement si vous utilisez la connexion via OAuth.
@@ -123,8 +146,9 @@ export default function PrivacyPage() {
       <h2>8. Sécurité</h2>
       <p>
         Nous mettons en œuvre des mesures techniques et organisationnelles
-        appropriées pour protéger vos données : chiffrement en transit (HTTPS), Row
-        Level Security en base de données, accès restreints, audits réguliers.
+        appropriées pour protéger vos données : chiffrement en transit (HTTPS) et au
+        repos, mots de passe hachés, contrôle des accès côté serveur, accès restreints,
+        audits réguliers.
       </p>
 
       <h2>9. Mineurs</h2>
