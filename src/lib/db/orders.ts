@@ -141,8 +141,11 @@ export async function settlePaidOrder(
       data: {
         orderId: order.id,
         status: "confirmed",
-        publicMessage:
-          "Paiement confirmé. La commande est transmise au vendeur.",
+        // L'acheteur n° 2 du dernier exemplaire ne doit pas attendre un colis
+        // qui ne partira peut-être pas : on le prévient sans dévoiler le stock.
+        publicMessage: stockShortfall.length
+          ? "Paiement reçu. Le vendeur vérifie la disponibilité de l'article et te contacte rapidement."
+          : "Paiement confirmé. La commande est transmise au vendeur.",
         note: stockShortfall.length
           ? `Stock insuffisant au moment du paiement : ${stockShortfall
               .map((item) => `${item.product_name ?? item.product_id} (${item.taken}/${item.requested})`)
@@ -212,7 +215,13 @@ export async function settlePaidOrder(
       ],
     });
 
-    await createDigitalDownloads(tx, order.id, order.items);
+    // Un fichier numérique en édition limitée n'est pas délivré à l'acheteur
+    // qui n'a rien obtenu : le vendeur tranche (livrer quand même ou
+    // rembourser).
+    const undelivered = new Set(
+      stockShortfall.filter((item) => item.taken === 0).map((item) => item.product_id),
+    );
+    await createDigitalDownloads(tx, order.id, order.items, undelivered);
 
     return { settled: true, customerId, commission: fee, plan, stockShortfall } as const;
   });
@@ -227,6 +236,7 @@ async function createDigitalDownloads(
   tx: Prisma.TransactionClient,
   orderId: string,
   items: Prisma.JsonValue,
+  skipProductIds: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   if (!Array.isArray(items)) return;
 
@@ -236,7 +246,7 @@ async function createDigitalDownloads(
 
   for (const item of items) {
     const productId = readString(item, "product_id");
-    if (!productId) continue;
+    if (!productId || skipProductIds.has(productId)) continue;
 
     const product = await tx.product.findUnique({
       where: { id: productId },
@@ -368,15 +378,35 @@ export async function cancelUnpaidOrder(
 async function restoreStock(
   tx: Prisma.TransactionClient,
   items: Prisma.JsonValue,
+  shortfall: Prisma.JsonValue | null = null,
 ): Promise<void> {
   if (!Array.isArray(items)) return;
 
-  for (const item of items) {
-    const productId = readString(item, "product_id");
-    const variantId = readString(item, "variant_id");
-    const quantity = Math.max(readInt(item, "quantity") ?? 0, 0);
+  // Ce qui n'avait pas pu être prélevé (manque au règlement) n'est pas rendu.
+  const missing = new Map<string, number>();
+  if (Array.isArray(shortfall)) {
+    for (const entry of shortfall) {
+      const key = readString(entry, "variant_id") ?? readString(entry, "product_id");
+      const requested = readInt(entry, "requested") ?? 0;
+      const taken = readInt(entry, "taken") ?? 0;
+      if (key) missing.set(key, Math.max(0, requested - taken));
+    }
+  }
 
-    if (quantity === 0 || !productId) continue;
+  // Ordre stable (même clé que le prélèvement) : pas d'interblocage entre
+  // deux restitutions ou une restitution et un règlement.
+  const lines = [...items]
+    .map((item) => ({
+      productId: readString(item, "product_id"),
+      variantId: readString(item, "variant_id"),
+      quantity: Math.max(readInt(item, "quantity") ?? 0, 0),
+    }))
+    .sort((a, b) => (a.variantId ?? a.productId ?? "").localeCompare(b.variantId ?? b.productId ?? ""));
+
+  for (const { productId, variantId, quantity: ordered } of lines) {
+    if (!productId) continue;
+    const quantity = ordered - (missing.get(variantId ?? productId) ?? 0);
+    if (quantity <= 0) continue;
 
     if (variantId) {
       await tx.productVariant.updateMany({
@@ -470,7 +500,10 @@ export async function transitionOrderStatus(input: {
         to: status,
       } as const;
     }
-    if (status === "cancelled" && order.paymentStatus === "paid") {
+    if (
+      status === "cancelled" &&
+      (order.paymentStatus === "paid" || order.paymentStatus === "partially_refunded")
+    ) {
       return { updated: false, reason: "paid_order_requires_refund" } as const;
     }
 
@@ -539,7 +572,16 @@ export async function recordOrderRefund(
 
     const order = await tx.order.findUniqueOrThrow({
       where: { id: orderId },
-      select: { id: true, shopId: true, totalAmount: true, currency: true, paymentStatus: true },
+      select: {
+        id: true,
+        shopId: true,
+        totalAmount: true,
+        currency: true,
+        paymentStatus: true,
+        items: true,
+        stockReservedAt: true,
+        stockShortfall: true,
+      },
     });
     if (order.paymentStatus !== "paid" && order.paymentStatus !== "partially_refunded") {
       return { recorded: false, reason: "not_paid" } as const;
@@ -595,11 +637,16 @@ export async function recordOrderRefund(
     if (kind === "refund") {
       const refundedTotal = roundToCents(alreadyRefunded + increment);
       const full = refundedTotal >= total;
+      // Remboursement intégral : la marchandise ne part pas, le stock prélevé
+      // au règlement (hors manque) revient en vente.
+      if (full && order.stockReservedAt !== null) {
+        await restoreStock(tx, order.items, order.stockShortfall);
+      }
       await tx.order.update({
         where: { id: orderId },
         data: {
           paymentStatus: full ? "refunded" : "partially_refunded",
-          ...(full ? { status: "refunded" } : {}),
+          ...(full ? { status: "refunded", stockReservedAt: null } : {}),
         },
       });
       await tx.orderStatusEvent.create({

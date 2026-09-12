@@ -76,8 +76,10 @@ const tx = {
   promoCode: { updateMany: jest.fn(async () => ({ count: 0 })) },
 };
 
+let _pendingOrders: Array<{ items: unknown }> = [];
 const prismaMock = {
   $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  order: { findMany: jest.fn(async () => _pendingOrders) },
   product: {
     findUnique: jest.fn(async ({ where }: { where: { id: string } }) => {
       const p = _products[where.id];
@@ -133,6 +135,7 @@ beforeEach(() => {
   _order = order();
   _updates = [];
   _events = [];
+  _pendingOrders = [];
   jest.clearAllMocks();
 });
 
@@ -160,7 +163,58 @@ describe("checkStockAvailability (lecture seule)", () => {
   });
 });
 
+describe("checkStockAvailability — réservation douce", () => {
+  test("les unités des commandes en attente récentes de la boutique comptent comme engagées", async () => {
+    _pendingOrders = [
+      { items: [{ product_id: P1, variant_id: null, quantity: 3 }] },
+      { items: [{ product_id: P1, variant_id: null, quantity: 1 }] },
+    ];
+    expect(await checkStockAvailability([{ product_id: P1, quantity: 1 }], { shopId: "shop" })).toEqual({ ok: true });
+    expect(await checkStockAvailability([{ product_id: P1, quantity: 2 }], { shopId: "shop" })).toEqual({
+      ok: false, reason: "insufficient_stock", product_id: P1, product_name: "Tissu wax", available: 1, requested: 2,
+    });
+    const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { paymentStatus: string; stockReservedAt: null; createdAt: { gt: Date } } }]>)[0]![0];
+    expect(call.where).toMatchObject({ shopId: "shop", paymentStatus: "pending", stockReservedAt: null });
+    expect(Date.now() - call.where.createdAt.gt.getTime()).toBeGreaterThanOrEqual(30 * 60 * 1000 - 1000);
+  });
+
+  test("sans boutique (appel interne) : pas de réservation douce", async () => {
+    _pendingOrders = [{ items: [{ product_id: P1, variant_id: null, quantity: 5 }] }];
+    expect(await checkStockAvailability([{ product_id: P1, quantity: 5 }])).toEqual({ ok: true });
+    expect(prismaMock.order.findMany).not.toHaveBeenCalled();
+  });
+
+  test("deux lignes sur le même article se cumulent avant la comparaison", async () => {
+    _products[P1]!.stock = 1;
+    expect(
+      await checkStockAvailability([
+        { product_id: P1, quantity: 1 },
+        { product_id: P1, quantity: 1 },
+      ]),
+    ).toMatchObject({ ok: false, reason: "insufficient_stock", requested: 2, available: 1 });
+  });
+});
+
 describe("claimStock (au règlement)", () => {
+  test("verrouille les articles dans un ordre stable, quel que soit l'ordre du panier", async () => {
+    const original = tx.$queryRaw.getMockImplementation()!;
+    const seen: string[] = [];
+    tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join("?");
+      if (sql.includes("from public.products") || sql.includes("product_variants v")) seen.push(values[0] as string);
+      return original(strings, ...values);
+    });
+    try {
+      await claimStock(tx as never, [
+        { product_id: P2, variant_id: V1, quantity: 1 },
+        { product_id: P1, variant_id: null, quantity: 1 },
+      ]);
+    } finally {
+      tx.$queryRaw.mockImplementation(original);
+    }
+    expect(seen).toEqual([P1, V1].sort((a, b) => a.localeCompare(b)));
+  });
+
   test("prélève ce qui existe et signale le manque, sans jamais refuser", async () => {
     _products[P1]!.stock = 1;
     const shortfall = await claimStock(tx as never, [
@@ -205,6 +259,29 @@ describe("settlePaidOrder", () => {
       { product_id: P1, variant_id: null, product_name: "Tissu wax", requested: 2, taken: 1 },
     ]);
     expect(_events[0]!.note).toMatch(/Stock insuffisant au moment du paiement : Tissu wax \(1\/2\)/);
+  });
+
+  test("manque sur une variante : signalé avec le nom du produit", async () => {
+    _variants[V1]!.stock = 0;
+    const res = await settlePaidOrder(ORDER, "MTX-4", "geniuspay");
+    expect(res).toMatchObject({
+      settled: true,
+      stockShortfall: [{ product_id: P2, variant_id: V1, product_name: "Boubou", requested: 1, taken: 0 }],
+    });
+    expect(_events[0]!.publicMessage).toMatch(/vérifie la disponibilité/);
+  });
+
+  test("produit numérique en édition limitée : pas de fichier délivré à l'acheteur qui n'a rien obtenu", async () => {
+    _products[P1] = { stock: 0, name: "E-book" };
+    _order = order({ items: [{ product_id: P1, variant_id: null, quantity: 1, product_snapshot: {} }] });
+    tx.product.findUnique.mockResolvedValue({ id: P1, name: "E-book", isDigital: true, metadata: { download_key: "k" } } as never);
+    await settlePaidOrder(ORDER, "MTX-5", "stripe");
+    expect(tx.digitalDownload.create).not.toHaveBeenCalled();
+
+    _products[P1]!.stock = 1;
+    _order = order({ items: [{ product_id: P1, variant_id: null, quantity: 1, product_snapshot: {} }] });
+    await settlePaidOrder(ORDER, "MTX-6", "stripe");
+    expect(tx.digitalDownload.create).toHaveBeenCalledTimes(1);
   });
 
   test("commande d'avant le changement (stock déjà réservé) : pas de second prélèvement", async () => {

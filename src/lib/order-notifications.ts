@@ -178,7 +178,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
   const stockWarning = shortfall.length
     ? `Attention : stock insuffisant au moment du paiement — ${shortfall
         .map((item) => `${item.product_name ?? "article"} : ${item.taken} sur ${item.requested} disponible(s)`)
-        .join(", ")}. Contacte le client pour livrer, remplacer ou rembourser.`
+        .join(", ")}. Contacte le client pour livrer plus tard ou remplacer ; pour un remboursement, écris à l'équipe Bio-Lien avec le numéro de commande.`
     : null;
 
   // 1. E-mail au vendeur, toujours. C'est le seul canal qui ne dépend ni
@@ -299,19 +299,24 @@ async function sendSellerWhatsApp(args: {
       orderUrl: args.detailUrl,
     }) + (args.stockWarning ? `\n\n⚠️ ${args.stockWarning}` : "");
 
+  // Le template Meta n'a pas de champ pour l'avertissement de stock : quand
+  // il y en a un, on passe directement au message texte (délivré dans la
+  // fenêtre de 24 h) — l'e-mail porte l'avertissement de toute façon.
   if (isWhatsAppCloudConfigured()) {
-    // Template first: business-initiated messages outside a 24h service
-    // window are only deliverable as pre-approved templates (Meta 131047).
-    const buyerLabel = args.buyerPhone
-      ? `${args.buyerName} (${args.buyerPhone})`
-      : args.buyerName;
-    const viaTemplate = await sendOrderTemplate(args.whatsappNumber, {
-      buyerLabel,
-      itemCount: args.itemCount,
-      totalLabel: args.totalLabel,
-      orderShortId: args.orderId.slice(0, 8).toUpperCase(),
-    });
-    if (viaTemplate) return;
+    if (!args.stockWarning) {
+      // Template first: business-initiated messages outside a 24h service
+      // window are only deliverable as pre-approved templates (Meta 131047).
+      const buyerLabel = args.buyerPhone
+        ? `${args.buyerName} (${args.buyerPhone})`
+        : args.buyerName;
+      const viaTemplate = await sendOrderTemplate(args.whatsappNumber, {
+        buyerLabel,
+        itemCount: args.itemCount,
+        totalLabel: args.totalLabel,
+        orderShortId: args.orderId.slice(0, 8).toUpperCase(),
+      });
+      if (viaTemplate) return;
+    }
 
     // Free text lands whenever the seller has messaged the business in the
     // last 24 hours (e.g. a buyer relayed their order confirmation).

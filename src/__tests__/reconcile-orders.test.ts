@@ -190,7 +190,7 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(_updates).toHaveLength(0);
   });
 
-  test("rend le stock et annule sur un paiement échoué", async () => {
+  test("annule (et rend le code promo) sur un paiement échoué", async () => {
     _payment = payment({ status: "failed" });
 
     const res = await reconcilePendingGeniusPayOrders();
@@ -239,19 +239,7 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(_released).toHaveLength(0);
   });
 
-  test("onlyStale : ne relit que les commandes déjà abandonnées (plus de 2 h)", async () => {
-    _orders = [];
-
-    await reconcilePendingGeniusPayOrders({ shopId: "shop-1", onlyStale: true });
-
-    const before = _selectFilters.created_before as Date;
-    const age = Date.now() - before.getTime();
-    expect(age).toBeGreaterThanOrEqual(2 * HOUR - 1000);
-    expect(age).toBeLessThan(2 * HOUR + 5000);
-    expect(_selectFilters.shop_id).toBe("shop-1");
-  });
-
-  test("sans onlyStale : relit dès la première minute pour rattraper un webhook manqué", async () => {
+  test("relit dès la première minute pour rattraper un webhook manqué", async () => {
     _orders = [];
 
     await reconcilePendingGeniusPayOrders();

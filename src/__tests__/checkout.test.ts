@@ -506,9 +506,10 @@ describe("POST /api/checkout", () => {
 
     expect(res.status).toBe(200);
     expect(stock.checkStockAvailability).toHaveBeenCalledTimes(1);
-    expect(stock.checkStockAvailability).toHaveBeenCalledWith([
-      { product_id: PRODUCT_ID, variant_id: null, quantity: 2 },
-    ]);
+    expect(stock.checkStockAvailability).toHaveBeenCalledWith(
+      [{ product_id: PRODUCT_ID, variant_id: null, quantity: 2 }],
+      { shopId: SHOP_ID },
+    );
     expect(stock.reserveStock).not.toHaveBeenCalled();
     expect(stock.releaseStock).not.toHaveBeenCalled();
   });

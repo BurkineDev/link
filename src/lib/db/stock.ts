@@ -183,57 +183,133 @@ async function reserveProduct(
   });
 }
 
-/**
- * Lecture seule : le panier est-il servable maintenant ? Même forme de
- * résultat que `reserveStock`, sans verrou ni écriture. Deux acheteurs
- * peuvent passer en même temps pour le dernier exemplaire : c'est le
- * règlement qui tranche.
- */
-export async function checkStockAvailability(items: unknown): Promise<ReserveStockResult> {
-  if (!Array.isArray(items)) return { ok: false, reason: "invalid_items" };
+/** Une ligne de panier normalisée ; clé stable = variante sinon produit. */
+interface StockLine {
+  product_id: string;
+  variant_id: string | null;
+  quantity: number;
+}
 
+function stockKey(line: { product_id: string; variant_id: string | null }): string {
+  return line.variant_id ?? line.product_id;
+}
+
+/**
+ * Normalise un panier : lignes invalides signalées, mêmes articles cumulés
+ * (deux lignes sur le même article valent une), et tri par clé stable —
+ * deux règlements qui verrouillent les mêmes articles le font dans le
+ * même ordre, donc jamais en interblocage.
+ */
+function normalizeLines(
+  items: unknown,
+): { ok: true; lines: StockLine[] } | { ok: false; result: Exclude<ReserveStockResult, { ok: true }> } {
+  if (!Array.isArray(items)) return { ok: false, result: { ok: false, reason: "invalid_items" } };
+  const byKey = new Map<string, StockLine>();
   for (const raw of items) {
     const productId = readString(raw, "product_id");
     const variantId = readString(raw, "variant_id");
     const quantity = readInt(raw, "quantity") ?? 0;
-
-    if (quantity <= 0) {
-      return { ok: false, reason: "invalid_quantity", product_id: productId ?? "" };
+    if (quantity <= 0 || !productId) {
+      return { ok: false, result: { ok: false, reason: "invalid_quantity", product_id: productId ?? "" } };
     }
+    const line: StockLine = { product_id: productId, variant_id: variantId, quantity };
+    const existing = byKey.get(stockKey(line));
+    if (existing) existing.quantity += quantity;
+    else byKey.set(stockKey(line), line);
+  }
+  return { ok: true, lines: [...byKey.values()].sort((a, b) => stockKey(a).localeCompare(stockKey(b))) };
+}
 
-    if (variantId) {
+/**
+ * Fenêtre pendant laquelle une commande en attente compte comme « en cours
+ * de paiement » : les sessions Stripe expirent à 30 min et un paiement
+ * Mobile Money se fait en quelques minutes. Au-delà, le panier est réputé
+ * abandonné et ne bloque plus personne.
+ */
+export const PENDING_HOLD_MS = 30 * 60 * 1000;
+
+/**
+ * Unités déjà engagées par des commandes en attente récentes de la
+ * boutique, par article. C'est une réservation douce : rien n'est
+ * décrémenté, un panier abandonné libère de lui-même au bout de 30 min, et
+ * une commande fantôme ne peut bloquer un article que ce temps-là.
+ */
+async function pendingUnits(shopId: string, now: Date): Promise<Map<string, number>> {
+  const rows = await prisma.order.findMany({
+    where: {
+      shopId,
+      paymentStatus: "pending",
+      stockReservedAt: null,
+      createdAt: { gt: new Date(now.getTime() - PENDING_HOLD_MS) },
+    },
+    select: { items: true },
+  });
+  const units = new Map<string, number>();
+  for (const row of rows) {
+    const normalized = normalizeLines(row.items);
+    if (!normalized.ok) continue;
+    for (const line of normalized.lines) {
+      units.set(stockKey(line), (units.get(stockKey(line)) ?? 0) + line.quantity);
+    }
+  }
+  return units;
+}
+
+/**
+ * Lecture seule : le panier est-il servable maintenant ? Même forme de
+ * résultat que `reserveStock`, sans verrou ni écriture. Le stock réel est
+ * diminué des unités engagées par les commandes en attente récentes de la
+ * boutique (voir `pendingUnits`) : un vendeur qui a une pièce n'en vend pas
+ * trente pendant un live. Deux acheteurs peuvent encore passer au même
+ * instant pour le dernier exemplaire : c'est le règlement qui tranche.
+ */
+export async function checkStockAvailability(
+  items: unknown,
+  options: { shopId?: string; now?: Date } = {},
+): Promise<ReserveStockResult> {
+  const normalized = normalizeLines(items);
+  if (!normalized.ok) return normalized.result;
+
+  const held = options.shopId
+    ? await pendingUnits(options.shopId, options.now ?? new Date())
+    : new Map<string, number>();
+
+  for (const line of normalized.lines) {
+    const engaged = held.get(stockKey(line)) ?? 0;
+
+    if (line.variant_id) {
       const variant = await prisma.productVariant.findUnique({
-        where: { id: variantId },
+        where: { id: line.variant_id },
         select: { stockQuantity: true, product: { select: { name: true } } },
       });
-      if (!variant) return { ok: false, reason: "variant_not_found", variant_id: variantId };
-      if (variant.stockQuantity !== null && variant.stockQuantity < quantity) {
+      if (!variant) return { ok: false, reason: "variant_not_found", variant_id: line.variant_id };
+      if (variant.stockQuantity !== null && variant.stockQuantity - engaged < line.quantity) {
         return {
           ok: false,
           reason: "insufficient_stock",
-          product_id: productId ?? "",
-          variant_id: variantId,
+          product_id: line.product_id,
+          variant_id: line.variant_id,
           product_name: variant.product.name,
-          available: variant.stockQuantity,
-          requested: quantity,
+          available: Math.max(0, variant.stockQuantity - engaged),
+          requested: line.quantity,
         };
       }
       continue;
     }
 
     const product = await prisma.product.findUnique({
-      where: { id: productId ?? "" },
+      where: { id: line.product_id },
       select: { stockQuantity: true, name: true },
     });
-    if (!product) return { ok: false, reason: "product_not_found", product_id: productId ?? "" };
-    if (product.stockQuantity !== null && product.stockQuantity < quantity) {
+    if (!product) return { ok: false, reason: "product_not_found", product_id: line.product_id };
+    if (product.stockQuantity !== null && product.stockQuantity - engaged < line.quantity) {
       return {
         ok: false,
         reason: "insufficient_stock",
-        product_id: productId ?? "",
+        product_id: line.product_id,
         product_name: product.name,
-        available: product.stockQuantity,
-        requested: quantity,
+        available: Math.max(0, product.stockQuantity - engaged),
+        requested: line.quantity,
       };
     }
   }
@@ -258,14 +334,14 @@ export async function claimStock(
   tx: Prisma.TransactionClient,
   items: unknown,
 ): Promise<StockShortfall[]> {
-  if (!Array.isArray(items)) return [];
+  const normalized = normalizeLines(items);
+  if (!normalized.ok) return [];
   const shortfalls: StockShortfall[] = [];
 
-  for (const raw of items) {
-    const productId = readString(raw, "product_id");
-    const variantId = readString(raw, "variant_id");
-    const quantity = readInt(raw, "quantity") ?? 0;
-    if (quantity <= 0 || !productId) continue;
+  for (const line of normalized.lines) {
+    const productId = line.product_id;
+    const variantId = line.variant_id;
+    const quantity = line.quantity;
 
     if (variantId) {
       const rows = await tx.$queryRaw<Array<{ stock_quantity: number | null; name: string }>>`

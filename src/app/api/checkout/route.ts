@@ -399,9 +399,11 @@ export async function POST(request: NextRequest) {
     );
 
     // -- Stock : vérification seule -------------------------------------------
-    // Rien n'est réservé ici : le stock est prélevé au règlement, sous
-    // verrou (settlePaidOrder). Une commande en attente n'immobilise donc
-    // plus rien, quel que soit le nombre de paniers fantômes.
+    // Rien n'est décrémenté ici : le stock est prélevé au règlement, sous
+    // verrou (settlePaidOrder). Les commandes en attente de moins de 30 min
+    // de la boutique comptent comme engagées (réservation douce) : un panier
+    // fantôme ne bloque un article que ce temps-là, et un vendeur qui a une
+    // pièce n'en vend pas trente pendant un live.
     const stockPayload = items.map((it) => ({
       product_id: it.product_id,
       variant_id: it.variant_id ?? null,
@@ -410,7 +412,7 @@ export async function POST(request: NextRequest) {
 
     let reservation: Awaited<ReturnType<typeof checkStockAvailability>>;
     try {
-      reservation = await checkStockAvailability(stockPayload);
+      reservation = await checkStockAvailability(stockPayload, { shopId });
     } catch (error) {
       console.error("[checkout] stock check error:", error);
       await releasePromo();

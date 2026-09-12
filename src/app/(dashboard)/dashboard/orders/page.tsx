@@ -35,8 +35,8 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   // Le webhook Genius Pay peut ne jamais arriver — c'est arrivé au premier
   // paiement réel en production. L'ouverture de cette page est le moment
   // naturel pour retomber sur nos pieds : le vendeur voit l'état réel de ses
-  // commandes plutôt qu'un « en attente » figé, et le stock d'un panier
-  // abandonné repart à la vente.
+  // commandes plutôt qu'un « en attente » figé, et un panier abandonné est
+  // annulé (le stock, lui, n'est prélevé qu'au règlement).
   //
   // Plafonné dans le temps : si Genius Pay est lent, la page s'affiche quand
   // même avec les données qu'on a.
