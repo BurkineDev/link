@@ -173,3 +173,13 @@ export function nsnHint(iso2: string | null | undefined): string | null {
   const lengths = [...entry.nsn].sort((a, b) => a - b);
   return lengths.length === 1 ? `${lengths[0]} chiffres` : `${lengths.slice(0, -1).join(", ")} ou ${lengths.at(-1)} chiffres`;
 }
+
+/** Pays d'un numéro E.164 (« +22670123456 » → BF), par indicatif le plus long. */
+export function iso2FromE164(value: string | null | undefined): string | null {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const match = [...DIAL_CODES]
+    .sort((a, b) => b.dialCode.length - a.dialCode.length)
+    .find((entry) => digits.startsWith(entry.dialCode.slice(1)));
+  return match?.iso2 ?? null;
+}

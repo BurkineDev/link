@@ -35,7 +35,7 @@ import { join } from "node:path";
 /** Endpoints Neon de la branche `production` du projet `biolien-production`. */
 export const DEFAULT_PRODUCTION_ENDPOINTS: readonly string[] = ["ep-dawn-tree-b2sxokvu"];
 
-/** Fichiers d'environnement locaux que Next et dotenv chargent. */
+/** Fichiers d'environnement locaux que Next et dotenv chargent (voir `defaultHasLocalEnvFile`). */
 export const LOCAL_ENV_FILES: readonly string[] = [
   ".env",
   ".env.local",
@@ -113,9 +113,21 @@ export function isProductionDatabaseUrl(
   return id !== null && productionEndpointIds(env).includes(id);
 }
 
+/**
+ * Chemins écrits en littéraux, un par fichier : le traceur de fichiers de
+ * Next (output tracing) ne sait pas résoudre un chemin construit dans une
+ * boucle et embarquerait alors tout le projet dans la fonction Vercel.
+ */
 function defaultHasLocalEnvFile(): boolean {
   const cwd = process.cwd();
-  return LOCAL_ENV_FILES.some((file) => existsSync(join(cwd, file)));
+  return (
+    existsSync(join(cwd, ".env")) ||
+    existsSync(join(cwd, ".env.local")) ||
+    existsSync(join(cwd, ".env.development")) ||
+    existsSync(join(cwd, ".env.development.local")) ||
+    existsSync(join(cwd, ".env.production")) ||
+    existsSync(join(cwd, ".env.production.local"))
+  );
 }
 
 /**

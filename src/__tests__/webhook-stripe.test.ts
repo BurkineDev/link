@@ -62,7 +62,11 @@ const mockPrisma = {
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
+const mockRecordRefund = jest.fn<Promise<unknown>, unknown[]>(async () => ({ recorded: true, clawback: 95, refundedTotal: 100, full: false }));
+const mockReverseChargeback = jest.fn<Promise<unknown>, unknown[]>(async () => ({ recorded: true, amount: 95 }));
 jest.mock("@/lib/db/orders", () => ({
+  recordOrderRefund: (...args: unknown[]) => mockRecordRefund(...args),
+  reverseChargeback: (...args: unknown[]) => mockReverseChargeback(...args),
   settlePaidOrder: jest.fn(async (orderId: string, ref: string, provider: string) => {
     _settleResult = { p_order_id: orderId, p_payment_ref: ref, p_payment_provider: provider };
     return { settled: true };
@@ -84,6 +88,9 @@ jest.mock("@/lib/stripe", () => {
           if (_constructThrows) throw new Error("invalid signature");
           return _event;
         },
+      },
+      charges: {
+        retrieve: jest.fn(async (id: string) => ({ id, metadata: { orderId: ORDER_ID } })),
       },
     }),
   };
@@ -165,6 +172,8 @@ beforeEach(() => {
   _constructThrows = false;
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
   mockNotify.mockClear();
+  mockRecordRefund.mockClear();
+  mockReverseChargeback.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -264,5 +273,56 @@ describe("POST /api/webhooks/stripe", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
+  });
+  // Remboursements et litiges : contre-passation du net vendeur.
+  test("charge.refunded contre-passe le net vendeur avec le cumul remboursé", async () => {
+    _event = {
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", amount_refunded: 5000, currency: "xof", metadata: { orderId: ORDER_ID } } },
+    };
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect(mockRecordRefund).toHaveBeenCalledWith(ORDER_ID, {
+      amount: 5000,
+      cumulative: true,
+      reference: "ch_1:refund:5000",
+      provider: "stripe",
+    });
+  });
+
+  test("charge.refunded sans orderId est ignoré", async () => {
+    _event = { type: "charge.refunded", data: { object: { id: "ch_2", amount_refunded: 5000, currency: "xof", metadata: {} } } };
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect(mockRecordRefund).not.toHaveBeenCalled();
+  });
+
+  test("charge.dispute.created retient le montant contesté, charge.dispute.closed gagné le rend", async () => {
+    _event = {
+      type: "charge.dispute.created",
+      data: { object: { id: "dp_1", charge: "ch_1", amount: 5000, currency: "xof", status: "needs_response" } },
+    };
+    expect((await POST(makeRequest())).status).toBe(200);
+    expect(mockRecordRefund).toHaveBeenCalledWith(ORDER_ID, {
+      amount: 5000,
+      reference: "dp_1",
+      provider: "stripe",
+      kind: "chargeback",
+    });
+
+    _event = {
+      type: "charge.dispute.closed",
+      data: { object: { id: "dp_1", charge: "ch_1", amount: 5000, currency: "xof", status: "won" } },
+    };
+    expect((await POST(makeRequest())).status).toBe(200);
+    expect(mockReverseChargeback).toHaveBeenCalledWith(ORDER_ID, { reference: "dp_1", provider: "stripe" });
+
+    _event = {
+      type: "charge.dispute.closed",
+      data: { object: { id: "dp_1", charge: "ch_1", amount: 5000, currency: "xof", status: "lost" } },
+    };
+    mockReverseChargeback.mockClear();
+    expect((await POST(makeRequest())).status).toBe(200);
+    expect(mockReverseChargeback).not.toHaveBeenCalled();
   });
 });

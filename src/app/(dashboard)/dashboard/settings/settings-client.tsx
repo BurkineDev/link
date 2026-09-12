@@ -1354,8 +1354,12 @@ export function SettingsClient({
                     Mastercard) et Mobile Money (Wave, Orange, MTN, Moov). La
                     configuration des moyens de paiement est gérée par
                     l&apos;équipe Bio-Lien — tu n&apos;as rien à installer.
-                    Les fonds sont reversés sur le compte que tu fourniras à
-                    l&apos;équipe.
+                    Les fonds te sont reversés sur le compte Mobile Money ou
+                    bancaire que tu renseignes dans{" "}
+                    <Link href="/dashboard/payments#reversements" className="font-medium underline underline-offset-2">
+                      Paiements → Reversements
+                    </Link>
+                    .
                   </p>
                 </div>
               </>

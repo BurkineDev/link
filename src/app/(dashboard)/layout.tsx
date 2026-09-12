@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { isAdminEmail } from "@/lib/admin";
+import { OPEN_PAYOUT_STATUSES } from "@/lib/payouts/config";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, BottomNav } from "@/components/dashboard/sidebar";
 import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
@@ -34,6 +36,11 @@ export default async function DashboardLayout({
   const reqHeaders = await headers();
   const pathname = reqHeaders.get("x-pathname") ?? "";
   const isOnboarding = pathname === "/dashboard/onboarding";
+  const isAdmin = isAdminEmail(user.email);
+  // Un compte de l'équipe sans boutique doit pouvoir traiter les reversements
+  // sans passer par l'onboarding vendeur.
+  const isTeamArea =
+    isAdmin && (pathname.startsWith("/dashboard/admin") || pathname === "/dashboard/more");
 
   const [profile, shop] = await Promise.all([
     prisma.profile.findUnique({
@@ -51,10 +58,16 @@ export default async function DashboardLayout({
     }),
   ]);
 
+  // Demandes de reversement en attente : l'équipe doit les voir sans ouvrir
+  // sa boîte mail.
+  const pendingPayouts = isAdmin
+    ? await prisma.payout.count({ where: { status: { in: [...OPEN_PAYOUT_STATUSES] } } })
+    : 0;
+
   // Un vendeur qui n'a pas terminé son onboarding est ramené dessus, quelle
   // que soit la page du tableau de bord demandée. Ce contrôle vivait dans le
   // proxy ; il est ici parce que c'est le seul endroit qui lit la base.
-  if (!isOnboarding && !profile?.onboardingCompleted) {
+  if (!isOnboarding && !isTeamArea && !profile?.onboardingCompleted) {
     redirect("/dashboard/onboarding");
   }
 
@@ -81,7 +94,12 @@ export default async function DashboardLayout({
       <BrandBackdrop />
       {/* Desktop sidebar */}
       <div className="relative z-10 hidden md:flex">
-        <Sidebar shopSlug={shop?.slug} shopName={shop?.name} />
+        <Sidebar
+          shopSlug={shop?.slug}
+          shopName={shop?.name}
+          isAdmin={isAdmin}
+          pendingPayouts={pendingPayouts}
+        />
       </div>
 
       {/* Main content area */}

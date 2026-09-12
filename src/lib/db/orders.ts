@@ -469,3 +469,166 @@ function emptyToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : null;
 }
+
+// ---------------------------------------------------------------------------
+// Remboursements et litiges : contre-passation du net vendeur
+// ---------------------------------------------------------------------------
+
+/** Types de lignes comptables qui corrigent le net vendeur après coup. */
+export const LEDGER_ADJUSTMENT_TYPES = ["refund", "chargeback", "chargeback_reversal"] as const;
+export type LedgerAdjustmentType = (typeof LEDGER_ADJUSTMENT_TYPES)[number];
+
+export type RefundResult =
+  | { recorded: true; clawback: number; refundedTotal: number; full: boolean }
+  | { recorded: false; reason: "not_found" | "not_paid" | "already_recorded" | "nothing_to_refund" };
+
+/**
+ * Enregistre un remboursement (ou un litige carte) sur une commande payée :
+ * la part du net vendeur correspondante est contre-passée dans le registre,
+ * de sorte que le solde reversable redescende. Sans cela, la plateforme
+ * rembourse l'acheteur ET verse le vendeur.
+ *
+ * `amount` est le montant rendu à l'acheteur pour CE remboursement (ou le
+ * montant contesté) ; avec `cumulative: true`, c'est le total remboursé à
+ * ce jour tel que le prestataire le rapporte (Stripe `amount_refunded`), et
+ * seule la différence avec ce qui est déjà enregistré est contre-passée.
+ * Idempotent sur (commande, type, référence).
+ */
+export async function recordOrderRefund(
+  orderId: string,
+  input: {
+    amount: number;
+    reference: string;
+    provider: PaymentProvider;
+    kind?: "refund" | "chargeback";
+    cumulative?: boolean;
+    publicMessage?: string;
+  },
+): Promise<RefundResult> {
+  const kind = input.kind ?? "refund";
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      select id from public.orders where id = ${orderId}::uuid for update
+    `;
+    if (locked.length === 0) return { recorded: false, reason: "not_found" } as const;
+
+    const order = await tx.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { id: true, shopId: true, totalAmount: true, currency: true, paymentStatus: true },
+    });
+    if (order.paymentStatus !== "paid" && order.paymentStatus !== "partially_refunded") {
+      return { recorded: false, reason: "not_paid" } as const;
+    }
+
+    const rows = await tx.transactionLedger.findMany({
+      where: { orderId, type: { in: ["seller_net", "refund", "chargeback", "chargeback_reversal"] } },
+      select: { type: true, amount: true, reference: true, metadata: true },
+    });
+
+    if (rows.some((row) => row.type === kind && row.reference === input.reference)) {
+      return { recorded: false, reason: "already_recorded" } as const;
+    }
+
+    const sellerNet = rows
+      .filter((row) => row.type === "seller_net")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+    const alreadyClawedBack = rows
+      .filter((row) => row.type !== "seller_net")
+      .reduce((sum, row) => sum - Number(row.amount), 0);
+    const alreadyRefunded = rows
+      .filter((row) => row.type === "refund")
+      .reduce((sum, row) => {
+        const meta = row.metadata as { refundedAmount?: unknown } | null;
+        return sum + (typeof meta?.refundedAmount === "number" ? meta.refundedAmount : 0);
+      }, 0);
+
+    const total = Number(order.totalAmount);
+    const increment = input.cumulative ? input.amount - alreadyRefunded : input.amount;
+    if (increment <= 0) return { recorded: false, reason: "nothing_to_refund" } as const;
+
+    // Part du net vendeur proportionnelle au montant rendu, bornée par ce
+    // qui reste à contre-passer.
+    const share = total > 0 ? Math.min(1, increment / total) : 1;
+    const clawback = Math.max(
+      0,
+      Math.min(roundToCents(sellerNet * share), roundToCents(sellerNet - alreadyClawedBack)),
+    );
+
+    await tx.transactionLedger.create({
+      data: {
+        shopId: order.shopId,
+        orderId,
+        type: kind,
+        amount: -clawback,
+        currency: order.currency,
+        provider: input.provider,
+        reference: input.reference,
+        metadata: { refundedAmount: increment, kind },
+      },
+    });
+
+    if (kind === "refund") {
+      const refundedTotal = roundToCents(alreadyRefunded + increment);
+      const full = refundedTotal >= total;
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          paymentStatus: full ? "refunded" : "partially_refunded",
+          ...(full ? { status: "refunded" } : {}),
+        },
+      });
+      await tx.orderStatusEvent.create({
+        data: {
+          orderId,
+          status: full ? "refunded" : "confirmed",
+          publicMessage:
+            input.publicMessage ??
+            (full ? "Commande remboursée." : "Remboursement partiel enregistré."),
+        },
+      });
+      return { recorded: true, clawback, refundedTotal, full } as const;
+    }
+
+    return { recorded: true, clawback, refundedTotal: alreadyRefunded, full: false } as const;
+  });
+}
+
+/**
+ * Litige carte gagné : la retenue `chargeback` est annulée par une ligne
+ * inverse. Idempotent sur la référence du litige.
+ */
+export async function reverseChargeback(
+  orderId: string,
+  input: { reference: string; provider: PaymentProvider },
+): Promise<{ recorded: boolean; amount: number }> {
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      select id from public.orders where id = ${orderId}::uuid for update
+    `;
+    if (locked.length === 0) return { recorded: false, amount: 0 };
+
+    const rows = await tx.transactionLedger.findMany({
+      where: { orderId, type: { in: ["chargeback", "chargeback_reversal"] }, reference: input.reference },
+      select: { type: true, amount: true, shopId: true, currency: true },
+    });
+    const held = rows.find((row) => row.type === "chargeback");
+    if (!held || rows.some((row) => row.type === "chargeback_reversal")) {
+      return { recorded: false, amount: 0 };
+    }
+
+    const amount = Math.abs(Number(held.amount));
+    await tx.transactionLedger.create({
+      data: {
+        shopId: held.shopId,
+        orderId,
+        type: "chargeback_reversal",
+        amount,
+        currency: held.currency,
+        provider: input.provider,
+        reference: input.reference,
+        metadata: { kind: "chargeback_reversal" },
+      },
+    });
+    return { recorded: true, amount };
+  });
+}
