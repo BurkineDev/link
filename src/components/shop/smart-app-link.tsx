@@ -8,19 +8,32 @@ import {
   openNativeApp,
 } from "@/lib/links/app-link";
 
-type SmartAppLinkProps = ComponentPropsWithoutRef<"a">;
+type SmartAppLinkProps = ComponentPropsWithoutRef<"a"> & {
+  /**
+   * Route serveur `/go/<id>` à mettre dans l'ancre à la place de l'URL web :
+   * sans JavaScript (ou avant qu'il ne soit chargé), c'est le serveur qui
+   * décide app ou web et qui compte le clic. `href` reste la vraie
+   * destination, utilisée pour reconnaître l'app et pour le tap intercepté.
+   */
+  goHref?: string;
+  /** Appelé quand le tap est intercepté côté client (l'ancre n'est pas suivie). */
+  onNativeOpen?: () => void;
+};
 
 /**
  * Lien sortant qui laisse iOS/Android ouvrir l'application associée.
  *
- * L'ancre garde toujours une URL web valide pour fonctionner sans JavaScript.
- * Sur mobile, les destinations disposant d'un schéma natif sont tentées lors
- * du tap ; sur Android, une app sans schéma mais au paquet connu (TikTok,
+ * L'ancre garde toujours une URL valide pour fonctionner sans JavaScript :
+ * l'URL web, ou la route serveur `/go/<id>` quand elle est fournie. Sur
+ * mobile, les destinations disposant d'un schéma natif sont tentées lors du
+ * tap ; sur Android, une app sans schéma mais au paquet connu (TikTok,
  * Facebook, Messenger…) est forcée par intent HTTPS ; les autres utilisent
  * leur Universal Link / App Link HTTPS.
  */
 export function SmartAppLink({
   href,
+  goHref,
+  onNativeOpen,
   target,
   rel,
   onClick,
@@ -51,6 +64,7 @@ export function SmartAppLink({
     }
 
     event.preventDefault();
+    onNativeOpen?.();
     openNativeApp(destination.nativeUrl, destination.webUrl, {
       androidPackage: destination.androidPackage,
       userAgent: navigator.userAgent,
@@ -60,7 +74,7 @@ export function SmartAppLink({
   return (
     <a
       {...props}
-      href={rawHref ? destination.webUrl : undefined}
+      href={rawHref ? (goHref ?? destination.webUrl) : undefined}
       // target=_blank is precisely what traps visitors in many in-app
       // browsers. Known app links stay in the current browsing context.
       target={destination.opensInApp ? undefined : target}

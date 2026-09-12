@@ -29,3 +29,15 @@ export function blockClickEndpoint(blockId: string): string {
     ? `/api/shop-links/${blockId.slice(LEGACY_LINK_PREFIX.length)}/click`
     : `/api/blocks/${blockId}/click`;
 }
+
+/**
+ * Adresse de la route serveur `/go/<id>` d'un bloc lien : la décision « app
+ * ou web » y est prise avant toute hydratation, et le clic y est compté.
+ * Un bloc synthétisé renvoie à son `shop_links` d'origine.
+ */
+export function blockGoHref(blockId: string): string {
+  const id = blockId.startsWith(LEGACY_LINK_PREFIX)
+    ? blockId.slice(LEGACY_LINK_PREFIX.length)
+    : blockId;
+  return `/go/${id}`;
+}
