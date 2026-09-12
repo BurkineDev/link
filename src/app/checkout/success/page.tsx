@@ -13,6 +13,9 @@ import {
   Mail,
   MessageCircle,
   Clock,
+  Download,
+  PackageSearch,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +47,10 @@ interface OrderDetails {
   shop_name?: string;
   shop_slug?: string;
   shop_whatsapp?: string | null;
+  /** Présent une fois la commande payée : lien de suivi public. */
+  tracking_token?: string | null;
+  /** Fichiers numériques achetés, une fois la commande payée. */
+  downloads?: Array<{ token: string; file_name: string | null; expires_at: string | null }>;
 }
 
 type VerifyState =
@@ -319,9 +326,29 @@ function SuccessContent() {
             `Référence : #${order.id.slice(0, 8).toUpperCase()}`,
             `Total : ${formatPrice(order.total_amount)}`,
             `Nom : ${order.buyer_name}`,
+            ...(order.tracking_token
+              ? [`Suivi : ${typeof window !== "undefined" ? window.location.origin : ""}/orders/track/${order.tracking_token}`]
+              : []),
           ].join("\n"),
         )
       : null;
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const trackingUrl = order.tracking_token ? `${origin}/orders/track/${order.tracking_token}` : null;
+  const downloads = order.downloads ?? [];
+  // « M'envoyer le lien sur WhatsApp » : wa.me sans destinataire ouvre le
+  // choix du contact ; l'acheteur se l'envoie à lui-même ou à un proche.
+  // C'est le seul canal dont on est sûr qu'il l'a : l'e-mail est optionnel
+  // dans les faits (faute de frappe, adresse jetable).
+  const selfWaLink = trackingUrl
+    ? `https://wa.me/?text=${encodeURIComponent(
+        [
+          `Ma commande #${order.id.slice(0, 8).toUpperCase()} chez ${order.shop_name ?? "Bio-Lien"}`,
+          `Suivi : ${trackingUrl}`,
+          ...downloads.map((d) => `${d.file_name ?? "Fichier"} : ${origin}/api/downloads/${d.token}`),
+        ].join("\n"),
+      )}`
+    : null;
 
   function formatPrice(amount: number) {
     const fmt =
@@ -359,9 +386,9 @@ function SuccessContent() {
       >
         <h1 className="mb-2 text-2xl font-bold">Paiement réussi !</h1>
         <p className="mb-8 text-muted-foreground">
-          Merci <strong>{order.buyer_name}</strong>. Votre commande a bien été
-          enregistrée. Le vendeur en a été informé et vous contactera pour la
-          suite. Conservez votre numéro de référence ci-dessous.
+          Merci <strong>{order.buyer_name}</strong>. Ta commande est enregistrée
+          et le vendeur est prévenu. Tout ce qu&apos;il te faut est ici : ta
+          référence, ton suivi{order.downloads?.length ? " et tes fichiers" : ""}.
         </p>
       </motion.div>
 
@@ -431,6 +458,58 @@ function SuccessContent() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ── Ce que l'acheteur emporte : suivi et fichiers, à l'écran ── */}
+      {(trackingUrl || downloads.length > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="mt-4 space-y-3 text-left"
+        >
+          {downloads.length > 0 && (
+            <Card>
+              <CardContent className="space-y-2 pt-5">
+                <p className="text-sm font-semibold">
+                  {downloads.length > 1 ? "Tes fichiers" : "Ton fichier"}
+                </p>
+                {downloads.map((d) => (
+                  <a
+                    key={d.token}
+                    href={`/api/downloads/${d.token}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium hover:bg-muted"
+                  >
+                    <span className="truncate">{d.file_name ?? "Fichier numérique"}</span>
+                    <Download className="size-4 shrink-0" aria-hidden />
+                  </a>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Liens personnels, valables quelques jours. Ils sont aussi sur ta page de suivi.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {trackingUrl && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button asChild variant="outline" className="h-12 flex-1 gap-2">
+                <a href={trackingUrl}>
+                  <PackageSearch className="size-4" />
+                  Suivre ma commande
+                </a>
+              </Button>
+              {selfWaLink && (
+                <Button asChild variant="outline" className="h-12 flex-1 gap-2">
+                  <a href={selfWaLink} target="_blank" rel="noopener noreferrer">
+                    <Copy className="size-4" />
+                    M&apos;envoyer le lien sur WhatsApp
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* ── Buyer relay: confirm the order in the seller's WhatsApp ── */}
       {/* Works with zero API setup, matches how buyers already talk to     */}
