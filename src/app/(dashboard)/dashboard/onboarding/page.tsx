@@ -52,6 +52,8 @@ import {
 import { usernameSchema } from "@/lib/validations/auth";
 import { safeNextPath } from "@/lib/validations/next-path";
 import { useDebounce } from "@/hooks/use-debounce";
+import { isValidE164 } from "@/lib/phone/dial-codes";
+import { WhatsAppNumberField } from "@/components/dashboard/whatsapp-number-field";
 import { useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -96,15 +98,14 @@ const step2Schema = z
     whatsappNumber: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.checkoutMode === "whatsapp") {
-      const digits = (data.whatsappNumber ?? "").replace(/\D/g, "");
-      if (digits.length < 8 || digits.length > 15) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["whatsappNumber"],
-          message: "Numéro WhatsApp invalide (avec indicatif pays)",
-        });
-      }
+    // Le champ ne renvoie qu'un numéro composé valide (indicatif + longueur
+    // du pays) ou "" : un numéro sans indicatif ne peut plus passer.
+    if (data.checkoutMode === "whatsapp" && !isValidE164(data.whatsappNumber ?? "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["whatsappNumber"],
+        message: "Choisis l'indicatif et saisis un numéro WhatsApp complet.",
+      });
     }
   });
 
@@ -220,6 +221,7 @@ export default function OnboardingPage() {
   });
 
   const watchedSlug = useWatch({ control: form2.control, name: "shopSlug" });
+  const watchedCurrency = useWatch({ control: form2.control, name: "currency" });
   const debouncedSlug = useDebounce(watchedSlug, 500);
   const watchedShopName = useWatch({ control: form2.control, name: "shopName" });
 
@@ -606,23 +608,20 @@ export default function OnboardingPage() {
 
                   {watchedCheckoutMode === "whatsapp" && (
                     <div className="space-y-2">
-                      <Label htmlFor="whatsappNumber">Ton numéro WhatsApp</Label>
-                      <Input
+                      <WhatsAppNumberField
                         id="whatsappNumber"
-                        type="tel"
-                        inputMode="tel"
-                        placeholder="+226 70 00 00 00"
-                        {...form2.register("whatsappNumber")}
-                        className="h-12"
+                        value={form2.getValues("whatsappNumber") ?? ""}
+                        onChange={(digits) =>
+                          form2.setValue("whatsappNumber", digits, { shouldValidate: true, shouldDirty: true })
+                        }
+                        currency={watchedCurrency}
+                        inputClassName="h-12"
                       />
                       {form2.formState.errors.whatsappNumber && (
                         <p className="text-sm text-destructive">
                           {form2.formState.errors.whatsappNumber.message}
                         </p>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        Inclure l&apos;indicatif pays (ex: +226 pour le Burkina, +221 pour le Sénégal).
-                      </p>
                     </div>
                   )}
 
