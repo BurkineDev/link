@@ -72,7 +72,47 @@ describe("getAppLinkDestination", () => {
       nativeUrl: null,
       appName: "LinkedIn",
       opensInApp: true,
+      androidPackage: "com.linkedin.android",
     });
+  });
+
+  it("TikTok : pas de schéma par nom d'utilisateur, mais le paquet Android pour l'intent HTTPS", () => {
+    expect(getAppLinkDestination("https://www.tiktok.com/@amy.creator")).toEqual({
+      webUrl: "https://www.tiktok.com/@amy.creator",
+      nativeUrl: null,
+      appName: "TikTok",
+      opensInApp: true,
+      androidPackage: "com.zhiliaoapp.musically",
+    });
+  });
+
+  it("Facebook : ouvre l'URL dans l'app (facewebmodal), profil, page ou publication", () => {
+    expect(getAppLinkDestination("https://www.facebook.com/wax.and.co")).toMatchObject({
+      nativeUrl: "fb://facewebmodal/f?href=https%3A%2F%2Fwww.facebook.com%2Fwax.and.co",
+      appName: "Facebook",
+      androidPackage: "com.facebook.katana",
+    });
+    expect(
+      getAppLinkDestination("https://www.facebook.com/wax.and.co/posts/123").nativeUrl,
+    ).toBe("fb://facewebmodal/f?href=https%3A%2F%2Fwww.facebook.com%2Fwax.and.co%2Fposts%2F123");
+    expect(getAppLinkDestination("https://www.facebook.com/").nativeUrl).toBeNull();
+  });
+
+  it("Messenger : m.me/<nom> et messenger.com/t/<nom> ouvrent le fil dans l'app", () => {
+    expect(getAppLinkDestination("https://m.me/wax.and.co")).toMatchObject({
+      nativeUrl: "fb-messenger://user-thread/wax.and.co",
+      appName: "Messenger",
+      androidPackage: "com.facebook.orca",
+    });
+    expect(getAppLinkDestination("https://www.messenger.com/t/wax.and.co").nativeUrl).toBe(
+      "fb-messenger://user-thread/wax.and.co",
+    );
+    expect(getAppLinkDestination("https://www.messenger.com/").nativeUrl).toBeNull();
+  });
+
+  it("Pinterest et Threads connaissent leur paquet Android sans schéma natif", () => {
+    expect(getAppLinkDestination("https://www.pinterest.com/amy/").androidPackage).toBe("com.pinterest");
+    expect(getAppLinkDestination("https://www.threads.net/@amy").androidPackage).toBe("com.instagram.barcelona");
   });
 
   it("ne traite pas un site inconnu comme une application", () => {
@@ -124,8 +164,17 @@ describe("Android : lien intent:// avec repli", () => {
     );
   });
 
-  it("refuse de transformer une URL http(s) : ce n'est pas un schéma d'app", () => {
+  it("ne transforme une URL http(s) que si le paquet est connu : intent HTTPS (App Link)", () => {
     expect(toAndroidIntentUrl("https://example.com", "https://example.com", null)).toBeNull();
+    expect(
+      toAndroidIntentUrl(
+        "https://www.tiktok.com/@amy.creator?lang=fr#section",
+        "https://www.tiktok.com/@amy.creator?lang=fr",
+        "com.zhiliaoapp.musically",
+      ),
+    ).toBe(
+      "intent://www.tiktok.com/@amy.creator?lang=fr#Intent;scheme=https;package=com.zhiliaoapp.musically;S.browser_fallback_url=https%3A%2F%2Fwww.tiktok.com%2F%40amy.creator%3Flang%3Dfr;end",
+    );
   });
 
   it("chaque app avec schéma natif connaît son paquet Android", () => {
@@ -149,8 +198,8 @@ describe("Android : lien intent:// avec repli", () => {
     expect(isAndroid("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari")).toBe(false);
   });
 
-  it("ne renseigne pas de paquet quand il n'y a pas de schéma natif", () => {
-    expect(getAppLinkDestination("https://www.linkedin.com/in/biolien").androidPackage).toBeNull();
+  it("ne renseigne pas de paquet pour un site inconnu", () => {
+    expect(getAppLinkDestination("https://example.com/biolien").androidPackage).toBeNull();
   });
 });
 

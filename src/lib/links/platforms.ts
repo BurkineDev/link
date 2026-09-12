@@ -98,7 +98,11 @@ export const SUPPORTED_APP_COUNT = APP_PLATFORMS.length;
 
 /** `www.` et les variantes mobiles ne changent pas la plateforme. */
 export function normalizeLinkHost(host: string): string {
-  return host.toLowerCase().replace(/^(www|m|mobile)\./, "");
+  const lower = host.toLowerCase();
+  const stripped = lower.replace(/^(www|m|mobile)\./, "");
+  // « m.me » (Messenger) n'est pas « me » avec un préfixe mobile : on ne
+  // retire le préfixe que s'il reste un vrai domaine derrière.
+  return stripped.includes(".") ? stripped : lower;
 }
 
 /** Hôte exact ou sous-domaine légitime, jamais une simple sous-chaîne. */

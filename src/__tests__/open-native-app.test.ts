@@ -78,3 +78,23 @@ test("iOS : si l'app a pris la main (page cachée), pas de repli web", () => {
   timers[0].cb();
   expect(assigned).toEqual(["instagram://user?username=x"]);
 });
+
+test("Android sans schéma natif mais avec paquet : intent HTTPS qui force l'app (TikTok)", () => {
+  openNativeApp(null, "https://www.tiktok.com/@amy.creator", {
+    androidPackage: "com.zhiliaoapp.musically",
+    userAgent: ANDROID,
+  });
+  expect(assigned).toEqual([
+    "intent://www.tiktok.com/@amy.creator#Intent;scheme=https;package=com.zhiliaoapp.musically;S.browser_fallback_url=https%3A%2F%2Fwww.tiktok.com%2F%40amy.creator;end",
+  ]);
+  expect(timers).toHaveLength(0);
+});
+
+test("iOS sans schéma natif : navigation web immédiate (Universal Link), sans minuterie", () => {
+  openNativeApp(null, "https://www.tiktok.com/@amy.creator", {
+    androidPackage: "com.zhiliaoapp.musically",
+    userAgent: IOS,
+  });
+  expect(assigned).toEqual(["https://www.tiktok.com/@amy.creator"]);
+  expect(timers).toHaveLength(0);
+});
