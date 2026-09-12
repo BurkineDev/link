@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,7 @@ import { Prisma } from "../../../../../prisma/generated/client/client";
 async function findOwnedProduct(productId: string, userId: string) {
   return prisma.product.findFirst({
     where: { id: productId, shop: { ownerId: userId } },
-    select: { id: true },
+    select: { id: true, shopId: true },
   });
 }
 
@@ -129,6 +130,7 @@ export async function PATCH(
       return updated;
     });
 
+    await revalidateShop(owned.shopId);
     return NextResponse.json({ product: serializeProduct(product) });
   } catch (error) {
     if (

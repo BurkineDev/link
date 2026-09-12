@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -107,6 +108,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     }
 
     const updated = await prisma.pageBlock.update({ where: { id }, data: patch });
+    await revalidateShop(block.shopId);
     return NextResponse.json({ block: serializePageBlock(updated) });
   } catch (error) {
     console.error("[api/blocks PATCH id]", error);
@@ -139,6 +141,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
       },
     });
 
+    await revalidateShop(block.shopId);
     return NextResponse.json({ block: serializePageBlock(copy) }, { status: 201 });
   } catch (error) {
     console.error("[api/blocks POST duplicate]", error);
@@ -156,6 +159,7 @@ export async function DELETE(_request: NextRequest, ctx: Ctx) {
     if (!block) return NextResponse.json({ error: "Bloc introuvable" }, { status: 404 });
 
     await prisma.pageBlock.delete({ where: { id } });
+    await revalidateShop(block.shopId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[api/blocks DELETE]", error);

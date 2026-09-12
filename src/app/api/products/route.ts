@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -174,6 +175,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await revalidateShop(shopId);
     return NextResponse.json(
       { product: serializeProduct(product) },
       { status: 201 },

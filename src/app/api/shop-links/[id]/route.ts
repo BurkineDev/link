@@ -1,3 +1,4 @@
+import { revalidateShop } from "@/lib/shops/revalidate";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
@@ -28,12 +29,11 @@ type Ctx = { params: Promise<{ id: string }> };
  * Sans RLS, c'est le seul contrôle d'accès : il doit rester avant toute
  * écriture.
  */
-async function ownsLink(linkId: string, userId: string): Promise<boolean> {
-  const link = await prisma.shopLink.findFirst({
+async function ownedLink(linkId: string, userId: string): Promise<{ shopId: string } | null> {
+  return prisma.shopLink.findFirst({
     where: { id: linkId, shop: { ownerId: userId } },
-    select: { id: true },
+    select: { shopId: true },
   });
-  return link !== null;
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
@@ -54,7 +54,8 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
   }
 
   try {
-    if (!(await ownsLink(id, user.id))) {
+    const owned = await ownedLink(id, user.id);
+    if (!owned) {
       return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
     }
 
@@ -71,6 +72,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       },
     });
 
+    await revalidateShop(owned.shopId);
     return NextResponse.json({ link: serializeShopLink(link) });
   } catch (error) {
     console.error("[api/shop-links PATCH] update error", error);
@@ -84,11 +86,13 @@ export async function DELETE(_request: NextRequest, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   try {
-    if (!(await ownsLink(id, user.id))) {
+    const owned = await ownedLink(id, user.id);
+    if (!owned) {
       return NextResponse.json({ error: "Lien introuvable" }, { status: 404 });
     }
 
     await prisma.shopLink.delete({ where: { id } });
+    await revalidateShop(owned.shopId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[api/shop-links DELETE] db error", error);
