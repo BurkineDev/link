@@ -117,10 +117,20 @@ function xUrl(url: URL): string | null {
 }
 
 /**
- * Paquets Android des apps pour lesquelles on tente un schéma natif. Sans
- * paquet, Chrome et les WebView Android ne savent pas quoi ouvrir ni où
- * retomber : un lien intent:// « package=… ; S.browser_fallback_url=… ; end »
- * ouvre l'app si elle est là, sinon l'URL de repli, sans page d'erreur.
+ * Paquets Android des apps que l'on sait ouvrir. Sans paquet, Chrome et les
+ * WebView Android ne savent pas quoi ouvrir ni où retomber : un lien
+ * intent:// « package=… ; S.browser_fallback_url=… ; end » ouvre l'app si
+ * elle est là, sinon l'URL de repli, sans page d'erreur.
+ *
+ * Deux familles :
+ *   - apps avec un schéma natif fiable (instagram://, whatsapp://…) : le
+ *     lien intent:// reprend ce schéma ;
+ *   - apps sans schéma exploitable depuis un nom d'utilisateur (TikTok ne
+ *     connaît que des identifiants numériques, LinkedIn, Pinterest, Threads)
+ *     ou dont le schéma iOS est incertain : le lien intent:// garde l'URL
+ *     HTTPS et force le paquet — c'est l'App Link vérifié de l'app, qui
+ *     marche aussi depuis le navigateur intégré de TikTok ou d'Instagram,
+ *     là où un simple tap sur l'URL reste coincé dans la WebView.
  */
 const ANDROID_PACKAGES: Record<string, string> = {
   instagram: "com.instagram.android",
@@ -131,7 +141,32 @@ const ANDROID_PACKAGES: Record<string, string> = {
   x: "com.twitter.android",
   snapchat: "com.snapchat.android",
   waze: "com.waze",
+  tiktok: "com.zhiliaoapp.musically",
+  facebook: "com.facebook.katana",
+  messenger: "com.facebook.orca",
+  linkedin: "com.linkedin.android",
+  pinterest: "com.pinterest",
+  threads: "com.instagram.barcelona",
 };
+
+function facebookUrl(url: URL): string | null {
+  // Pas de schéma par nom d'utilisateur (fb://profile/ exige un identifiant
+  // numérique) : l'app Facebook sait en revanche ouvrir n'importe quelle URL
+  // facebook.com dans sa propre vue.
+  const segment = firstSegment(url);
+  if (!segment) return null;
+  return `fb://facewebmodal/f?href=${encodeURIComponent(url.toString())}`;
+}
+
+function messengerUrl(url: URL): string | null {
+  // m.me/<nom> ou messenger.com/t/<nom> → fil de discussion avec la page.
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  const parts = url.pathname.split("/").filter(Boolean);
+  const name = host === "m.me" ? parts[0] : parts[0] === "t" ? parts[1] : null;
+  return isProfileSegment(name ?? null)
+    ? `fb-messenger://user-thread/${encodeURIComponent(name!)}`
+    : null;
+}
 
 /**
  * Schémas natifs documentés et stables pour les destinations les plus
@@ -163,6 +198,13 @@ function nativeUrlFor(platformId: string, url: URL): string | null {
     }
     case "waze":
       return url.pathname === "/ul" ? `waze://?${url.searchParams.toString()}` : null;
+    case "facebook":
+      return facebookUrl(url);
+    case "messenger":
+      return messengerUrl(url);
+    // TikTok : snssdk1233://user/profile/<uid> n'accepte qu'un identifiant
+    // numérique, jamais le @nom que colle le vendeur. Sur iOS, l'Universal
+    // Link HTTPS fait le travail ; sur Android, l'intent:// avec paquet.
     default:
       return null;
   }
@@ -183,11 +225,10 @@ export function getAppLinkDestination(raw: string): AppLinkDestination {
 
   try {
     const url = new URL(detected.url);
-    const nativeUrl = nativeUrlFor(detected.platformId, url);
     return {
       ...fallback,
-      nativeUrl,
-      androidPackage: nativeUrl ? (ANDROID_PACKAGES[detected.platformId] ?? null) : null,
+      nativeUrl: nativeUrlFor(detected.platformId, url),
+      androidPackage: ANDROID_PACKAGES[detected.platformId] ?? null,
     };
   } catch {
     return fallback;
@@ -211,7 +252,7 @@ export function isAndroid(userAgent: string): boolean {
 }
 
 /**
- * Convertit un schéma natif en lien intent:// Android.
+ * Convertit une adresse en lien intent:// Android.
  *
  * `instagram://user?username=x` devient
  * `intent://user?username=x#Intent;scheme=instagram;package=com.instagram.android;S.browser_fallback_url=<web>;end`.
@@ -220,18 +261,25 @@ export function isAndroid(userAgent: string): boolean {
  * la page par « ERR_UNKNOWN_URL_SCHEME » dans une WebView qui ne le relaie
  * pas — exactement le navigateur intégré de TikTok ou d'Instagram sur les
  * téléphones d'entrée de gamme — et la minuterie de repli meurt avec elle.
+ *
+ * Une URL HTTPS n'est convertie que si l'on connaît le paquet : l'intent
+ * garde alors `scheme=https` et force l'app par son App Link vérifié
+ * (`intent://www.tiktok.com/@x#Intent;scheme=https;package=com.zhiliaoapp.musically;…`).
+ * Sans paquet, une URL web reste une URL web.
  */
 export function toAndroidIntentUrl(
-  nativeUrl: string,
+  targetUrl: string,
   fallbackUrl: string,
   androidPackage: string | null,
 ): string | null {
-  const match = /^([a-z][a-z0-9+.-]*):(?:\/\/)?(.*)$/i.exec(nativeUrl);
+  const match = /^([a-z][a-z0-9+.-]*):(?:\/\/)?([^#]*)/i.exec(targetUrl);
   if (!match) return null;
   const [, scheme, rest] = match;
-  if (!scheme || scheme === "http" || scheme === "https") return null;
+  if (!scheme) return null;
+  const isWeb = scheme.toLowerCase() === "http" || scheme.toLowerCase() === "https";
+  if (isWeb && !androidPackage) return null;
   const parts = [
-    `scheme=${scheme}`,
+    `scheme=${isWeb ? "https" : scheme}`,
     androidPackage ? `package=${androidPackage}` : null,
     `S.browser_fallback_url=${encodeURIComponent(fallbackUrl)}`,
   ].filter(Boolean);
@@ -242,23 +290,35 @@ export function toAndroidIntentUrl(
  * Tente l'app, puis ouvre le web si la page est toujours visible.
  *
  * Sur Android, un lien intent:// porte lui-même son repli : on navigue et
- * le système décide. Sur iOS, il n'existe pas d'équivalent : on tente le
- * schéma, et si la page est toujours visible après un court délai, l'app
- * n'est pas là et on ouvre le web. Le changement de visibilité est le seul
+ * le système décide — avec le schéma natif quand il existe, avec l'URL
+ * HTTPS et le paquet sinon. Sur iOS, il n'existe pas d'équivalent : on
+ * tente le schéma, et si la page est toujours visible après un court délai,
+ * l'app n'est pas là et on ouvre le web. Le changement de visibilité est le seul
  * signal inter-navigateurs indiquant que l'application a pris la main. Tous
  * les listeners sont retirés afin de ne rien laisser vivre si l'utilisateur
  * revient plus tard sur la BioPage.
  */
 export function openNativeApp(
-  nativeUrl: string,
+  nativeUrl: string | null,
   fallbackUrl: string,
   options: { androidPackage?: string | null; userAgent?: string } = {},
 ): void {
   const ua = options.userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
 
   if (isAndroid(ua)) {
-    const intentUrl = toAndroidIntentUrl(nativeUrl, fallbackUrl, options.androidPackage ?? null);
+    // Sans schéma natif mais avec un paquet connu : intent HTTPS (App Link).
+    const intentUrl = toAndroidIntentUrl(
+      nativeUrl ?? fallbackUrl,
+      fallbackUrl,
+      options.androidPackage ?? null,
+    );
     window.location.assign(intentUrl ?? fallbackUrl);
+    return;
+  }
+
+  // iOS sans schéma natif : l'Universal Link HTTPS est la seule voie.
+  if (!nativeUrl) {
+    window.location.assign(fallbackUrl);
     return;
   }
 

@@ -103,4 +103,9 @@ describe("detectLink", () => {
     expect(detectLink("   ").recognized).toBe(false);
     expect(detectLink("pas une url du tout").recognized).toBe(false);
   });
+  it("reconnaît un lien Messenger m.me (le préfixe « m. » n'est pas un préfixe mobile ici)", () => {
+    const link = detectLink("https://m.me/wax.and.co");
+    expect(link).toMatchObject({ recognized: true, platformId: "messenger", label: "Messenger" });
+    expect(detectLink("https://m.facebook.com/wax.and.co").platformId).toBe("facebook");
+  });
 });

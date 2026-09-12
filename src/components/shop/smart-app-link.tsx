@@ -3,6 +3,7 @@
 import { useMemo, type ComponentPropsWithoutRef, type MouseEvent } from "react";
 import {
   getAppLinkDestination,
+  isAndroid,
   isMobileBrowser,
   openNativeApp,
 } from "@/lib/links/app-link";
@@ -14,7 +15,9 @@ type SmartAppLinkProps = ComponentPropsWithoutRef<"a">;
  *
  * L'ancre garde toujours une URL web valide pour fonctionner sans JavaScript.
  * Sur mobile, les destinations disposant d'un schéma natif sont tentées lors
- * du tap ; les autres apps utilisent leur Universal Link / App Link HTTPS.
+ * du tap ; sur Android, une app sans schéma mais au paquet connu (TikTok,
+ * Facebook, Messenger…) est forcée par intent HTTPS ; les autres utilisent
+ * leur Universal Link / App Link HTTPS.
  */
 export function SmartAppLink({
   href,
@@ -31,6 +34,9 @@ export function SmartAppLink({
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
+    const canDeepLink =
+      destination.nativeUrl !== null ||
+      (destination.androidPackage !== null && isAndroid(navigator.userAgent));
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
@@ -38,7 +44,7 @@ export function SmartAppLink({
       event.ctrlKey ||
       event.shiftKey ||
       event.altKey ||
-      !destination.nativeUrl ||
+      !canDeepLink ||
       !isMobileBrowser(navigator.userAgent, navigator.maxTouchPoints)
     ) {
       return;
