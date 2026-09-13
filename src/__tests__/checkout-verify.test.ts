@@ -37,7 +37,7 @@ const toRow = (o: Record<string, unknown>) => ({
   buyerPhone: null,
   status: o.status,
   paymentStatus: o.payment_status,
-  paymentProvider: "stripe",
+  paymentProvider: o.payment_provider ?? "stripe",
   paymentRef: "cs_test_123",
   totalAmount: o.total_amount,
   shippingAmount: 0,
@@ -271,5 +271,41 @@ describe("GET /api/checkout/verify", () => {
     expect(res.status).toBe(429);
     expect(mockPrisma.order.findFirst).not.toHaveBeenCalled();
     expect(mockRetrieveSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/checkout/verify — paiement à la livraison", () => {
+  const ORDER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const codRequest = (id = ORDER_ID) =>
+    new NextRequest(`http://localhost:3000/api/checkout/verify?provider=cash_on_delivery&order=${id}`);
+
+  test("montre la commande ferme, non payée, avec son suivi et sans donnée privée", async () => {
+    _order = { ...BASE_ORDER_DEFAULT(), id: ORDER_ID, status: "confirmed", payment_provider: "cash_on_delivery" };
+    const res = await GET(codRequest());
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.order).toMatchObject({
+      id: ORDER_ID,
+      status: "confirmed",
+      payment_status: "pending",
+      payment_provider: "cash_on_delivery",
+      tracking_token: "tok-001",
+      shop_name: "Boutique Test",
+    });
+    expect(json.order.buyer_email).toBeUndefined();
+    expect(mockRetrieveSession).not.toHaveBeenCalled();
+  });
+
+  test("répond 409 pour une commande annulée ou qui n'est pas COD", async () => {
+    _order = { ...BASE_ORDER_DEFAULT(), id: ORDER_ID, status: "cancelled", payment_provider: "cash_on_delivery" };
+    expect((await GET(codRequest())).status).toBe(409);
+    _order = { ...BASE_ORDER_DEFAULT(), id: ORDER_ID, payment_provider: "geniuspay" };
+    expect((await GET(codRequest())).status).toBe(409);
+  });
+
+  test("exige un identifiant de commande bien formé, 404 si inconnue", async () => {
+    expect((await GET(codRequest("nope"))).status).toBe(400);
+    _order = null;
+    expect((await GET(codRequest())).status).toBe(404);
   });
 });

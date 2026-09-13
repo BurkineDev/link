@@ -1,3 +1,4 @@
+import type { ShippingZoneRow } from "@/lib/shipping/zone-schema";
 import type { Prisma } from "../../../prisma/generated/client/client";
 
 /**
@@ -206,6 +207,7 @@ type ShopRowInput = {
   customDomainVerifiedAt: Date | null;
   showBioLienBadge: boolean;
   shippingEnabled: boolean;
+  cashOnDelivery: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -244,6 +246,7 @@ export function serializeShop(shop: ShopRowInput) {
     custom_domain_verified_at: dateToIso(shop.customDomainVerifiedAt),
     show_biolien_badge: shop.showBioLienBadge,
     shipping_enabled: shop.shippingEnabled,
+    cash_on_delivery: shop.cashOnDelivery,
     created_at: dateToIso(shop.createdAt),
     updated_at: dateToIso(shop.updatedAt),
   };
@@ -356,5 +359,35 @@ export function serializePromoCode(promo: PromoCodeRowInput) {
     is_active: promo.isActive,
     created_at: dateToIso(promo.createdAt),
     updated_at: dateToIso(promo.updatedAt),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Zones de livraison
+// ---------------------------------------------------------------------------
+
+export function serializeShippingZone(zone: {
+  id: string;
+  shopId: string;
+  name: string;
+  countries: string[];
+  rate: unknown;
+  freeAbove: unknown;
+  estimatedMin: number | null;
+  estimatedMax: number | null;
+  isActive: boolean;
+  currency: string;
+}): ShippingZoneRow {
+  return {
+    id: zone.id,
+    shop_id: zone.shopId,
+    name: zone.name,
+    countries: zone.countries,
+    rate: Number(zone.rate),
+    free_above: zone.freeAbove == null ? null : Number(zone.freeAbove),
+    estimated_min: zone.estimatedMin,
+    estimated_max: zone.estimatedMax,
+    is_active: zone.isActive,
+    currency: zone.currency,
   };
 }

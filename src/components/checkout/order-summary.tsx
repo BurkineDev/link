@@ -146,9 +146,19 @@ function ShippingLine({ quote, currency }: { quote: ShippingQuote; currency: Cur
     case "unavailable":
       return <span className="font-medium text-destructive">Indisponible pour ce pays</span>;
     case "free":
-      return <span className="font-medium text-[var(--success)]">Gratuite</span>;
+      return (
+        <>
+          <span className="font-medium text-[var(--success)]">Gratuite</span>
+          {quote.delay && <span className="block text-xs">{quote.delay}</span>}
+        </>
+      );
     case "paid":
-      return <>{formatPrice(quote.amount, currency)}</>;
+      return (
+        <>
+          {formatPrice(quote.amount, currency)}
+          {quote.delay && <span className="block text-xs">{quote.delay}</span>}
+        </>
+      );
   }
 }
 

@@ -21,6 +21,8 @@ export interface CheckoutShop {
   theme_color: string;
   currency: Currency;
   shipping_enabled: boolean;
+  /** Le vendeur accepte d'encaisser à la remise du colis. */
+  cash_on_delivery: boolean;
   /** Zones actives dans la devise de la boutique, ordre de création. */
   shipping_zones: ShippingZoneQuote[];
 }
@@ -52,10 +54,18 @@ export async function loadCheckoutShop(ref: string): Promise<CheckoutShop | null
       themeColor: true,
       currency: true,
       shippingEnabled: true,
+      cashOnDelivery: true,
       shippingZones: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
-        select: { countries: true, rate: true, freeAbove: true, currency: true },
+        select: {
+          countries: true,
+          rate: true,
+          freeAbove: true,
+          currency: true,
+          estimatedMin: true,
+          estimatedMax: true,
+        },
       },
     },
   });
@@ -69,12 +79,15 @@ export async function loadCheckoutShop(ref: string): Promise<CheckoutShop | null
     theme_color: shop.themeColor,
     currency: shop.currency as Currency,
     shipping_enabled: shop.shippingEnabled,
+    cash_on_delivery: shop.cashOnDelivery,
     shipping_zones: shop.shippingZones
       .filter((zone) => zone.currency === shop.currency)
       .map((zone) => ({
         countries: zone.countries,
         rate: Number(zone.rate),
         free_above: zone.freeAbove === null ? null : Number(zone.freeAbove),
+        estimated_min: zone.estimatedMin,
+        estimated_max: zone.estimatedMax,
       })),
   };
 }

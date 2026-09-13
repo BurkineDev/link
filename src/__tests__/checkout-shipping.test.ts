@@ -29,19 +29,22 @@ describe("quoteShipping", () => {
   });
 
   test("tarif de la zone, gratuit au-dessus du seuil ou à tarif nul, casse du pays indifférente", () => {
-    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "bf", subtotal: 5_000 })).toEqual({ kind: "paid", amount: 2_000 });
-    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "BF", subtotal: 20_000 })).toEqual({ kind: "free", amount: 0 });
-    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "CI", subtotal: 1 })).toEqual({ kind: "free", amount: 0 });
+    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "bf", subtotal: 5_000 })).toEqual({ kind: "paid", amount: 2_000, delay: null });
+    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "BF", subtotal: 20_000 })).toEqual({ kind: "free", amount: 0, delay: null });
+    expect(quoteShipping({ physical: true, shippingEnabled: true, zones: ZONES, country: "CI", subtotal: 1 })).toEqual({ kind: "free", amount: 0, delay: null });
+    // Délai indicatif quand le vendeur l'a renseigné.
+    const zones = [{ countries: ["SN"], rate: 1_000, free_above: null, estimated_min: 2, estimated_max: 4 }];
+    expect(quoteShipping({ physical: true, shippingEnabled: true, zones, country: "SN", subtotal: 1 })).toEqual({ kind: "paid", amount: 1_000, delay: "2 à 4 jours" });
     expect(findShippingZone(ZONES, "BF")).toBe(ZONES[0]);
   });
 });
 
 describe("checkoutTotal", () => {
   test("sous-total − remise + livraison chiffrée, jamais négatif", () => {
-    expect(checkoutTotal({ subtotal: 10_000, discount: 2_000, shipping: { kind: "paid", amount: 1_500 } })).toBe(9_500);
+    expect(checkoutTotal({ subtotal: 10_000, discount: 2_000, shipping: { kind: "paid", amount: 1_500, delay: null } })).toBe(9_500);
     expect(checkoutTotal({ subtotal: 10_000, shipping: { kind: "unknown" } })).toBe(10_000);
     expect(checkoutTotal({ subtotal: 10_000, shipping: { kind: "unavailable" } })).toBe(10_000);
-    expect(checkoutTotal({ subtotal: 1_000, discount: 5_000, shipping: { kind: "free", amount: 0 } })).toBe(0);
+    expect(checkoutTotal({ subtotal: 1_000, discount: 5_000, shipping: { kind: "free", amount: 0, delay: null } })).toBe(0);
     expect(shippingAmount({ kind: "none" })).toBe(0);
   });
 });

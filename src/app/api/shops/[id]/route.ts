@@ -54,6 +54,7 @@ const patchSchema = z
     intentions: z.array(z.string().max(50)).max(20).optional(),
     show_biolien_badge: z.boolean().optional(),
     shipping_enabled: z.boolean().optional(),
+    cash_on_delivery: z.boolean().optional(),
   })
   .strict()
   .refine((body) => Object.keys(body).length > 0, {
@@ -95,6 +96,7 @@ function toPrismaData(body: PatchBody): Prisma.ShopUpdateInput {
   set("intentions", body.intentions);
   set("showBioLienBadge", body.show_biolien_badge);
   set("shippingEnabled", body.shipping_enabled);
+  set("cashOnDelivery", body.cash_on_delivery);
   if (body.template_id !== undefined) {
     data.template = body.template_id
       ? { connect: { id: body.template_id } }

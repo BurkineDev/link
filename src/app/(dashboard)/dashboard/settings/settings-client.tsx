@@ -70,6 +70,7 @@ import {
   RotateCcw,
   MessageCircle,
   CreditCard,
+  Truck,
 } from "lucide-react";
 
 import { ThemePreview } from "@/components/dashboard/theme-preview";
@@ -79,11 +80,15 @@ import {
   type BioThemeId,
 } from "@/lib/bio-themes";
 import { LinksSection } from "@/components/dashboard/links-section";
+import { ShippingSection } from "@/components/dashboard/shipping-section";
 import { Switch } from "@/components/ui/switch";
+import type { ShippingZoneRow } from "@/lib/shipping/zone-schema";
 
 interface SettingsClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
+  /** Zones de livraison de la boutique, ordre de création. */
+  shippingZones: ShippingZoneRow[];
   /** La rédaction assistée fait partie du plan Pro. */
   canUseAi: boolean;
   /** Retirer le badge Bio-Lien fait partie des plans payants. */
@@ -365,6 +370,7 @@ function BioThemeSwatch({
 export function SettingsClient({
   shop,
   links,
+  shippingZones,
   canUseAi,
   canHideBadge,
 }: SettingsClientProps) {
@@ -680,6 +686,10 @@ export function SettingsClient({
           </TabsTrigger>
           <TabsTrigger value="contact">Contact</TabsTrigger>
           <TabsTrigger value="payments">Paiements</TabsTrigger>
+          <TabsTrigger value="shipping" className="gap-1.5">
+            <Truck className="size-3.5" />
+            Livraison
+          </TabsTrigger>
           <TabsTrigger
             value="danger"
             className="text-destructive data-active:text-destructive"
@@ -1195,6 +1205,20 @@ export function SettingsClient({
               onChanged={() => router.refresh()}
             />
           </div>
+        </TabsContent>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* LIVRAISON */}
+        {/* ---------------------------------------------------------------- */}
+        <TabsContent value="shipping" className="space-y-6 pt-6">
+          <ShippingSection
+            shopId={shop.id}
+            currency={shop.currency}
+            shippingEnabled={shop.shipping_enabled}
+            cashOnDelivery={shop.cash_on_delivery}
+            initialZones={shippingZones}
+            onChanged={() => router.refresh()}
+          />
         </TabsContent>
 
         {/* ---------------------------------------------------------------- */}

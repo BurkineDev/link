@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { serializeShop, serializeShopLink } from "@/lib/db/serialize";
+import { serializeShop, serializeShopLink, serializeShippingZone } from "@/lib/db/serialize";
 import { getPlanLimits } from "@/lib/subscription";
 import { getEffectivePlanForUser } from "@/lib/db/plans";
 import { canHideBadge } from "@/lib/plans/badge";
@@ -19,10 +19,14 @@ export default async function SettingsPage() {
 
   if (!shopRow) redirect("/dashboard");
 
-  const [linkRows, plan] = await Promise.all([
+  const [linkRows, zoneRows, plan] = await Promise.all([
     prisma.shopLink.findMany({
       where: { shopId: shopRow.id },
       orderBy: { position: "asc" },
+    }),
+    prisma.shippingZone.findMany({
+      where: { shopId: shopRow.id },
+      orderBy: { createdAt: "asc" },
     }),
     // La rédaction assistée est réservée au plan Pro, le retrait du badge aux
     // plans payants. Les boutons restent visibles pour les autres — une porte
@@ -37,6 +41,7 @@ export default async function SettingsPage() {
     <SettingsClient
       shop={shop}
       links={links}
+      shippingZones={zoneRows.map(serializeShippingZone)}
       canUseAi={getPlanLimits(plan).aiWriting}
       canHideBadge={canHideBadge(plan)}
     />

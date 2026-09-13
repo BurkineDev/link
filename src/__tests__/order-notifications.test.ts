@@ -60,7 +60,11 @@ jest.mock("@/lib/whatsapp", () => ({
   sendCloudApiMessage: jest.fn(async () => true),
 }));
 
-import { notifySellerOfPaidOrder, notifyPaidOrder } from "@/lib/order-notifications";
+import {
+  notifyCashOnDeliveryOrder,
+  notifySellerOfPaidOrder,
+  notifyPaidOrder,
+} from "@/lib/order-notifications";
 
 beforeEach(() => {
   _emails.length = 0;
@@ -175,5 +179,26 @@ describe("notifyPaidOrder", () => {
     await notifyPaidOrder(ORDER_ID);
     const to = _emails.map((m) => m.to).sort();
     expect(to).toEqual(["awa@example.com", "vendeuse@example.com"]);
+  });
+});
+
+describe("notifyCashOnDeliveryOrder", () => {
+  test("le vendeur apprend qu'il y a un colis à livrer et un montant à encaisser ; l'acheteur reçoit sa confirmation", async () => {
+    await notifyCashOnDeliveryOrder(ORDER_ID);
+    const seller = _emails.find((m) => m.to === "vendeuse@example.com");
+    const buyer = _emails.find((m) => m.to === "awa@example.com");
+    expect(seller?.subject).toMatch(/commande à livrer/i);
+    expect(seller?.subject).toMatch(/à encaisser/);
+    expect(seller?.text).toMatch(/à encaisser à la livraison/);
+    expect(seller?.text).toMatch(/Dakar/);
+    expect(buyer?.subject).toMatch(/à régler à la livraison/);
+    expect(buyer?.text).toMatch(/tok-123/);
+    expect(buyer?.text).not.toMatch(/Paiement confirmé/);
+  });
+
+  test("sans e-mail acheteur, seul le vendeur est prévenu", async () => {
+    _buyerEmail = null;
+    await notifyCashOnDeliveryOrder(ORDER_ID);
+    expect(_emails.map((m) => m.to)).toEqual(["vendeuse@example.com"]);
   });
 });

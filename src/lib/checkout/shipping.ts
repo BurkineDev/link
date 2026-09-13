@@ -9,11 +9,16 @@
  * Aucune dépendance serveur : importable depuis un Client Component.
  */
 
+import { deliveryDelayLabel } from "@/lib/shipping/zone-schema";
+
 export interface ShippingZoneQuote {
   /** Codes pays ISO 3166-1 alpha-2, dans la casse d'origine. */
   countries: string[];
   rate: number;
   free_above: number | null;
+  /** Délai indicatif en jours, si le vendeur l'a renseigné. */
+  estimated_min?: number | null;
+  estimated_max?: number | null;
 }
 
 export type ShippingQuote =
@@ -23,8 +28,8 @@ export type ShippingQuote =
   | { kind: "unknown" }
   /** Aucune zone ne dessert ce pays : la commande sera refusée. */
   | { kind: "unavailable" }
-  | { kind: "free"; amount: 0 }
-  | { kind: "paid"; amount: number };
+  | { kind: "free"; amount: 0; delay: string | null }
+  | { kind: "paid"; amount: number; delay: string | null };
 
 export interface ShippingQuoteInput {
   /** Le panier contient au moins un article physique. */
@@ -53,7 +58,8 @@ export function quoteShipping(input: ShippingQuoteInput): ShippingQuote {
   if (!zone) return { kind: "unavailable" };
   const free =
     (zone.free_above !== null && input.subtotal >= zone.free_above) || zone.rate <= 0;
-  return free ? { kind: "free", amount: 0 } : { kind: "paid", amount: zone.rate };
+  const delay = deliveryDelayLabel(zone.estimated_min ?? null, zone.estimated_max ?? null);
+  return free ? { kind: "free", amount: 0, delay } : { kind: "paid", amount: zone.rate, delay };
 }
 
 /** Montant facturé pour un devis : 0 tant qu'il n'est pas chiffré. */

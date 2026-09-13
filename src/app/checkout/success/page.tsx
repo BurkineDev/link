@@ -38,6 +38,7 @@ interface OrderDetails {
   currency: Currency;
   status: string;
   payment_status: string;
+  payment_provider?: string | null;
   items: Array<{
     product_snapshot: { product_name: string };
     quantity: number;
@@ -181,7 +182,9 @@ function SuccessContent() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
         <Loader2 className="size-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">
-          Vérification du paiement en cours…
+          {provider === "cash_on_delivery"
+            ? "Enregistrement de la commande…"
+            : "Vérification du paiement en cours…"}
         </p>
       </div>
     );
@@ -314,6 +317,7 @@ function SuccessContent() {
   // ---- Success ----
   const { order } = state;
   const currencyMeta = CURRENCY_META[order.currency];
+  const cashOnDelivery = order.payment_provider === "cash_on_delivery";
 
   const sellerWaLink =
     order.shop_whatsapp && isValidWhatsAppNumber(order.shop_whatsapp)
@@ -384,11 +388,16 @@ function SuccessContent() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <h1 className="mb-2 text-2xl font-bold">Paiement réussi !</h1>
+        <h1 className="mb-2 text-2xl font-bold">
+          {cashOnDelivery ? "Commande enregistrée !" : "Paiement réussi !"}
+        </h1>
         <p className="mb-8 text-muted-foreground">
-          Merci <strong>{order.buyer_name}</strong>. Ta commande est enregistrée
-          et le vendeur est prévenu. Tout ce qu&apos;il te faut est ici : ta
-          référence, ton suivi{order.downloads?.length ? " et tes fichiers" : ""}.
+          Merci <strong>{order.buyer_name}</strong>.{" "}
+          {cashOnDelivery
+            ? `Le vendeur prépare ton colis ; tu règles ${formatPrice(order.total_amount)} à la livraison, en espèces ou en Mobile Money.`
+            : "Ta commande est enregistrée et le vendeur est prévenu."}{" "}
+          Tout ce qu&apos;il te faut est ici : ta référence, ton suivi
+          {order.downloads?.length ? " et tes fichiers" : ""}.
         </p>
       </motion.div>
 
@@ -435,7 +444,7 @@ function SuccessContent() {
 
             {/* Total */}
             <div className="flex items-center justify-between font-semibold">
-              <span>Total payé</span>
+              <span>{cashOnDelivery ? "Total à régler à la livraison" : "Total payé"}</span>
               <span className="tabular-nums text-lg">
                 {formatPrice(order.total_amount)}
               </span>
@@ -452,7 +461,11 @@ function SuccessContent() {
                     : "bg-yellow-100 text-yellow-700",
                 )}
               >
-                {order.payment_status === "paid" ? "Payé" : "En attente"}
+                {order.payment_status === "paid"
+                  ? "Payé"
+                  : cashOnDelivery
+                    ? "À régler à la livraison"
+                    : "En attente"}
               </span>
             </div>
           </CardContent>

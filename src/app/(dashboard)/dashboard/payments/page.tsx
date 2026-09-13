@@ -39,6 +39,7 @@ const PROVIDER_META: Record<
   stripe: { label: "Carte bancaire", icon: CreditCardIcon },
   geniuspay: { label: "Mobile Money", icon: SmartphoneIcon },
   manual: { label: "WhatsApp / hors ligne", icon: WalletIcon },
+  cash_on_delivery: { label: "Paiement à la livraison", icon: WalletIcon },
   free: { label: "Gratuit (code promo)", icon: WalletIcon },
 };
 
