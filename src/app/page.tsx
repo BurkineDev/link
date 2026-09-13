@@ -12,6 +12,7 @@ import {
 } from "@/components/home/sections";
 import { MOBILE_MONEY_PROVIDERS } from "@/lib/constants";
 import { PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
+import { PLAN_FEATURES, commissionNote, planLabel } from "@/lib/plans/catalog";
 import {
   BrandBackdrop,
   Wordmark,
@@ -442,47 +443,35 @@ function QrGlyph() {
 // ---------------------------------------------------------------------------
 //
 // Les montants viennent de PREPAID_PRICES — la table que le paiement Mobile
-// Money applique vraiment. La remise annuelle est recalculée, pas recopiée.
+// Money applique vraiment — et les fonctionnalités du catalogue des plans
+// (src/lib/plans/catalog.ts), le même que la page Tarifs et les CGU.
 
 const PLANS = [
   {
-    name: "Découverte",
+    name: planLabel("free"),
     price: "0 F",
     unit: " / pour toujours",
-    features: [
-      "Page, liens et statistiques",
-      "5 produits en boutique",
-      "Commission 5 % par vente",
-    ],
+    features: [...PLAN_FEATURES.free, commissionNote("free").replace(/\.$/, "")],
     cta: "Commencer",
     href: "/register",
     featured: false,
   },
   {
-    name: "Pro",
+    name: planLabel("pro"),
     price: fcfa(PREPAID_PRICES.pro[1]),
     unit: " / mois",
     year: `${fcfa(PREPAID_PRICES.pro[12])} l'année — économise ${prepaidSavingsPercent("pro", 12)} %`,
-    features: [
-      "Produits illimités",
-      "0 % de commission",
-      "Rédaction assistée par IA",
-      "Statistiques détaillées",
-    ],
+    features: PLAN_FEATURES.pro,
     cta: "Passer Pro",
     href: "/pricing",
     featured: true,
   },
   {
-    name: "Starter",
+    name: planLabel("starter"),
     price: fcfa(PREPAID_PRICES.starter[1]),
     unit: " / mois",
     year: `${fcfa(PREPAID_PRICES.starter[12])} l'année — économise ${prepaidSavingsPercent("starter", 12)} %`,
-    features: [
-      "20 produits en boutique",
-      "Commission réduite à 3 %",
-      "Périodes prépayées 1 / 3 / 12 mois",
-    ],
+    features: PLAN_FEATURES.starter,
     cta: "Choisir Starter",
     href: "/pricing",
     featured: false,
@@ -503,7 +492,8 @@ function Pricing() {
         style={{ color: "var(--b-muted)" }}
       >
         Payables en Mobile Money, d&apos;avance — un mois, trois mois ou
-        l&apos;année. Jamais de prélèvement automatique.
+        l&apos;année, sans prélèvement automatique. Ou par carte, en
+        abonnement résiliable à tout moment.
       </p>
 
       <div className="mt-10 grid items-stretch gap-4.5 md:grid-cols-3">
@@ -602,7 +592,7 @@ const FAQ = [
   },
   {
     q: "Dois-je donner ma carte bancaire ?",
-    a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique.",
+    a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique. La carte bancaire reste possible, en abonnement résiliable à tout moment.",
   },
   {
     q: "Que se passe-t-il si j'arrête de payer ?",

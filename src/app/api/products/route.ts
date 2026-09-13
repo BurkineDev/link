@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       if (count >= limits.maxProducts) {
         return NextResponse.json(
           {
-            error: `Tu as atteint la limite de ${limits.maxProducts} produits du plan Gratuit. Passe en Pro pour des produits illimités.`,
+            error: `Tu as atteint la limite de ${limits.maxProducts} produits du plan ${limits.label}. Passe en Pro pour des produits illimités.`,
             code: "PLAN_LIMIT_REACHED",
             plan,
             limit: limits.maxProducts,

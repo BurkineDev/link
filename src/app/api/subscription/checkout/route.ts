@@ -5,9 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import {
   PLAN_CURRENCY,
+  PLAN_LIMITS,
   PLAN_PRICES,
   getStripePriceId,
 } from "@/lib/subscription";
+import { featureSentence } from "@/lib/plans/catalog";
 import type { BillingInterval, SubscriptionPlan } from "@/lib/types/database";
 
 export const runtime = "nodejs";
@@ -93,11 +95,11 @@ export async function POST(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const priceId = getStripePriceId(parsed.plan, parsed.interval);
 
-  const planLabel = parsed.plan === "pro" ? "Bio-Lien Pro" : "Bio-Lien Starter";
-  const planDescription =
-    parsed.plan === "pro"
-      ? "Produits illimités, 0% de commission, analytics avancés et support prioritaire."
-      : "Jusqu'à 20 produits, 3% de commission, badge masqué et support standard.";
+  // Ce que Stripe affiche sur sa page de paiement : le même catalogue que
+  // la page Tarifs, pas une troisième version.
+  const planLabel = `Bio-Lien ${PLAN_LIMITS[parsed.plan].label}`;
+  const sentence = featureSentence(parsed.plan);
+  const planDescription = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

@@ -25,12 +25,15 @@ const mockUpdate = jest.fn(async ({ data }: { data: Record<string, unknown> }) =
   createdAt: new Date(),
   updatedAt: new Date(),
 }));
+let _subscription: { plan: string; status: string; provider: string; currentPeriodEnd: Date | null } | null = null;
+let _badgeInDb = true;
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     shop: {
-      findFirst: jest.fn(async () => ({ id: SHOP_ID, slug: "wax", currency: "XOF" })),
+      findFirst: jest.fn(async () => ({ id: SHOP_ID, slug: "wax", currency: "XOF", showBioLienBadge: _badgeInDb })),
       update: (args: { data: Record<string, unknown> }) => mockUpdate(args),
     },
+    creatorSubscription: { findUnique: jest.fn(async () => _subscription) },
   },
 }));
 jest.mock("@/lib/db/serialize", () => ({ serializeShop: (shop: unknown) => shop }));
@@ -53,6 +56,31 @@ function patch(body: unknown) {
 beforeEach(() => {
   mockUpdate.mockClear();
   _balance = { currency: "XOF", available: 0, maturing: 0, reserved: 0, paidOut: 0, oldestUnpaidAt: null, nextMaturityAt: null };
+  _subscription = null;
+  _badgeInDb = true;
+});
+
+describe("badge Bio-Lien", () => {
+  test("le masquer est refusé (402) sur le plan gratuit, accepté sur un plan payant en cours", async () => {
+    const res = await patch({ show_biolien_badge: false });
+    expect(res.status).toBe(402);
+    expect(await res.json()).toMatchObject({ code: "PLAN_REQUIRED" });
+    expect(mockUpdate).not.toHaveBeenCalled();
+
+    _subscription = { plan: "starter", status: "active", provider: "geniuspay", currentPeriodEnd: new Date(Date.now() + 86_400_000) };
+    expect((await patch({ show_biolien_badge: false })).status).toBe(200);
+    expect(mockUpdate.mock.calls[0]![0].data).toMatchObject({ showBioLienBadge: false });
+
+    // Plan échu : de nouveau gratuit.
+    _subscription = { ..._subscription, currentPeriodEnd: new Date(Date.now() - 86_400_000) };
+    expect((await patch({ show_biolien_badge: false })).status).toBe(402);
+    // Le réafficher reste toujours possible.
+    expect((await patch({ show_biolien_badge: true })).status).toBe(200);
+    // Renvoyer la valeur déjà en base (réglage pris pendant le plan payant)
+    // ne bloque pas l'enregistrement des couleurs d'un plan échu.
+    _badgeInDb = false;
+    expect((await patch({ show_biolien_badge: false, theme_color: "#123456" })).status).toBe(200);
+  });
 });
 
 describe("changement de devise", () => {

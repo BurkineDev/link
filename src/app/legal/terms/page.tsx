@@ -1,3 +1,6 @@
+import { PLAN_LIMITS } from "@/lib/subscription";
+import { featureSentence, planLabel, planPriceSummary } from "@/lib/plans/catalog";
+
 export const metadata = {
   alternates: { canonical: "/legal/terms" },
   title: "Conditions générales d'utilisation",
@@ -5,7 +8,7 @@ export const metadata = {
     "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",
 };
 
-const LAST_UPDATED = "24 mai 2026";
+const LAST_UPDATED = "13 septembre 2026";
 
 export default function TermsPage() {
   return (
@@ -46,25 +49,34 @@ export default function TermsPage() {
       <h2>4. Plans et facturation</h2>
       <p>Bio-Lien propose trois plans :</p>
       <ul>
+        {/* Une seule source : le catalogue des plans, celui que la page
+            Tarifs affiche et que Mobile Money et Stripe facturent. */}
         <li>
-          <strong>Découverte (gratuit)</strong> : limité à 5 produits par boutique. Une
-          commission de 5 % est prélevée sur chaque vente pour couvrir les frais de la
-          plateforme.
+          <strong>{planLabel("free")} (gratuit)</strong> : limité à{" "}
+          {PLAN_LIMITS.free.maxProducts} produits par boutique. Une commission de{" "}
+          {Math.round(PLAN_LIMITS.free.commissionRate * 100)} % est prélevée sur chaque
+          vente pour couvrir les frais de la plateforme.
         </li>
         <li>
-          <strong>Starter (4,99 $CA / mois ou 49 $CA / an)</strong> : jusqu&apos;à 20
-          produits, commission réduite à 3 %, suppression du badge Bio-Lien, analytics
-          standard, support email.
+          <strong>
+            {planLabel("starter")} ({planPriceSummary("starter")})
+          </strong>{" "}
+          : {featureSentence("starter")}.
         </li>
         <li>
-          <strong>Pro (9,99 $CA / mois ou 59 $CA / an)</strong> : produits illimités,
-          0 % de commission, analytics avancés, templates premium, support prioritaire.
+          <strong>
+            {planLabel("pro")} ({planPriceSummary("pro")})
+          </strong>{" "}
+          : {featureSentence("pro")}.
         </li>
       </ul>
       <p>
-        Les abonnements payants sont facturés en dollars canadiens via Stripe. Le
-        Vendeur peut résilier son abonnement à tout moment depuis son profil. La
-        résiliation prend effet à la fin de la période de facturation en cours.
+        Les plans payants s&apos;achètent par période prépayée (1, 3 ou 12 mois) en
+        Mobile Money, en FCFA, sans prélèvement récurrent : à l&apos;échéance, la boutique
+        repasse en {planLabel("free")} sauf rachat. Par carte bancaire, l&apos;abonnement
+        est facturé en dollars canadiens via Stripe ; le Vendeur peut le résilier à tout
+        moment depuis son profil, la résiliation prenant effet à la fin de la période de
+        facturation en cours.
       </p>
 
       <h2>5. Rôle de Bio-Lien</h2>

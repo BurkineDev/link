@@ -17,6 +17,8 @@ import {
   productJsonLd,
 } from "@/lib/seo/json-ld";
 import { ProductPage } from "./product-page";
+import { getEffectivePlanForUser } from "@/lib/db/plans";
+import { showBioLienBadge } from "@/lib/plans/badge";
 
 interface Props {
   params: Promise<{ username: string; productSlug: string }>;
@@ -132,7 +134,7 @@ export default async function Page({ params }: Props) {
   if (!productRow) notFound();
 
   // Fetch variants (if product has them) + related products together
-  const [variantRows, relatedRows] = await Promise.all([
+  const [variantRows, relatedRows, ownerPlan] = await Promise.all([
     productRow.hasVariants
       ? prisma.productVariant.findMany({
           where: { productId: productRow.id },
@@ -144,6 +146,9 @@ export default async function Page({ params }: Props) {
       orderBy: { createdAt: "desc" },
       take: 4,
     }),
+    // Le badge Bio-Lien se retire sur un plan payant (même règle que la
+    // page boutique).
+    getEffectivePlanForUser(shopRow.ownerId),
   ]);
 
   // Les composants d'affichage lisent la forme Supabase (snake_case).
@@ -173,6 +178,7 @@ export default async function Page({ params }: Props) {
         related={related}
         pageUrl={pageUrl}
         shopUrl={shopUrl}
+        showBadge={showBioLienBadge(ownerPlan, shop.show_biolien_badge)}
       />
     </>
   );
