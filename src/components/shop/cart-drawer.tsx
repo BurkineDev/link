@@ -27,6 +27,7 @@ export function CartDrawer({
   open,
   onOpenChange,
   currency,
+  shopSlug,
 }: CartDrawerProps) {
   const items = useCart((s) => s.items);
   const updateQuantity = useCart((s) => s.updateQuantity);
@@ -185,7 +186,7 @@ export function CartDrawer({
 
               <div className="flex w-full flex-col gap-2">
                 <Link
-                  href="/checkout"
+                  href={`/checkout?shop=${encodeURIComponent(items[0]?.shopSlug ?? shopSlug)}`}
                   onClick={() => onOpenChange(false)}
                   className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-base font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ backgroundColor: "var(--shop-primary, #6366f1)" }}

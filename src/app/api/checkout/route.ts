@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkStockAvailability } from "@/lib/db/stock";
+import { quoteShipping, shippingAmount as shippingAmountOf } from "@/lib/checkout/shipping";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
@@ -358,12 +359,12 @@ export async function POST(request: NextRequest) {
         countries: string[];
         rate: unknown;
         freeAbove: unknown;
-        currency: string;
       }>;
       try {
         zones = await prisma.shippingZone.findMany({
-          where: { shopId, isActive: true },
-          select: { countries: true, rate: true, freeAbove: true, currency: true },
+          where: { shopId, isActive: true, currency: shop.currency },
+          orderBy: { createdAt: "asc" },
+          select: { countries: true, rate: true, freeAbove: true },
         });
       } catch (error) {
         console.error("[checkout] shipping zones error:", error);
@@ -374,23 +375,27 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const country = shippingAddress.country.toUpperCase();
-      const zone = zones.find(
-        (candidate) =>
-          candidate.currency === shop.currency &&
-          candidate.countries.map((code) => code.toUpperCase()).includes(country),
-      );
-      if (!zone) {
+      // Même règle que la page de commande (src/lib/checkout/shipping.ts) :
+      // ce que l'acheteur a vu est ce qu'il paie.
+      const quote = quoteShipping({
+        physical: true,
+        shippingEnabled: true,
+        zones: zones.map((zone) => ({
+          countries: zone.countries,
+          rate: Number(zone.rate),
+          free_above: zone.freeAbove == null ? null : Number(zone.freeAbove),
+        })),
+        country: shippingAddress.country,
+        subtotal: subtotalAmount,
+      });
+      if (quote.kind === "unavailable") {
         await releasePromo();
         return NextResponse.json(
-          { error: "La livraison n'est pas disponible pour ce pays." },
+          { error: "La livraison n'est pas disponible pour ce pays.", code: "SHIPPING_UNAVAILABLE" },
           { status: 422 },
         );
       }
-      shippingAmount =
-        zone.freeAbove != null && subtotalAmount >= Number(zone.freeAbove)
-          ? 0
-          : Number(zone.rate);
+      shippingAmount = shippingAmountOf(quote);
     }
 
     const totalAmount = Math.max(

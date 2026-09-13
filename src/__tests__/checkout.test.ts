@@ -19,6 +19,7 @@ let _variants: Record<string, unknown>[] = [];
 let _orderError: unknown = null;
 let _reserveResult: { ok: boolean; reason?: string; product_name?: string; available?: number } = { ok: true };
 let _redeemResult: { ok: boolean; discount?: number; reason?: string } = { ok: true, discount: 0 };
+let _zones: Array<{ countries: string[]; rate: number; freeAbove: number | null }> = [];
 
 const toShop = (s: Record<string, unknown>) => ({
   id: s.id,
@@ -64,7 +65,7 @@ const mockPrisma = {
     findMany: jest.fn(async () => _variants.map(toVariant)),
   },
   shippingZone: {
-    findMany: jest.fn(async () => []),
+    findMany: jest.fn(async () => _zones),
   },
   order: {
     create: jest.fn(async () => {
@@ -186,6 +187,7 @@ function setup(opts: {
   _orderError = opts.orderError ?? null;
   _reserveResult = opts.reserveResult ?? { ok: true };
   _redeemResult = opts.redeemResult ?? { ok: true, discount: 0 };
+  _zones = [];
 }
 
 function makeRequest(body: unknown): NextRequest {
@@ -339,6 +341,43 @@ describe("POST /api/checkout", () => {
     expect(mockCreateSession.mock.calls[0][0].discounts).toEqual([
       { coupon: "coupon_order_123" },
     ]);
+  });
+
+  // TC-SH — livraison : même règle que la page de commande
+  test("TC-SH1: la livraison de la zone s'ajoute au total et à la session Stripe", async () => {
+    setup({ shop: { ...BASE_SHOP, shipping_enabled: true } });
+    _zones = [{ countries: ["BF", "ML"], rate: 1_500, freeAbove: 50_000 }];
+    mockStripeOk();
+
+    const res = await POST(makeRequest(validPayload()));
+    expect(res.status).toBe(200);
+    const order = (mockPrisma.order.create.mock.calls.at(-1) as unknown as [{ data: { shippingAmount: number; totalAmount: number } }])[0].data;
+    expect(order.shippingAmount).toBe(1_500);
+    expect(order.totalAmount).toBe(11_500);
+    const stripeSession = mockCreateSession.mock.calls.at(-1)![0];
+    const shippingLine = stripeSession.line_items.find(
+      (line: { price_data: { product_data: { name: string } } }) => /livraison/i.test(line.price_data.product_data.name),
+    );
+    expect(shippingLine?.price_data.unit_amount).toBe(1_500);
+    expect(mockPrisma.shippingZone.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { shopId: SHOP_ID, isActive: true, currency: "XOF" } }),
+    );
+  });
+
+  test("TC-SH2: gratuite au-dessus du seuil ; pays non desservi → 422 sans commande", async () => {
+    setup({ shop: { ...BASE_SHOP, shipping_enabled: true } });
+    _zones = [{ countries: ["BF"], rate: 1_500, freeAbove: 10_000 }];
+    mockStripeOk();
+    await POST(makeRequest(validPayload()));
+    expect((mockPrisma.order.create.mock.calls.at(-1) as unknown as [{ data: { shippingAmount: number } }])[0].data.shippingAmount).toBe(0);
+
+    mockPrisma.order.create.mockClear();
+    const res = await POST(
+      makeRequest(validPayload({ shippingAddress: { full_name: "Kofi Mensah", address_line1: "Rue du Commerce 12", city: "Dakar", country: "SN" } })),
+    );
+    const body = await res.json();
+    expect([res.status, body]).toEqual([422, expect.objectContaining({ code: "SHIPPING_UNAVAILABLE" })]);
+    expect(mockPrisma.order.create).not.toHaveBeenCalled();
   });
 
   // TC-03 — boutique non publiée

@@ -2,6 +2,13 @@ import { Suspense } from "react";
 import CheckoutForm from "./checkout-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isGeniusPayConfigured } from "@/lib/geniuspay";
+import { loadCheckoutShop } from "@/lib/checkout/shop-context";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Finaliser la commande",
+  robots: { index: false, follow: false },
+};
 
 function CheckoutSkeleton() {
   return (
@@ -19,12 +26,25 @@ function CheckoutSkeleton() {
   );
 }
 
-export default function CheckoutPage() {
+/**
+ * `?shop=<slug>` est posé par le tiroir panier : il permet de rendre
+ * l'identité et les règles de livraison de la boutique dès le serveur, sans
+ * page blanche. Le formulaire vérifie que c'est bien la boutique du panier
+ * et, sinon, corrige l'adresse lui-même.
+ */
+export default async function CheckoutPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ shop?: string | string[] }>;
+}) {
   const mobileMoneyEnabled = isGeniusPayConfigured();
+  const { shop: slugParam } = await searchParams;
+  const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
+  const shop = slug ? await loadCheckoutShop(slug) : null;
 
   return (
     <Suspense fallback={<CheckoutSkeleton />}>
-      <CheckoutForm mobileMoneyEnabled={mobileMoneyEnabled} />
+      <CheckoutForm mobileMoneyEnabled={mobileMoneyEnabled} shop={shop} />
     </Suspense>
   );
 }
