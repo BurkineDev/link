@@ -8,7 +8,7 @@ export const metadata = {
     "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",
 };
 
-const LAST_UPDATED = "24 mai 2026";
+const LAST_UPDATED = "13 septembre 2026";
 
 export default function TermsPage() {
   return (

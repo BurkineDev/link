@@ -26,10 +26,11 @@ const mockUpdate = jest.fn(async ({ data }: { data: Record<string, unknown> }) =
   updatedAt: new Date(),
 }));
 let _subscription: { plan: string; status: string; provider: string; currentPeriodEnd: Date | null } | null = null;
+let _badgeInDb = true;
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     shop: {
-      findFirst: jest.fn(async () => ({ id: SHOP_ID, slug: "wax", currency: "XOF" })),
+      findFirst: jest.fn(async () => ({ id: SHOP_ID, slug: "wax", currency: "XOF", showBioLienBadge: _badgeInDb })),
       update: (args: { data: Record<string, unknown> }) => mockUpdate(args),
     },
     creatorSubscription: { findUnique: jest.fn(async () => _subscription) },
@@ -56,6 +57,7 @@ beforeEach(() => {
   mockUpdate.mockClear();
   _balance = { currency: "XOF", available: 0, maturing: 0, reserved: 0, paidOut: 0, oldestUnpaidAt: null, nextMaturityAt: null };
   _subscription = null;
+  _badgeInDb = true;
 });
 
 describe("badge Bio-Lien", () => {
@@ -74,6 +76,10 @@ describe("badge Bio-Lien", () => {
     expect((await patch({ show_biolien_badge: false })).status).toBe(402);
     // Le réafficher reste toujours possible.
     expect((await patch({ show_biolien_badge: true })).status).toBe(200);
+    // Renvoyer la valeur déjà en base (réglage pris pendant le plan payant)
+    // ne bloque pas l'enregistrement des couleurs d'un plan échu.
+    _badgeInDb = false;
+    expect((await patch({ show_biolien_badge: false, theme_color: "#123456" })).status).toBe(200);
   });
 });
 

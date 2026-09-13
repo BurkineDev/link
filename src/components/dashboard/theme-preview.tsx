@@ -31,6 +31,8 @@ interface ThemePreviewProps {
   borderRadius: ShopBorderRadius;
   ctaShape: ShopCtaShape;
   logoUrl?: string | null;
+  /** Le badge « Crée ta page sur Bio-Lien », retirable sur un plan payant. */
+  showBadge?: boolean;
 }
 
 const SAMPLE_LINKS = ["Mon TikTok", "WhatsApp"];
@@ -50,6 +52,7 @@ export function ThemePreview({
   borderRadius,
   ctaShape,
   logoUrl,
+  showBadge = true,
 }: ThemePreviewProps) {
   const palette = resolveBioTheme({
     bio_theme: bioTheme,
@@ -212,18 +215,20 @@ export function ThemePreview({
         </div>
 
         {/* Footer CTA */}
-        <div className="mt-4 flex justify-center">
-          <span
-            className="rounded-full px-3 py-1.5 text-[9px] font-semibold"
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              border: `1px solid ${palette.border}`,
-            }}
-          >
-            Crée ta page sur Bio-Lien
-          </span>
-        </div>
+        {showBadge && (
+          <div className="mt-4 flex justify-center">
+            <span
+              className="rounded-full px-3 py-1.5 text-[9px] font-semibold"
+              style={{
+                backgroundColor: palette.surface,
+                color: palette.surfaceText,
+                border: `1px solid ${palette.border}`,
+              }}
+            >
+              Crée ta page sur Bio-Lien
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

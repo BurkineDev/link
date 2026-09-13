@@ -12,7 +12,7 @@ import {
 } from "@/components/home/sections";
 import { MOBILE_MONEY_PROVIDERS } from "@/lib/constants";
 import { PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
-import { PLAN_FEATURES, planLabel } from "@/lib/plans/catalog";
+import { PLAN_FEATURES, commissionNote, planLabel } from "@/lib/plans/catalog";
 import {
   BrandBackdrop,
   Wordmark,
@@ -451,7 +451,7 @@ const PLANS = [
     name: planLabel("free"),
     price: "0 F",
     unit: " / pour toujours",
-    features: PLAN_FEATURES.free,
+    features: [...PLAN_FEATURES.free, commissionNote("free").replace(/\.$/, "")],
     cta: "Commencer",
     href: "/register",
     featured: false,
@@ -492,7 +492,8 @@ function Pricing() {
         style={{ color: "var(--b-muted)" }}
       >
         Payables en Mobile Money, d&apos;avance — un mois, trois mois ou
-        l&apos;année. Jamais de prélèvement automatique.
+        l&apos;année, sans prélèvement automatique. Ou par carte, en
+        abonnement résiliable à tout moment.
       </p>
 
       <div className="mt-10 grid items-stretch gap-4.5 md:grid-cols-3">
@@ -591,7 +592,7 @@ const FAQ = [
   },
   {
     q: "Dois-je donner ma carte bancaire ?",
-    a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique.",
+    a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique. La carte bancaire reste possible, en abonnement résiliable à tout moment.",
   },
   {
     q: "Que se passe-t-il si j'arrête de payer ?",

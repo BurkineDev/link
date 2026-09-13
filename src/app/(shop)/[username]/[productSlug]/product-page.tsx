@@ -46,6 +46,8 @@ interface ProductPageProps {
   pageUrl: string;
   /** Absolute URL of the shop's bio page, for the related-product cards. */
   shopUrl: string;
+  /** Badge « Crée ta page sur Bio-Lien » : décidé côté serveur (plan + réglage). */
+  showBadge?: boolean;
 }
 
 /**
@@ -63,6 +65,7 @@ export function ProductPage({
   related,
   pageUrl,
   shopUrl,
+  showBadge = true,
 }: ProductPageProps) {
   const [selectedVariant, setSelectedVariant] =
     useState<ProductVariantRow | null>(null);
@@ -459,18 +462,20 @@ export function ProductPage({
             Retour à {shop.name}
           </Link>
 
-          <Link
-            href={`/register?de=${encodeURIComponent(shop.slug)}`}
-            className="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:scale-[1.02] active:scale-95"
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              border: `1px solid ${palette.border}`,
-            }}
-          >
-            <Sparkles className="size-4" />
-            Crée ta page sur Bio-Lien
-          </Link>
+          {showBadge && (
+            <Link
+              href={`/register?de=${encodeURIComponent(shop.slug)}`}
+              className="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:scale-[1.02] active:scale-95"
+              style={{
+                backgroundColor: palette.surface,
+                color: palette.surfaceText,
+                border: `1px solid ${palette.border}`,
+              }}
+            >
+              <Sparkles className="size-4" />
+              Crée ta page sur Bio-Lien
+            </Link>
+          )}
         </div>
       </main>
 

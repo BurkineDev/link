@@ -502,8 +502,11 @@ export function SettingsClient({
       cta_shape: ctaShape,
       bio_theme: bioTheme,
       // Le plan gratuit garde le badge : on n'envoie le réglage que si on
-      // a le droit d'y toucher (le serveur le vérifie aussi).
-      ...(canHideBadge ? { show_biolien_badge: showBadge } : {}),
+      // a le droit d'y toucher et qu'il a changé (le serveur le vérifie
+      // aussi) — un plan échu entre-temps ne doit pas bloquer les couleurs.
+      ...(canHideBadge && showBadge !== shop.show_biolien_badge
+        ? { show_biolien_badge: showBadge }
+        : {}),
     });
 
     setSaving(false);
@@ -949,10 +952,12 @@ export function SettingsClient({
                     <Label htmlFor="show-badge" className="text-sm font-medium">
                       Afficher « Crée ta page sur Bio-Lien » en bas de ta page
                     </Label>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p id="show-badge-help" className="text-[11px] text-muted-foreground">
                       {canHideBadge
                         ? "Ton plan te permet de le retirer."
-                        : "Le retirer fait partie des plans Starter et Pro."}{" "}
+                        : shop.show_biolien_badge
+                          ? "Le retirer fait partie des plans Starter et Pro."
+                          : "Ton plan payant est terminé : le badge est de nouveau affiché. Ton réglage sera repris si tu te réabonnes."}{" "}
                       {!canHideBadge && (
                         <Link href="/pricing" className="font-semibold text-foreground underline underline-offset-2">
                           Voir les plans
@@ -965,7 +970,7 @@ export function SettingsClient({
                     checked={canHideBadge ? showBadge : true}
                     onCheckedChange={(checked) => setShowBadge(checked)}
                     disabled={!canHideBadge}
-                    aria-label="Afficher le badge Bio-Lien"
+                    aria-describedby="show-badge-help"
                   />
                 </div>
               </section>
@@ -1144,6 +1149,7 @@ export function SettingsClient({
                       fontFamily={fontFamily}
                       borderRadius={borderRadius}
                       ctaShape={ctaShape}
+                      showBadge={canHideBadge ? showBadge : true}
                     />
                   </div>
                 </div>
@@ -1170,6 +1176,7 @@ export function SettingsClient({
                     fontFamily={fontFamily}
                     borderRadius={borderRadius}
                     ctaShape={ctaShape}
+                    showBadge={canHideBadge ? showBadge : true}
                   />
                 </div>
               </div>

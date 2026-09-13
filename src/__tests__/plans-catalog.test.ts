@@ -38,7 +38,8 @@ test("le prix carte affiché est celui que Stripe facture", () => {
   const pro = planPricing("pro");
   expect(pro.prepaid.months1).toBe(`${PREPAID_PRICES.pro[1].toLocaleString("fr-FR")} FCFA`);
   expect(pro.prepaid.yearlySavingsPercent).toBeGreaterThan(0);
-  expect(planPriceSummary("starter")).toMatch(/^2.000 FCFA \/ mois, 5.000 FCFA \/ 3 mois ou 18.000 FCFA \/ an ; par carte 4,99 \$CA \/ mois ou 49 \$CA \/ an$/);
+  // Espace fine insécable (U+202F) de fr-FR, comme partout ailleurs (formatPrice).
+  expect(planPriceSummary("starter")).toBe("2\u202f000 FCFA / mois, 5\u202f000 FCFA / 3 mois ou 18\u202f000 FCFA / an ; par carte 4,99 $CA / mois ou 49 $CA / an");
   expect(planPriceSummary("free")).toBe("gratuit");
   expect(commissionNote("free")).toBe("5 % de commission sur chaque vente.");
   expect(commissionNote("pro")).toBe("Aucune commission.");

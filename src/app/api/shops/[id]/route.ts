@@ -1,6 +1,6 @@
 import { isValidE164 } from "@/lib/phone/dial-codes";
 import { NextRequest, NextResponse } from "next/server";
-import { getEffectivePlan } from "@/lib/subscription";
+import { getEffectivePlanForUser } from "@/lib/db/plans";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -112,7 +112,7 @@ function toPrismaData(body: PatchBody): Prisma.ShopUpdateInput {
 async function findOwnedShop(shopId: string, userId: string) {
   return prisma.shop.findFirst({
     where: { id: shopId, ownerId: userId },
-    select: { id: true, slug: true, currency: true },
+    select: { id: true, slug: true, currency: true, showBioLienBadge: true },
   });
 }
 
@@ -170,22 +170,11 @@ export async function PATCH(
     }
 
     // Masquer le badge Bio-Lien est une contrepartie des plans payants :
-    // le plan gratuit le garde, c'est ce qui le finance.
-    if (parsed.data.show_biolien_badge === false) {
-      const sub = await prisma.creatorSubscription.findUnique({
-        where: { userId: user.id },
-        select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
-      });
-      const plan = getEffectivePlan(
-        sub
-          ? {
-              plan: sub.plan,
-              status: sub.status,
-              provider: sub.provider,
-              current_period_end: sub.currentPeriodEnd?.toISOString() ?? null,
-            }
-          : null,
-      );
+    // le plan gratuit le garde, c'est ce qui le finance. Seul un vrai
+    // changement est contrôlé : renvoyer la valeur déjà en base ne doit pas
+    // bloquer le reste de l'enregistrement d'un plan échu.
+    if (parsed.data.show_biolien_badge === false && owned.showBioLienBadge) {
+      const plan = await getEffectivePlanForUser(user.id);
       if (plan === "free") {
         return NextResponse.json(
           {

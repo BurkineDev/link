@@ -9,7 +9,7 @@ import {
   PLAN_PRICES,
   getStripePriceId,
 } from "@/lib/subscription";
-import { PLAN_FEATURES } from "@/lib/plans/catalog";
+import { featureSentence } from "@/lib/plans/catalog";
 import type { BillingInterval, SubscriptionPlan } from "@/lib/types/database";
 
 export const runtime = "nodejs";
@@ -98,7 +98,8 @@ export async function POST(request: NextRequest) {
   // Ce que Stripe affiche sur sa page de paiement : le même catalogue que
   // la page Tarifs, pas une troisième version.
   const planLabel = `Bio-Lien ${PLAN_LIMITS[parsed.plan].label}`;
-  const planDescription = `${PLAN_FEATURES[parsed.plan].join(", ")}.`;
+  const sentence = featureSentence(parsed.plan);
+  const planDescription = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

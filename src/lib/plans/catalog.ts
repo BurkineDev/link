@@ -8,6 +8,7 @@ import {
   type PaidPlan,
 } from "@/lib/subscription";
 import type { BillingInterval, SubscriptionPlan } from "@/lib/types/database";
+import { formatPrice } from "@/lib/utils/format";
 
 /**
  * Ce que chaque plan promet — une seule fois.
@@ -29,7 +30,7 @@ function percent(rate: number): string {
 }
 
 function fcfa(amount: number): string {
-  return `${amount.toLocaleString("fr-FR")} FCFA`;
+  return formatPrice(amount, "XOF");
 }
 
 /** Ce que le plan comprend, dans l'ordre où on le lit. */

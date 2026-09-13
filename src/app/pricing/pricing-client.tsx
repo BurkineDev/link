@@ -41,9 +41,11 @@ type Plan = "free" | "starter" | "pro";
 // Fonctionnalités et prix viennent du catalogue (src/lib/plans/catalog.ts),
 // lui-même dérivé des constantes qui facturent : cette page ne peut plus
 // annoncer un tarif que Stripe ou Mobile Money ne pratique pas.
+// Les cartes sont présentées en cumul (« Tout du plan X, plus : ») : on ne
+// répète pas ce que le plan précédent comprend déjà.
 const FREE_FEATURES = PLAN_FEATURES.free;
-const STARTER_FEATURES = PLAN_FEATURES.starter;
-const PRO_FEATURES = PLAN_FEATURES.pro;
+const STARTER_FEATURES = PLAN_FEATURES.starter.filter((f) => !PLAN_FEATURES.free.includes(f));
+const PRO_FEATURES = PLAN_FEATURES.pro.filter((f) => !PLAN_FEATURES.starter.includes(f));
 const STARTER = planPricing("starter");
 const PRO = planPricing("pro");
 
@@ -204,8 +206,9 @@ export function PricingClient({
             })}
           </div>
           <p className="text-xs text-muted-foreground">
-            Tu paies la durée choisie, une seule fois. Aucun prélèvement
-            automatique.
+            En Mobile Money, tu paies la durée choisie, une seule fois — aucun
+            prélèvement automatique. Par carte, c&apos;est un abonnement
+            renouvelé automatiquement, résiliable à tout moment.
           </p>
         </div>
 
@@ -327,9 +330,10 @@ export function PricingClient({
 
               <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
                 <p className="text-xs text-muted-foreground">
-                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
-                  carte fonctionne partout. Sans engagement : la période
-                  s&apos;arrête d&apos;elle-même.
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays, sans
+                  engagement : la période s&apos;arrête d&apos;elle-même. Par
+                  carte, partout : abonnement renouvelé automatiquement,
+                  résiliable depuis ton profil.
                 </p>
                 <button
                   type="button"
@@ -337,7 +341,7 @@ export function PricingClient({
                   disabled={checkingOutPlan !== null}
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
                 >
-                  Payer par carte ({cardPriceLabel("starter", months === 12 ? "year" : "month")})
+                  Payer par carte ({cardPriceLabel("starter", months === 12 ? "year" : "month")} / {months === 12 ? "an" : "mois"}, renouvelé automatiquement)
                 </button>
               </div>
             </CardContent>
@@ -409,9 +413,10 @@ export function PricingClient({
 
               <div className="mt-5 pt-4 border-t border-border/60 space-y-1.5">
                 <p className="text-xs text-muted-foreground">
-                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays — la
-                  carte fonctionne partout. Sans engagement : la période
-                  s&apos;arrête d&apos;elle-même.
+                  Mobile Money (Wave, Orange, MTN, Moov) selon les pays, sans
+                  engagement : la période s&apos;arrête d&apos;elle-même. Par
+                  carte, partout : abonnement renouvelé automatiquement,
+                  résiliable depuis ton profil.
                 </p>
                 <button
                   type="button"
@@ -419,7 +424,7 @@ export function PricingClient({
                   disabled={checkingOutPlan !== null}
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
                 >
-                  Payer par carte ({cardPriceLabel("pro", months === 12 ? "year" : "month")})
+                  Payer par carte ({cardPriceLabel("pro", months === 12 ? "year" : "month")} / {months === 12 ? "an" : "mois"}, renouvelé automatiquement)
                 </button>
               </div>
             </CardContent>
@@ -464,7 +469,7 @@ export function PricingClient({
               },
               {
                 q: "Comment se passe le paiement de l'abonnement ?",
-                a: `Tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 1 an revient ${PRO.prepaid.yearlySavingsPercent} % moins cher que mois par mois. Deux moyens de payer : le Mobile Money là où notre partenaire le propose, et la carte bancaire partout, facturée en dollars canadiens (${STARTER.card.month} ou ${STARTER.card.year} pour Starter, ${PRO.card.month} ou ${PRO.card.year} pour Pro).`,
+                a: `En Mobile Money, tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux ; 3 mois ou 1 an reviennent moins cher que mois par mois (${STARTER.prepaid.yearlySavingsPercent} % d'économie sur l'année pour Starter, ${PRO.prepaid.yearlySavingsPercent} % pour Pro). Par carte bancaire, partout, c'est un abonnement en dollars canadiens renouvelé automatiquement (${STARTER.card.month} / mois ou ${STARTER.card.year} / an pour Starter, ${PRO.card.month} / mois ou ${PRO.card.year} / an pour Pro), que tu résilies quand tu veux depuis ton profil.`,
               },
               {
                 q: "Le Mobile Money est-il disponible dans mon pays ?",
