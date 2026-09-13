@@ -154,6 +154,7 @@ export default async function DashboardPage() {
 
   let totalRevenue = 0;
   let ordersCount = 0;
+  let ordersAwaitingPayment = 0;
   let productsCount = 0;
   let recentOrders: OrderRow[] = [];
   let viewsCount = 0;
@@ -163,7 +164,7 @@ export default async function DashboardPage() {
       await Promise.all([
         prisma.order.findMany({
           where: { shopId: shop.id },
-          select: { totalAmount: true, paymentStatus: true },
+          select: { totalAmount: true, paymentStatus: true, paymentProvider: true, status: true },
         }),
         prisma.product.count({ where: { shopId: shop.id } }),
         prisma.order.findMany({
@@ -178,6 +179,11 @@ export default async function DashboardPage() {
       ]);
 
     ordersCount = ordersStats.length;
+    // Commandes WhatsApp que le vendeur n'a pas encore marquées payées :
+    // certaines ne sont qu'un tap sans message, le compteur le dit.
+    ordersAwaitingPayment = ordersStats.filter(
+      (o) => o.paymentProvider === "manual" && o.paymentStatus === "pending" && o.status === "pending",
+    ).length;
     totalRevenue = ordersStats
       .filter((o) => o.paymentStatus === "paid")
       .reduce((sum, o) => sum + Number(o.totalAmount), 0);
@@ -256,7 +262,13 @@ export default async function DashboardPage() {
         <Tile
           label="Commandes"
           value={ordersCount}
-          note={ordersCount === 0 ? "aucune commande" : "au total"}
+          note={
+            ordersCount === 0
+              ? "aucune commande"
+              : ordersAwaitingPayment > 0
+                ? `dont ${ordersAwaitingPayment} à confirmer`
+                : "au total"
+          }
           tone="paper"
         />
         <Tile

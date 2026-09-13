@@ -21,8 +21,11 @@ import type { Currency } from "@/lib/constants";
  *
  * Public et anonyme comme le checkout : les prix sont relus en base, la
  * boutique doit être publiée et en mode WhatsApp avec un numéro valide, le
- * stock est vérifié (réservation douce comprise), et une même IP ne crée
- * pas plus de 20 commandes par 10 minutes.
+ * stock réel est vérifié (sans réservation : une commande WhatsApp n'engage
+ * rien tant qu'elle n'est pas payée), et une même IP ne crée pas plus de
+ * 40 commandes par 10 minutes — plus large que le checkout, parce que les
+ * opérateurs mobiles partagent une adresse entre des centaines d'abonnés
+ * et qu'au-delà le bouton retombe sur WhatsApp sans enregistrement.
  */
 
 const schema = z.object({
@@ -39,7 +42,7 @@ const schema = z.object({
     .max(20),
 });
 
-const PER_IP = { limit: 20, windowSeconds: 10 * 60 };
+const PER_IP = { limit: 40, windowSeconds: 10 * 60 };
 
 function firstImageUrl(images: unknown): string | undefined {
   if (!Array.isArray(images)) return undefined;
@@ -67,7 +70,16 @@ export async function POST(request: NextRequest) {
 
   const shop = await prisma.shop.findUnique({
     where: { id: shopId },
-    select: { id: true, name: true, slug: true, currency: true, isPublished: true, checkoutMode: true, whatsappNumber: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      currency: true,
+      isPublished: true,
+      checkoutMode: true,
+      whatsappNumber: true,
+      _count: { select: { shippingZones: { where: { isActive: true } } } },
+    },
   });
   if (!shop || !shop.isPublished) {
     return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
@@ -176,10 +188,15 @@ export async function POST(request: NextRequest) {
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
   const reference = orderReference(order.id);
+  // L'adresse n'est pas connue : la livraison, si la boutique en facture
+  // une, se règle dans la conversation.
+  const deliversWithFees = shop._count.shippingZones > 0;
   const message = formatWhatsAppOrderMessage({
     shopName: shop.name,
     lines,
-    totalLabel: formatPrice(total, shop.currency),
+    totalLabel: deliversWithFees
+      ? `${formatPrice(total, shop.currency)} (hors livraison)`
+      : formatPrice(total, shop.currency),
     reference,
     trackingUrl: `${appUrl}/orders/track/${order.trackingToken}`,
     formatPrice: (amount) => formatPrice(amount, shop.currency),

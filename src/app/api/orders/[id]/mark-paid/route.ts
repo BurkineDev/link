@@ -25,13 +25,21 @@ export async function POST(
 
   const order = await prisma.order.findUnique({
     where: { id },
-    select: { paymentProvider: true, paymentStatus: true, shop: { select: { ownerId: true } } },
+    select: { status: true, paymentProvider: true, paymentStatus: true, shop: { select: { ownerId: true } } },
   });
   if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
   if (order.shop.ownerId !== user.id) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   if (order.paymentProvider !== "manual") {
     return NextResponse.json(
       { error: "Cette commande est réglée en ligne : son paiement est confirmé automatiquement." },
+      { status: 409 },
+    );
+  }
+  // Une commande annulée (par le vendeur, ou expirée) ne ressuscite pas :
+  // si l'acheteur paie quand même, il repasse commande.
+  if (order.status === "cancelled") {
+    return NextResponse.json(
+      { error: "Cette commande est annulée : elle ne peut plus être marquée payée." },
       { status: 409 },
     );
   }

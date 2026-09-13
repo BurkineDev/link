@@ -356,6 +356,15 @@ export function ProductPage({
                   fallbackUrl: whatsAppUrl,
                 }}
                 disabled={isOutOfStock}
+                onBeforeStart={() => {
+                  // Même garde-fou que le panier : sans variante, le serveur
+                  // refuserait et WhatsApp s'ouvrirait sans commande.
+                  if (product.has_variants && !selectedVariant) {
+                    toast.error("Veuillez choisir une variante");
+                    return false;
+                  }
+                  return true;
+                }}
                 className={cn(
                   "flex h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold text-white",
                   "transition-transform active:scale-[0.99]",

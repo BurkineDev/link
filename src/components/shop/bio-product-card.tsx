@@ -2,14 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { MessageCircle, Plus, ShoppingBag } from "lucide-react";
+import { Loader2, MessageCircle, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { ProductVectorIllustration } from "@/components/shop/product-vector-illustration";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
-import { startWhatsAppOrder } from "@/lib/orders/whatsapp-client";
+import { useWhatsAppOrder } from "@/components/shop/whatsapp-order-button";
 import {
   primaryActionColor,
   readableTextOn,
@@ -54,6 +54,7 @@ export function BioProductCard({
   const isOnSale =
     product.compare_price !== null && product.compare_price > product.price;
 
+  const whatsappOrder = useWhatsAppOrder();
   const whatsappUrl = whatsappNumber
     ? buildWhatsAppOrderUrl({
         whatsappNumber,
@@ -168,17 +169,32 @@ export function BioProductCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                void startWhatsAppOrder({
+                void whatsappOrder.start({
                   shopId,
                   items: [{ product_id: product.id, variant_id: null, quantity: 1 }],
                   fallbackUrl: whatsappUrl,
                 });
               }}
-              aria-label={`Commander ${product.name} sur WhatsApp`}
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform active:scale-95"
+              // Pas de `disabled` : un clic sur un bouton désactivé remonterait
+              // au Link de la carte. Le hook ignore les taps répétés.
+              aria-disabled={whatsappOrder.busy}
+              aria-busy={whatsappOrder.busy}
+              aria-label={
+                whatsappOrder.busy
+                  ? "Ouverture de WhatsApp…"
+                  : `Commander ${product.name} sur WhatsApp`
+              }
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform active:scale-95",
+                whatsappOrder.busy && "cursor-wait opacity-70",
+              )}
               style={{ backgroundColor: "#25D366" }}
             >
-              <MessageCircle className="size-5" />
+              {whatsappOrder.busy ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <MessageCircle className="size-5" />
+              )}
             </button>
           ) : (
             <button

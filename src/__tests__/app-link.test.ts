@@ -32,8 +32,9 @@ describe("getAppLinkDestination", () => {
     const destination = getAppLinkDestination(
       "https://wa.me/22670112233?text=Bonjour%20Amy",
     );
+    // %20 et non « + » : l'app WhatsApp affiche le « + » tel quel.
     expect(destination.nativeUrl).toBe(
-      "whatsapp://send?phone=22670112233&text=Bonjour+Amy",
+      "whatsapp://send?phone=22670112233&text=Bonjour%20Amy",
     );
   });
 

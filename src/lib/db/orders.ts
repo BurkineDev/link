@@ -41,6 +41,9 @@ export type SettleResult =
 /** Taux de commission par plan, identique au `case` de la fonction SQL. */
 const COMMISSION_RATES = { free: 0.05, starter: 0.03, pro: 0 } as const;
 
+/** Statuts au-delà de « confirmée » : le règlement les laisse en place. */
+const ADVANCED_STATUSES: ReadonlySet<string> = new Set(["processing", "shipped", "delivered"]);
+
 const DOWNLOAD_VALIDITY_DAYS = 30;
 const DEFAULT_DOWNLOAD_LIMIT = 5;
 
@@ -78,7 +81,9 @@ export async function settlePaidOrder(
       where: { id: order.id },
       data: {
         paymentStatus: "paid",
-        status: "confirmed",
+        // Un règlement ne fait pas reculer une commande déjà en préparation
+        // ou livrée : il confirme ce qui attendait.
+        status: ADVANCED_STATUSES.has(order.status) ? order.status : "confirmed",
         paymentRef,
         paymentProvider,
         stockReservedAt: order.stockReservedAt ?? new Date(),
@@ -480,7 +485,8 @@ export type TransitionResult =
         | "not_found"
         | "forbidden"
         | "unchanged"
-        | "paid_order_requires_refund";
+        | "paid_order_requires_refund"
+        | "manual_order_requires_payment";
     }
   | { updated: false; reason: "invalid_transition"; from: OrderStatus; to: OrderStatus }
   | { updated: true; status: OrderStatus };
@@ -508,6 +514,7 @@ export async function transitionOrderStatus(input: {
         id: true,
         status: true,
         paymentStatus: true,
+        paymentProvider: true,
         shop: { select: { ownerId: true } },
       },
     });
@@ -531,6 +538,17 @@ export async function transitionOrderStatus(input: {
       (order.paymentStatus === "paid" || order.paymentStatus === "partially_refunded")
     ) {
       return { updated: false, reason: "paid_order_requires_refund" } as const;
+    }
+    // Une commande WhatsApp non payée n'avance que par « Marquer comme
+    // payée » : la confirmer à la main enverrait « Paiement confirmé » à
+    // l'acheteur sans un franc encaissé, sans stock prélevé, sans vente au
+    // tableau de bord.
+    if (
+      status !== "cancelled" &&
+      order.paymentProvider === "manual" &&
+      order.paymentStatus === "pending"
+    ) {
+      return { updated: false, reason: "manual_order_requires_payment" } as const;
     }
 
     await tx.order.update({ where: { id: order.id }, data: { status } });

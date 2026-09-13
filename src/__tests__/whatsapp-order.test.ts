@@ -59,7 +59,7 @@ function post(body: unknown) {
 }
 
 beforeEach(() => {
-  _shop = { id: SHOP_ID, name: "Wax & Co", slug: "wax", currency: "XOF", isPublished: true, checkoutMode: "whatsapp", whatsappNumber: "22670123456" };
+  _shop = { id: SHOP_ID, name: "Wax & Co", slug: "wax", currency: "XOF", isPublished: true, checkoutMode: "whatsapp", whatsappNumber: "22670123456", _count: { shippingZones: 0 } };
   _products = [{ id: PRODUCT_ID, name: "Tissu wax", price: 5000, images: [{ url: "https://cdn/x.jpg" }], hasVariants: false, currency: "XOF" }];
   _variants = [];
   _created = null;
@@ -72,7 +72,8 @@ beforeEach(() => {
 
 describe("message WhatsApp", () => {
   test("référence courte, lignes, total et lien de suivi", () => {
-    expect(orderReference("0f8a7b6c-1111-4222-8333-444455556666")).toBe("0F8A7B");
+    // La même référence que le tableau de bord, la page de suivi et les e-mails.
+    expect(orderReference("0f8a7b6c-1111-4222-8333-444455556666")).toBe("0F8A7B6C");
     const message = formatWhatsAppOrderMessage({
       shopName: "Wax & Co",
       lines: [
@@ -80,12 +81,12 @@ describe("message WhatsApp", () => {
         { product_name: "Boubou", quantity: 1, unit_price: 12_000 },
       ],
       totalLabel: "22 000 FCFA",
-      reference: "0F8A7B",
+      reference: "0F8A7B6C",
       trackingUrl: "https://www.bio-lien.com/orders/track/tok",
       formatPrice: (n) => `${n} FCFA`,
     });
     expect(message).toBe(
-      "Bonjour Wax & Co 👋\nJe commande :\n• Tissu wax (2 m) × 2 — 10000 FCFA\n• Boubou — 12000 FCFA\nTotal : 22 000 FCFA\n\nCommande #0F8A7B\nSuivi : https://www.bio-lien.com/orders/track/tok",
+      "Bonjour Wax & Co 👋\nJe commande :\n• Tissu wax (2 m) × 2 — 10000 FCFA\n• Boubou — 12000 FCFA\nTotal : 22 000 FCFA\n\nCommande #0F8A7B6C\nSuivi : https://www.bio-lien.com/orders/track/tok",
     );
     expect(whatsAppUrl("22670123456", "a b")).toBe("https://wa.me/22670123456?text=a%20b");
   });
@@ -97,10 +98,12 @@ describe("POST /api/orders/whatsapp", () => {
     const json = await res.json();
     expect(res.status).toBe(201);
     expect(json.order_id).toBe(ORDER_ID);
-    expect(json.reference).toBe("0F8A7B");
+    expect(json.reference).toBe("0F8A7B6C");
     expect(json.wa_url).toMatch(/^https:\/\/wa\.me\/22670123456\?text=/);
     const text = decodeURIComponent(json.wa_url.split("text=")[1]);
-    expect(text).toContain("Commande #0F8A7B");
+    expect(text).toContain("Commande #0F8A7B6C");
+    // Espaces insécables dans le montant ; pas de mention livraison sans zone.
+    expect(text).toMatch(/Total : 10.000.FCFA\n/);
     expect(text).toContain("https://www.bio-lien.com/orders/track/tok-abc");
     expect(text).toContain("Tissu wax × 2");
     expect(_created).toMatchObject({
@@ -114,6 +117,13 @@ describe("POST /api/orders/whatsapp", () => {
       currency: "XOF",
     });
     expect((_created!.items as Array<{ unit_price: number; quantity: number }>)[0]).toMatchObject({ unit_price: 5000, quantity: 2 });
+  });
+
+  test("boutique avec zones de livraison actives : le total est annoncé hors livraison", async () => {
+    _shop = { ..._shop!, _count: { shippingZones: 2 } };
+    const res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
+    const text = decodeURIComponent((await res.json()).wa_url.split("text=")[1]);
+    expect(text).toMatch(/Total : 5.000.FCFA \(hors livraison\)/);
   });
 
   test("le prix vient de la base, pas du client ; une variante inconnue est refusée", async () => {
@@ -135,7 +145,7 @@ describe("POST /api/orders/whatsapp", () => {
     expect(_created).toBeNull();
   });
 
-  test("stock insuffisant (réservation douce comprise) → 409 sans commande", async () => {
+  test("stock insuffisant → 409 sans commande", async () => {
     _stock = { ok: false, reason: "insufficient_stock", product_name: "Tissu wax", available: 0 };
     const res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
     expect(res.status).toBe(409);
@@ -162,21 +172,32 @@ describe("POST /api/orders/[id]/mark-paid", () => {
   test("anonyme → 401 ; autre vendeur → 403", async () => {
     expect((await call()).status).toBe(401);
     _user = { id: "u-other" };
-    _existing = { paymentProvider: "manual", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
+    _existing = { status: "pending", paymentProvider: "manual", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
     expect((await call()).status).toBe(403);
     expect(mockSettle).not.toHaveBeenCalled();
   });
 
   test("commande en ligne → 409 (le paiement est confirmé automatiquement)", async () => {
     _user = { id: "u-owner" };
-    _existing = { paymentProvider: "geniuspay", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
+    _existing = { status: "pending", paymentProvider: "geniuspay", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
     expect((await call()).status).toBe(409);
+    expect(mockSettle).not.toHaveBeenCalled();
+  });
+
+  test("commande annulée (par le vendeur ou expirée) → 409, elle ne ressuscite pas", async () => {
+    _user = { id: "u-owner" };
+    _existing = { status: "cancelled", paymentProvider: "manual", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
+    const res = await call();
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/annulée/);
+    _existing = { status: "cancelled", paymentProvider: "manual", paymentStatus: "failed", shop: { ownerId: "u-owner" } };
+    expect((await (await call()).json()).error).toMatch(/annulée/);
     expect(mockSettle).not.toHaveBeenCalled();
   });
 
   test("commande WhatsApp en attente → réglée hors plateforme", async () => {
     _user = { id: "u-owner" };
-    _existing = { paymentProvider: "manual", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
+    _existing = { status: "pending", paymentProvider: "manual", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
     const res = await call();
     expect(res.status).toBe(200);
     expect(mockSettle).toHaveBeenCalledWith(ORDER_ID, expect.stringMatching(/^manual:u-owner:\d+$/), "manual");
