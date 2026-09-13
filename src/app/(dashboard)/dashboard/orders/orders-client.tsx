@@ -60,6 +60,15 @@ function shortId(id: string): string {
   return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
+/**
+ * Commande WhatsApp que le vendeur n'a pas encore marquée payée : elle
+ * n'avance que par « Marquer comme payée » (ou s'annule), et n'est peut-être
+ * qu'un tap sans message.
+ */
+function awaitsManualPayment(order: OrderRow): boolean {
+  return order.payment_provider === "manual" && order.payment_status === "pending";
+}
+
 // ---- Filter tabs ----
 
 interface FilterTab {
@@ -115,6 +124,32 @@ function OrderDetailSheet({
   onStatusUpdated,
 }: OrderDetailSheetProps) {
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
+
+  async function handleMarkPaid() {
+    if (!order) return;
+    setMarkingPaid(true);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/mark-paid`, { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as {
+        order?: OrderRow;
+        error?: string;
+        stock_shortfall?: unknown[];
+      };
+      if (!response.ok || !data.order) {
+        toast.error(data.error ?? "Impossible de marquer la commande payée.");
+        return;
+      }
+      onStatusUpdated(data.order);
+      toast.success(
+        data.stock_shortfall && data.stock_shortfall.length > 0
+          ? "Commande payée, mais le stock ne couvrait pas tout : vérifie le bandeau."
+          : "Commande marquée payée : le stock est prélevé.",
+      );
+    } finally {
+      setMarkingPaid(false);
+    }
+  }
 
   if (!order) return null;
 
@@ -198,7 +233,10 @@ function OrderDetailSheet({
                     (opt) =>
                       opt.value === order.status ||
                       (NEXT_STATUSES[order.status]?.includes(opt.value) &&
-                        !(opt.value === "cancelled" && order.payment_status === "paid")),
+                        !(opt.value === "cancelled" && order.payment_status === "paid") &&
+                        // Une commande WhatsApp non payée se confirme par
+                        // « Marquer comme payée », pas ici.
+                        !(awaitsManualPayment(order) && opt.value !== "cancelled")),
                   ).map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
@@ -216,10 +254,19 @@ function OrderDetailSheet({
             </h3>
             <div className="rounded-xl border border-border bg-muted/30 p-3 flex flex-col gap-2">
               <p className="font-medium">{order.buyer_name}</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MailIcon className="size-3.5 shrink-0" />
-                <span className="truncate">{order.buyer_email}</span>
-              </div>
+              {order.buyer_email ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MailIcon className="size-3.5 shrink-0" />
+                  <span className="truncate">{order.buyer_email}</span>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Commande passée depuis la boutique, sans coordonnées : l&apos;acheteur devait
+                  t&apos;écrire sur WhatsApp avec la référence {shortId(order.id)}. Si aucun message
+                  n&apos;est arrivé, il n&apos;a pas envoyé : tu peux l&apos;annuler. Sans nouvelle
+                  sous 7 jours, elle expire d&apos;elle-même.
+                </p>
+              )}
               {order.buyer_phone && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <PhoneIcon className="size-3.5 shrink-0" />
@@ -307,7 +354,9 @@ function OrderDetailSheet({
               <div className="flex items-center gap-2">
                 <CreditCardIcon className="size-4 text-muted-foreground" />
                 <span className="text-sm capitalize">
-                  {order.payment_provider ?? "Non renseigné"}
+                  {order.payment_provider === "manual"
+                    ? "WhatsApp / hors ligne"
+                    : (order.payment_provider ?? "Non renseigné")}
                 </span>
                 <span
                   className={cn(
@@ -339,6 +388,22 @@ function OrderDetailSheet({
                   {formatCurrency(order.total_amount, order.currency)}
                 </span>
               </div>
+              {awaitsManualPayment(order) && order.status !== "cancelled" && (
+                <div className="border-t border-border pt-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Tu as reçu l&apos;argent (espèces, Mobile Money direct) ? Marque la commande
+                    payée : le stock est prélevé et la commande passe en « Confirmée ».
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={markingPaid}
+                    onClick={handleMarkPaid}
+                  >
+                    {markingPaid ? "Enregistrement…" : "Marquer comme payée"}
+                  </Button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -496,7 +561,7 @@ export function OrdersClient({
                             {order.buyer_name}
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {order.buyer_email}
+                            {order.buyer_email ?? "Commande WhatsApp"}
                           </p>
                         </td>
                         <td className="px-4 py-3 text-center text-muted-foreground hidden sm:table-cell">
@@ -508,6 +573,14 @@ export function OrdersClient({
                         <td className="px-4 py-3">
                           <span className="inline-flex flex-wrap items-center gap-1">
                             <OrderStatusBadge status={order.status} />
+                            {awaitsManualPayment(order) && order.status !== "cancelled" ? (
+                              <span
+                                className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300"
+                                title="Commande WhatsApp : à marquer payée quand l'argent est reçu"
+                              >
+                                Non payée
+                              </span>
+                            ) : null}
                             {order.stock_shortfall && order.stock_shortfall.length > 0 ? (
                               <span
                                 className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"

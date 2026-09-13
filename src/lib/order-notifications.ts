@@ -110,6 +110,10 @@ export async function notifyBuyerOfPaidOrder(orderId: string): Promise<void> {
     ? `\n\nTéléchargements :\n${downloadRows.map((download) => `• ${download.name}: ${download.url}`).join("\n")}`
     : "";
 
+  // Commande WhatsApp : pas d'e-mail acheteur, la confirmation se fait dans
+  // la conversation.
+  if (!order.buyer_email) return;
+
   await sendTransactionalEmail({
     to: order.buyer_email,
     subject: `Commande confirmée chez ${shop?.name ?? "Bio-Lien"}`,
@@ -232,7 +236,7 @@ async function sendSellerEmail(args: {
   orderId: string;
   buyerName: string;
   buyerPhone: string | null;
-  buyerEmail: string;
+  buyerEmail: string | null;
   shippingAddress: unknown;
   items: OrderItem[];
   itemCount: number;
@@ -255,7 +259,7 @@ async function sendSellerEmail(args: {
   const contactText = [
     `Client : ${args.buyerName}`,
     args.buyerPhone ? `Téléphone : ${args.buyerPhone}` : null,
-    `E-mail : ${args.buyerEmail}`,
+    args.buyerEmail ? `E-mail : ${args.buyerEmail}` : null,
     address ? `Livraison : ${address}` : null,
   ]
     .filter(Boolean)
@@ -265,7 +269,7 @@ async function sendSellerEmail(args: {
     args.buyerPhone
       ? `<li>Téléphone : <a href="https://wa.me/${escapeEmailHtml(args.buyerPhone.replace(/\D/g, ""))}">${escapeEmailHtml(args.buyerPhone)}</a></li>`
       : "",
-    `<li>E-mail : ${escapeEmailHtml(args.buyerEmail)}</li>`,
+    args.buyerEmail ? `<li>E-mail : ${escapeEmailHtml(args.buyerEmail)}</li>` : "",
     address ? `<li>Livraison : ${escapeEmailHtml(address)}</li>` : "",
   ].join("");
 

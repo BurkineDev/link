@@ -33,7 +33,7 @@ import { useCart } from "@/hooks/use-cart";
 interface OrderDetails {
   id: string;
   buyer_name: string;
-  buyer_email: string;
+  buyer_email: string | null;
   total_amount: number;
   currency: Currency;
   status: string;

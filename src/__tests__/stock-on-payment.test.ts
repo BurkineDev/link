@@ -96,7 +96,7 @@ const prismaMock = {
 jest.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
 import { checkStockAvailability, claimStock } from "@/lib/db/stock";
-import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import { cancelUnpaidOrder, settlePaidOrder, transitionOrderStatus } from "@/lib/db/orders";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
 const P2 = "22222222-2222-4222-8222-222222222222";
@@ -173,9 +173,15 @@ describe("checkStockAvailability — réservation douce", () => {
     expect(await checkStockAvailability([{ product_id: P1, quantity: 2 }], { shopId: "shop" })).toEqual({
       ok: false, reason: "insufficient_stock", product_id: P1, product_name: "Tissu wax", available: 1, requested: 2,
     });
-    const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { paymentStatus: string; stockReservedAt: null; createdAt: { gt: Date } } }]>)[0]![0];
+    const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { paymentStatus: string; stockReservedAt: null; createdAt: { gt: Date }; OR: unknown[] } }]>)[0]![0];
     expect(call.where).toMatchObject({ shopId: "shop", paymentStatus: "pending", stockReservedAt: null });
     expect(Date.now() - call.where.createdAt.gt.getTime()).toBeGreaterThanOrEqual(30 * 60 * 1000 - 1000);
+  });
+
+  test("les commandes WhatsApp (manual) n'engagent rien : deux curieux ne bloquent pas la boutique", async () => {
+    await checkStockAvailability([{ product_id: P1, quantity: 1 }], { shopId: "shop" });
+    const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { OR: unknown[] } }]>)[0]![0];
+    expect(call.where.OR).toEqual([{ paymentProvider: null }, { paymentProvider: { not: "manual" } }]);
   });
 
   test("sans boutique (appel interne) : pas de réservation douce", async () => {
@@ -284,12 +290,57 @@ describe("settlePaidOrder", () => {
     expect(tx.digitalDownload.create).toHaveBeenCalledTimes(1);
   });
 
+  test("commande WhatsApp réglée hors plateforme : stock prélevé, ni registre ni fiche client sans e-mail", async () => {
+    _order = order({ buyerEmail: null, paymentProvider: "manual" });
+    const res = await settlePaidOrder(ORDER, "manual:u1:1", "manual");
+    expect(res).toMatchObject({ settled: true, offline: true, commission: 0, customerId: null, stockShortfall: [] });
+    expect(_products[P1]!.stock).toBe(3);
+    expect(tx.transactionLedger.createMany).not.toHaveBeenCalled();
+    expect(tx.customer.create).not.toHaveBeenCalled();
+    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "confirmed", paymentProvider: "manual" });
+  });
+
   test("commande d'avant le changement (stock déjà réservé) : pas de second prélèvement", async () => {
     _order = order({ stockReservedAt: new Date("2026-09-10T00:00:00Z") });
     const res = await settlePaidOrder(ORDER, "MTX-3", "stripe");
     expect(res).toMatchObject({ settled: true, stockShortfall: [] });
     expect(_products[P1]!.stock).toBe(5);
     expect(_updates[0]!.stockReservedAt).toEqual(new Date("2026-09-10T00:00:00Z"));
+  });
+});
+
+describe("settlePaidOrder — statut", () => {
+  test("une commande déjà expédiée ne recule pas à « confirmée » quand le paiement tombe", async () => {
+    _order = order({ status: "shipped" });
+    expect(await settlePaidOrder(ORDER, "MTX-9", "manual")).toMatchObject({ settled: true });
+    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "shipped" });
+  });
+});
+
+describe("transitionOrderStatus — commande WhatsApp non payée", () => {
+  const OWNER = "66666666-6666-4666-8666-666666666666";
+
+  test("ne se confirme pas à la main : c'est « Marquer comme payée » qui confirme", async () => {
+    _order = order({ paymentProvider: "manual", shop: { ownerId: OWNER } });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: OWNER })).toEqual({
+      updated: false,
+      reason: "manual_order_requires_payment",
+    });
+    expect(_updates).toHaveLength(0);
+    expect(_events).toHaveLength(0);
+  });
+
+  test("peut être annulée ; une commande en ligne en attente se confirme comme avant", async () => {
+    _order = order({ paymentProvider: "manual", shop: { ownerId: OWNER } });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "cancelled",
+    });
+    _order = order({ paymentProvider: "geniuspay", shop: { ownerId: OWNER } });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "confirmed",
+    });
   });
 });
 

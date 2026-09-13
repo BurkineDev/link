@@ -38,6 +38,8 @@ const PROVIDER_META: Record<
 > = {
   stripe: { label: "Carte bancaire", icon: CreditCardIcon },
   geniuspay: { label: "Mobile Money", icon: SmartphoneIcon },
+  manual: { label: "WhatsApp / hors ligne", icon: WalletIcon },
+  free: { label: "Gratuit (code promo)", icon: WalletIcon },
 };
 
 const PAYMENT_STATUS_META: Record<

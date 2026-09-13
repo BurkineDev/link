@@ -59,7 +59,9 @@ function whatsappUrl(url: URL): string | null {
   const params = new URLSearchParams();
   if (phone) params.set("phone", phone);
   if (text) params.set("text", text);
-  return `whatsapp://send?${params.toString()}`;
+  // `URLSearchParams` code l'espace en « + », que l'app WhatsApp affiche tel
+  // quel dans le message pré-rempli ; elle attend du %20.
+  return `whatsapp://send?${params.toString().replace(/\+/g, "%20")}`;
 }
 
 function telegramUrl(url: URL): string | null {
@@ -297,11 +299,22 @@ export function toAndroidIntentUrl(
  * signal inter-navigateurs indiquant que l'application a pris la main. Tous
  * les listeners sont retirés afin de ne rien laisser vivre si l'utilisateur
  * revient plus tard sur la BioPage.
+ *
+ * `androidFallbackDelayMs` pose le même filet sur Android : Chrome refuse un
+ * intent:// qui n'est pas porté par un geste utilisateur récent (console
+ * « Navigation is blocked ») et n'ouvre alors PAS l'URL de repli de
+ * l'intent — la page reste là, muette. Utile quand la navigation suit un
+ * appel réseau (commande WhatsApp enregistrée) ; inutile depuis un `onClick`
+ * synchrone, où le geste est garanti.
  */
 export function openNativeApp(
   nativeUrl: string | null,
   fallbackUrl: string,
-  options: { androidPackage?: string | null; userAgent?: string } = {},
+  options: {
+    androidPackage?: string | null;
+    userAgent?: string;
+    androidFallbackDelayMs?: number;
+  } = {},
 ): void {
   const ua = options.userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
 
@@ -312,6 +325,10 @@ export function openNativeApp(
       fallbackUrl,
       options.androidPackage ?? null,
     );
+    if (intentUrl && options.androidFallbackDelayMs) {
+      navigateThenFallBack(intentUrl, fallbackUrl, options.androidFallbackDelayMs);
+      return;
+    }
     window.location.assign(intentUrl ?? fallbackUrl);
     return;
   }
@@ -322,6 +339,14 @@ export function openNativeApp(
     return;
   }
 
+  navigateThenFallBack(nativeUrl, fallbackUrl, 1100);
+}
+
+/**
+ * Navigue vers `url` et, si la page est toujours visible `delayMs` plus
+ * tard, ouvre `fallbackUrl` à la place.
+ */
+function navigateThenFallBack(url: string, fallbackUrl: string, delayMs: number): void {
   let timer = 0;
 
   const cleanup = () => {
@@ -338,10 +363,10 @@ export function openNativeApp(
   timer = window.setTimeout(() => {
     cleanup();
     if (!document.hidden) window.location.assign(fallbackUrl);
-  }, 1100);
+  }, delayMs);
 
   try {
-    window.location.assign(nativeUrl);
+    window.location.assign(url);
   } catch {
     cleanup();
     window.location.assign(fallbackUrl);
