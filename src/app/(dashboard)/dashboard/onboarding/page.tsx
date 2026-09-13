@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
@@ -25,6 +25,8 @@ import {
   Loader2,
   Palette,
   Target,
+  ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import {
   BIO_THEME_LIST,
@@ -54,7 +56,14 @@ import { safeNextPath } from "@/lib/validations/next-path";
 import { useDebounce } from "@/hooks/use-debounce";
 import { isValidE164 } from "@/lib/phone/dial-codes";
 import { WhatsAppNumberField } from "@/components/dashboard/whatsapp-number-field";
-import { useEffect } from "react";
+import {
+  browserDraftStorage,
+  clearDraft,
+  loadDraft,
+  resumeStep,
+  saveDraft,
+  type OnboardingDraft,
+} from "@/lib/onboarding/draft";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -153,7 +162,73 @@ function OnboardingPreview({
 }
 
 // ─── Component ───────────────────────────────────────────────
+
+/** Objectifs retenus quand le vendeur passe l'écran : vendre, sur WhatsApp. */
+const DEFAULT_SEED_INTENTIONS: Intention[] = ["sell", "whatsapp"];
+
+interface SessionProfile {
+  fullName: string | null;
+  username: string | null;
+}
+
+/**
+ * Résout la session et le brouillon avant de monter l'assistant : ses
+ * états partent alors des bonnes valeurs, sans effet de restauration ni
+ * écran 1 qui clignote avant de sauter à l'écran 2.
+ */
 export default function OnboardingPage() {
+  const { data: session, isPending } = useSession();
+  const sessionUser = session?.user as
+    | { id?: string; name?: string | null; username?: string | null }
+    | undefined;
+  const userId = sessionUser?.id ?? null;
+
+  const sessionName = sessionUser?.name?.trim() || null;
+  const sessionUsername =
+    sessionUser?.username && usernameSchema.safeParse(sessionUser.username).success
+      ? sessionUser.username
+      : null;
+  // Lu une fois par compte, côté navigateur seulement (la session n'est
+  // jamais résolue pendant le rendu serveur).
+  const draft = useMemo(() => (userId ? loadDraft(browserDraftStorage(), userId) : null), [userId]);
+
+  if (isPending || !userId) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <Logo size="md" />
+            <Badge variant="outline" className="text-xs">
+              Configuration initiale
+            </Badge>
+          </div>
+        </header>
+        <div className="container mx-auto flex max-w-2xl justify-center px-4 py-24" aria-busy="true">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <OnboardingWizard
+      key={userId}
+      userId={userId}
+      profile={{ fullName: sessionName, username: sessionUsername }}
+      draft={draft}
+    />
+  );
+}
+
+function OnboardingWizard({
+  userId,
+  profile,
+  draft,
+}: {
+  userId: string;
+  profile: SessionProfile;
+  draft: OnboardingDraft | null;
+}) {
   const router = useRouter();
   // Le visiteur qui avait choisi un plan avant de s'inscrire y retourne une
   // fois sa boutique créée, plutôt que d'atterrir sur un tableau de bord qui
@@ -161,20 +236,41 @@ export default function OnboardingPage() {
   // transité par une URL, il n'est pas plus fiable qu'à l'arrivée.
   const searchParams = useSearchParams();
   const nextPath = safeNextPath(searchParams.get("next"));
-  const [step, setStep] = useState(1);
+
+  // Nom et pseudo ont été saisis à l'inscription : l'écran Profil est passé
+  // d'office, le vendeur peut y revenir d'un tap.
+  const profileKnown = Boolean(profile.fullName && profile.username);
+  const [step, setStep] = useState(() =>
+    draft ? resumeStep(draft, profileKnown) : profileKnown ? 2 : 1,
+  );
+  const [resumed, setResumed] = useState(draft !== null);
   const [loading, setLoading] = useState(false);
-  const [bioTheme, setBioTheme] = useState<BioThemeId>(DEFAULT_BIO_THEME);
+  const [bioTheme, setBioTheme] = useState<BioThemeId>(
+    () => (draft?.bioTheme as BioThemeId | undefined) ?? DEFAULT_BIO_THEME,
+  );
 
   // Step 1 data
-  const [step1Data, setStep1Data] = useState<Step1Values | null>(null);
-  const [step2Data, setStep2Data] = useState<Step2Values | null>(null);
+  const [step1Data, setStep1Data] = useState<Step1Values | null>(() => {
+    if (draft?.step1?.fullName && draft.step1.username) return draft.step1;
+    if (profileKnown) return { fullName: profile.fullName!, username: profile.username! };
+    return null;
+  });
+  const [step2Data, setStep2Data] = useState<Step2Values | null>(() =>
+    draft?.step2?.shopName && draft.step2.shopSlug ? draft.step2 : null,
+  );
 
   // Step 3 — ce que le vendeur veut faire, et le minimum pour le lui livrer.
-  const [intentions, setIntentions] = useState<Intention[]>([]);
-  const [handles, setHandles] = useState<Partial<Record<SocialNetwork, string>>>(
-    {},
+  const [intentions, setIntentions] = useState<Intention[]>(
+    () => (draft?.intentions ?? []).filter((i): i is Intention => INTENTIONS.includes(i as Intention)),
   );
-  const [announcement, setAnnouncement] = useState("");
+  const [handles, setHandles] = useState<Partial<Record<SocialNetwork, string>>>(
+    () => (draft?.handles as Partial<Record<SocialNetwork, string>> | undefined) ?? {},
+  );
+  const [announcement, setAnnouncement] = useState(draft?.announcement ?? "");
+
+  // Écran Terminé : la boutique existe, reste à la publier.
+  const [created, setCreated] = useState<{ id: string; slug: string; published: boolean } | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   const toggleIntention = (value: Intention) =>
     setIntentions((current) =>
@@ -187,34 +283,27 @@ export default function OnboardingPage() {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
 
-  const form1 = useForm<Step1Values>({ resolver: zodResolver(step1Schema) });
-
-  // Prefill step 1 from what the seller already typed at signup — kept on
-  // the Better Auth user (`name`, and the `username` additional field).
-  // They just confirm and continue.
-  const { data: session } = useSession();
-  const sessionUser = session?.user as
-    | { name?: string | null; username?: string | null }
-    | undefined;
-  const sessionName = sessionUser?.name ?? null;
-  const sessionUsername = sessionUser?.username ?? null;
-  useEffect(() => {
-    if (sessionName && !form1.getValues("fullName")) {
-      form1.setValue("fullName", sessionName);
-    }
-    if (
-      sessionUsername &&
-      !form1.getValues("username") &&
-      usernameSchema.safeParse(sessionUsername).success
-    ) {
-      form1.setValue("username", sessionUsername);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionName, sessionUsername]);
+  const form1 = useForm<Step1Values>({
+    resolver: zodResolver(step1Schema),
+    defaultValues: {
+      fullName: draft?.step1?.fullName || profile.fullName || "",
+      username: draft?.step1?.username || profile.username || "",
+    },
+  });
   const form2 = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
-    defaultValues: { currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" },
+    defaultValues: {
+      shopName: draft?.step2?.shopName ?? "",
+      shopSlug: draft?.step2?.shopSlug ?? "",
+      description: draft?.step2?.description ?? "",
+      currency: draft?.step2?.currency ?? "XOF",
+      checkoutMode: draft?.step2?.checkoutMode ?? "whatsapp",
+      whatsappNumber: draft?.step2?.whatsappNumber ?? "",
+    },
   });
+  // Un slug repris du brouillon est réputé choisi : l'auto-génération depuis
+  // le nom ne doit pas l'écraser.
+  const slugPinned = useRef(Boolean(draft?.step2?.shopSlug));
   const watchedCheckoutMode = useWatch({
     control: form2.control,
     name: "checkoutMode",
@@ -224,10 +313,62 @@ export default function OnboardingPage() {
   const watchedCurrency = useWatch({ control: form2.control, name: "currency" });
   const debouncedSlug = useDebounce(watchedSlug, 500);
   const watchedShopName = useWatch({ control: form2.control, name: "shopName" });
+  const watchedForm1 = useWatch({ control: form1.control });
+  const watchedForm2 = useWatch({ control: form2.control });
+
+  // Brouillon : chaque saisie est enregistrée dans le navigateur, un peu
+  // après la frappe. Effacé à la création de la boutique.
+  useEffect(() => {
+    if (created) return;
+    const timer = setTimeout(() => {
+      const fullName = watchedForm1.fullName ?? "";
+      const username = watchedForm1.username ?? "";
+      // Le profil pré-rempli depuis le compte n'est pas une saisie : sans
+      // lui, un écran 2 encore vide ne mérite pas de brouillon.
+      const step1 =
+        fullName === (profile.fullName ?? "") && username === (profile.username ?? "")
+          ? null
+          : { fullName, username };
+      saveDraft(browserDraftStorage(), userId, {
+        step,
+        step1,
+        step2: {
+          shopName: watchedForm2.shopName ?? "",
+          shopSlug: watchedForm2.shopSlug ?? "",
+          description: watchedForm2.description ?? "",
+          currency: watchedForm2.currency ?? "XOF",
+          checkoutMode: watchedForm2.checkoutMode ?? "whatsapp",
+          whatsappNumber: watchedForm2.whatsappNumber ?? "",
+        },
+        intentions,
+        handles: Object.fromEntries(
+          Object.entries(handles).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        ),
+        announcement,
+        bioTheme,
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [userId, created, step, watchedForm1, watchedForm2, intentions, handles, announcement, bioTheme, profile.fullName, profile.username]);
+
+  const restart = () => {
+    clearDraft(browserDraftStorage(), userId);
+    form1.reset({ fullName: profile.fullName ?? "", username: profile.username ?? "" });
+    form2.reset({ shopName: "", shopSlug: "", description: "", currency: "XOF", checkoutMode: "whatsapp", whatsappNumber: "" });
+    slugPinned.current = false;
+    setStep1Data(profileKnown ? { fullName: profile.fullName!, username: profile.username! } : null);
+    setStep2Data(null);
+    setIntentions([]);
+    setHandles({});
+    setAnnouncement("");
+    setBioTheme(DEFAULT_BIO_THEME);
+    setResumed(false);
+    setStep(profileKnown ? 2 : 1);
+  };
 
   // Auto-generate slug from shop name
   useEffect(() => {
-    if (watchedShopName && !form2.formState.dirtyFields.shopSlug) {
+    if (watchedShopName && !form2.formState.dirtyFields.shopSlug && !slugPinned.current) {
       const slug = watchedShopName
         .toLowerCase()
         .normalize("NFD")
@@ -291,9 +432,10 @@ export default function OnboardingPage() {
 
     try {
       // La première page est composée à partir des intentions ; le serveur
-      // crée profil, boutique et blocs en une seule transaction.
+      // crée profil, boutique et blocs en une seule transaction. Sans
+      // objectif choisi, la page reçoit le strict nécessaire pour vendre.
       const seeds = seedBlocksForIntentions({
-        intentions,
+        intentions: intentions.length > 0 ? intentions : DEFAULT_SEED_INTENTIONS,
         whatsappNumber: step2Data.whatsappNumber,
         handles,
         announcement,
@@ -329,18 +471,57 @@ export default function OnboardingPage() {
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+        if (body.code === "ALREADY_ONBOARDED") {
+          clearDraft(browserDraftStorage(), userId);
+          router.replace("/dashboard");
+          return;
+        }
         throw new Error(body.error ?? "Une erreur est survenue");
       }
+      const body = (await res.json()) as { shopId: string };
 
+      clearDraft(browserDraftStorage(), userId);
+      setCreated({ id: body.shopId, slug: step2Data.shopSlug, published: false });
+      setStep(5);
       toast.success("Ta boutique est créée ! 🎉");
-      router.push(nextPath ?? "/dashboard");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
       setLoading(false);
     }
   };
+
+  // Écran Terminé : publier tout de suite, sans chercher le bandeau du
+  // tableau de bord.
+  const handlePublish = async () => {
+    if (!created) return;
+    setPublishing(true);
+    try {
+      const res = await fetch(`/api/shops/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: true }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Impossible de publier la boutique.");
+      }
+      setCreated({ ...created, published: true });
+      toast.success("Ta page est en ligne !");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Impossible de publier la boutique.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const publicUrl =
+    typeof window !== "undefined" && created
+      ? `${window.location.origin}/${created.slug}`
+      : created
+        ? `/${created.slug}`
+        : "";
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -382,6 +563,20 @@ export default function OnboardingPage() {
             </div>
           ))}
         </div>
+
+        {resumed && !created && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm">
+            <p className="text-muted-foreground">On a repris là où tu t&apos;étais arrêté.</p>
+            <button
+              type="button"
+              onClick={restart}
+              className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+              Recommencer
+            </button>
+          </div>
+        )}
 
         {/* Step content */}
         <AnimatePresence mode="wait">
@@ -470,6 +665,22 @@ export default function OnboardingPage() {
                     Comment s&apos;appellera ta boutique ?
                   </p>
                 </div>
+
+                {step1Data && (
+                  <p className="flex flex-wrap items-center justify-center gap-x-2 rounded-lg bg-muted/60 px-3 py-2 text-center text-xs text-muted-foreground">
+                    <span>
+                      Profil : <span className="font-semibold text-foreground">{step1Data.fullName}</span>{" "}
+                      · @{step1Data.username}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="font-semibold text-foreground underline-offset-4 hover:underline"
+                    >
+                      Modifier
+                    </button>
+                  </p>
+                )}
 
                 <form onSubmit={handleStep2} className="space-y-4">
                   <div className="space-y-2">
@@ -668,8 +879,8 @@ export default function OnboardingPage() {
                     Que veux-tu faire avec Bio-Lien&nbsp;?
                   </h1>
                   <p className="text-muted-foreground">
-                    Choisis tout ce qui te correspond. On prépare ta page à
-                    partir de ça — tu pourras tout changer ensuite.
+                    Choisis tout ce qui te correspond, ou passe : on prépare
+                    ta page à partir de ça — tu pourras tout changer ensuite.
                   </p>
                 </div>
 
@@ -780,14 +991,13 @@ export default function OnboardingPage() {
                     type="button"
                     className="flex-1 h-12 gap-2"
                     onClick={() => setStep(4)}
-                    disabled={intentions.length === 0}
                   >
-                    Continuer <ArrowRight className="h-4 w-4" />
+                    {intentions.length === 0 ? "Passer" : "Continuer"} <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
                 {intentions.length === 0 && (
                   <p className="text-center text-xs text-muted-foreground -mt-2">
-                    Choisis au moins un objectif pour continuer.
+                    Sans objectif, ta page part avec l&apos;essentiel : tes produits et un bouton WhatsApp.
                   </p>
                 )}
               </Card>
@@ -907,6 +1117,63 @@ export default function OnboardingPage() {
                     )}
                   </Button>
                 </div>
+              </Card>
+            </motion.div>
+          )}
+          {/* ─── STEP 5: Terminé ─── */}
+          {step === 5 && created && (
+            <motion.div
+              key="step5"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="p-6 space-y-6">
+                <div className="text-center space-y-1">
+                  <div className="text-4xl" aria-hidden="true">🎉</div>
+                  <h1 className="text-2xl font-bold">Ta boutique est créée</h1>
+                  <p className="text-muted-foreground">
+                    {created.published
+                      ? "Elle est en ligne : partage ton lien dans ta bio."
+                      : "Il ne reste qu'à la publier pour que tes clients la voient."}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-center">
+                  <p className="text-xs text-muted-foreground">Ton lien</p>
+                  <p className="break-all font-mono text-sm font-semibold">{publicUrl}</p>
+                </div>
+
+                {created.published ? (
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button asChild variant="outline" className="flex-1 h-12 gap-2">
+                      <a href={`/${created.slug}`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4" /> Voir ma page
+                      </a>
+                    </Button>
+                    <Button className="flex-1 h-12 gap-2" onClick={() => router.push(nextPath ?? "/dashboard")}>
+                      Aller au tableau de bord <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <Button className="h-12 gap-2" onClick={handlePublish} disabled={publishing}>
+                      {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Publier ma page maintenant</>}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-12"
+                      onClick={() => router.push(nextPath ?? "/dashboard")}
+                      disabled={publishing}
+                    >
+                      Plus tard — ajouter des produits d&apos;abord
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Tu pourras publier à tout moment depuis le tableau de bord.
+                    </p>
+                  </div>
+                )}
               </Card>
             </motion.div>
           )}

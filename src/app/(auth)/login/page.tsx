@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -115,7 +115,6 @@ function RegistrationBanner() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -146,8 +145,14 @@ export default function LoginPage() {
     }
 
     toast.success("Connexion réussie. Bon retour !");
-    router.refresh();
-    router.push("/dashboard");
+    // Navigation complète, pas `router.push()` : tant que l'onboarding n'est
+    // pas terminé, le layout du tableau de bord redirige /dashboard vers
+    // /dashboard/onboarding, et le routeur client refaisait alors la même
+    // requête RSC en boucle — page blanche pour tout nouveau vendeur
+    // (reproduit avec et sans `router.refresh()`). Une vraie navigation suit
+    // la redirection une fois et repart avec la session fraîche.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign("/dashboard");
   }
 
   // ── Google OAuth ───────────────────────────────────────────────────────────

@@ -92,6 +92,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Un onboarding ne se termine qu'une fois : rejoué (double envoi, page
+  // rechargée sur l'écran final), il créerait une seconde boutique.
+  const existing = await prisma.shop.findFirst({
+    where: { ownerId: user.id },
+    select: { id: true },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: "Ta boutique existe déjà.", code: "ALREADY_ONBOARDED", shopId: existing.id },
+      { status: 409 },
+    );
+  }
+
   try {
     const shopId = await prisma.$transaction(async (tx) => {
       await tx.profile.update({

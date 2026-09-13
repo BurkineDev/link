@@ -70,6 +70,12 @@ export default async function DashboardLayout({
   if (!isOnboarding && !isTeamArea && !profile?.onboardingCompleted) {
     redirect("/dashboard/onboarding");
   }
+  // Et l'inverse : un onboarding déjà terminé ne se rejoue pas (rechargement
+  // de l'écran « Terminé », lien gardé en favori) — sinon une seconde
+  // boutique naissait d'un simple F5.
+  if (isOnboarding && profile?.onboardingCompleted && shop) {
+    redirect("/dashboard");
+  }
 
   // Sur la page d'onboarding, pas de chrome : elle fournit sa propre mise en
   // page plein écran.
