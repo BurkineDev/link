@@ -80,6 +80,7 @@ export function BioProductCard({
       image: primaryImage?.url,
       shopId,
       shopSlug,
+      isDigital: product.is_digital,
     });
 
     toast.success("Ajouté au panier", {

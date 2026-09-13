@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, ChevronLeft, Check, X, Tag } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronDown, Check, X, Tag } from "lucide-react";
 
-import { useCart } from "@/hooks/use-cart";
-import { AFRICAN_COUNTRIES, CURRENCY_META, type Currency } from "@/lib/constants";
+import { useCart, useCartReady } from "@/hooks/use-cart";
+import { AFRICAN_COUNTRIES, type Currency } from "@/lib/constants";
 import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { dialCodeEntry, dialCodeFor, nsnHint, toE164 } from "@/lib/phone/dial-codes";
+import { cartNeedsShipping, quoteShipping } from "@/lib/checkout/shipping";
+import type { CheckoutShop } from "@/lib/checkout/shop-context";
+import { readableTextOn } from "@/lib/bio-themes";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +28,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { OrderSummary, formatPrice } from "@/components/checkout/order-summary";
+import {
+  MobileOrderSummary,
+  OrderSummary,
+  formatPrice,
+  orderTotal,
+} from "@/components/checkout/order-summary";
 import {
   PaymentMethods,
   type PaymentType,
@@ -100,18 +109,38 @@ const PHONE_CODE_OPTIONS = AFRICAN_COUNTRIES.map((c) => ({
 
 interface CheckoutFormProps {
   mobileMoneyEnabled?: boolean;
+  /** Boutique chargée côté serveur depuis `?shop=` ; null si absente ou inconnue. */
+  shop?: CheckoutShop | null;
 }
 
-export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFormProps) {
+export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopParam = null }: CheckoutFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { items, getTotal, shopId } = useCart();
+  const cartReady = useCartReady();
 
-  const hasPhysical = items.length > 0;
-  const currency: Currency = (items[0]?.currency as Currency) ?? "XOF";
+  // La boutique de la page doit être celle du panier : une adresse bricolée
+  // (`?shop=autre`) ne montre ni le logo ni les frais d'une autre boutique.
+  const shop = shopParam && shopParam.id === shopId ? shopParam : null;
+  const cartSlug = items[0]?.shopSlug ?? null;
 
-  const shopName = items[0]?.shopSlug
-    ? items[0].shopSlug.charAt(0).toUpperCase() + items[0].shopSlug.slice(1)
-    : "Boutique";
+  // Sans contexte (ancien lien, adresse tapée), on recharge la page avec le
+  // bon `?shop=` — une seule fois : si la boutique reste introuvable, on
+  // continue sans identité plutôt que de boucler.
+  useEffect(() => {
+    if (!cartReady || shop || !cartSlug) return;
+    if (searchParams.get("shop") === cartSlug) return;
+    router.replace(`/checkout?shop=${encodeURIComponent(cartSlug)}`);
+  }, [cartReady, shop, cartSlug, searchParams, router]);
+
+  const physical = cartNeedsShipping(items);
+  const currency: Currency = shop?.currency ?? ((items[0]?.currency as Currency) ?? "XOF");
+  const accent = shop?.theme_color;
+  const accentInk = accent ? readableTextOn(accent) : undefined;
+
+  const shopName =
+    shop?.name ??
+    (cartSlug ? cartSlug.charAt(0).toUpperCase() + cartSlug.slice(1) : "Boutique");
 
   const [phoneIso2, setPhoneIso2] = useState("CI");
   // Un choix manuel de l'acheteur l'emporte : on ne le lui reprend pas quand
@@ -132,23 +161,34 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     discount_value: number;
   } | null>(null);
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
+  // Code promo et note vivent derrière un lien : rares, et ils poussaient le
+  // bouton de paiement sous cinq sections sur téléphone.
+  const [extrasOpen, setExtrasOpen] = useState(false);
 
   const {
     register,
     handleSubmit,
     control,
     setError,
+    setValue,
     formState: { errors },
   } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      requires_shipping: hasPhysical,
+      requires_shipping: physical,
       country: "CI",
     },
   });
 
+  // Un panier tout numérique n'a pas d'adresse à donner ; un panier chargé
+  // après le premier rendu (persistance) est rattrapé ici.
+  useEffect(() => {
+    setValue("requires_shipping", physical);
+  }, [physical, setValue]);
+
   const requiresShipping = useWatch({ control, name: "requires_shipping" });
   const shippingCountry = useWatch({ control, name: "country" });
+  const notesValue = useWatch({ control, name: "notes" });
 
   // L'indicatif suit le pays de livraison tant que l'acheteur ne l'a pas
   // choisi lui-même. Dérivé plutôt que synchronisé : il n'y a qu'une seule
@@ -163,15 +203,19 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
   // Affiché sous le champ pour que l'acheteur le voie avant de payer.
   const composedPhone = phoneValue ? toE164(phoneValue, phoneCountry) : null;
 
+  // Pays de l'acheteur pour la couverture Mobile Money : celui de la
+  // livraison quand il y en a une, sinon celui de son numéro (un panier
+  // tout numérique n'a pas d'adresse).
+  const buyerCountry = requiresShipping ? shippingCountry : phoneCountry;
   const countryLabel =
-    AFRICAN_COUNTRIES.find((c) => c.code === shippingCountry)?.name ?? null;
+    AFRICAN_COUNTRIES.find((c) => c.code === buyerCountry)?.name ?? null;
 
   // Genius Pay ne couvre pas tous les pays en Mobile Money : hors couverture,
   // il accepte le paiement mais n'envoie jamais le push. On bascule sur la
   // carte plutôt que de laisser partir une commande qui ne peut pas aboutir.
   // Dérivé, pas synchronisé : le choix de l'acheteur reste intact s'il revient
   // à un pays couvert.
-  const mobileMoneyCovered = isMobileMoneyCovered(shippingCountry);
+  const mobileMoneyCovered = isMobileMoneyCovered(buyerCountry);
   // Même logique pour la devise : Genius Pay règle en XOF, une boutique en
   // XAF ou KES ne peut pas voir sa commande confirmée.
   const mobileMoneyCurrencyOk = isMobileMoneyCurrency(currency);
@@ -180,13 +224,26 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
       ? { type: "card" as PaymentType, mobileProvider: undefined }
       : paymentSelection;
 
+  // Panier vide : retour d'où l'on vient — mais seulement une fois le panier
+  // réellement lu, sinon chaque rechargement de la page renvoyait l'acheteur
+  // en arrière avec un panier plein.
   useEffect(() => {
-    if (items.length === 0) router.back();
-  }, [items.length, router]);
+    if (cartReady && items.length === 0) router.back();
+  }, [cartReady, items.length, router]);
 
   const subtotal = getTotal();
   const discount = appliedPromo?.discount ?? 0;
-  const total = Math.max(0, subtotal - discount);
+  // Même règle que l'API : ce que l'acheteur voit ici est ce qu'il paie.
+  const shipping = quoteShipping({
+    physical,
+    shippingEnabled: shop?.shipping_enabled ?? false,
+    zones: shop?.shipping_zones ?? [],
+    country: requiresShipping ? shippingCountry : null,
+    subtotal,
+  });
+  const total = orderTotal({ items, currency, shipping, discount });
+  const shippingUnavailable = shipping.kind === "unavailable";
+  const showExtras = extrasOpen || appliedPromo !== null || !!notesValue;
 
   // ---------------------------------------------------------------------------
   async function applyPromo() {
@@ -299,17 +356,41 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
     }
   }
 
-  if (items.length === 0) return null;
+  // Même rendu que le serveur tant que le panier n'est pas lu : pas de
+  // désaccord d'hydratation, pas de formulaire vide qui clignote.
+  if (!cartReady || items.length === 0) return null;
 
-  const currencyMeta = CURRENCY_META[currency];
   const paymentBlurb =
     payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
       : "Paiement sécurisé via Stripe";
 
+  const payButton = (
+    <Button
+      type="submit"
+      disabled={isSubmitting || shippingUnavailable}
+      className={cn(
+        "h-12 w-full gap-2 border-0 text-base font-semibold",
+        !accent && "bg-primary text-primary-foreground hover:bg-primary/90",
+      )}
+      style={accent ? { backgroundColor: accent, color: accentInk } : undefined}
+    >
+      {isSubmitting ? (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          Traitement en cours…
+        </>
+      ) : shippingUnavailable ? (
+        "Livraison indisponible pour ce pays"
+      ) : (
+        `Payer ${formatPrice(total, currency)}`
+      )}
+    </Button>
+  );
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
-      <div className="mb-8">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10">
+      <div className="mb-6 sm:mb-8">
         <button
           type="button"
           onClick={() => router.back()}
@@ -321,44 +402,30 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
         <h1 className="text-2xl font-bold tracking-tight">Finaliser la commande</h1>
       </div>
 
+      {/* Téléphone : chez qui, quoi, combien — avant le premier champ */}
+      <div className="mb-6 lg:hidden">
+        <MobileOrderSummary
+          items={items}
+          shopName={shopName}
+          shopLogo={shop?.logo_url}
+          accent={accent}
+          currency={currency}
+          shipping={shipping}
+          physical={physical}
+          discount={discount}
+          discountLabel={appliedPromo?.code}
+        />
+      </div>
+
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
           <div className="space-y-6">
 
-            {/* Section 1 – Coordonnées */}
-            <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            {/* Section 1 – Coordonnées : le téléphone d'abord, c'est lui qui paie en Mobile Money */}
+            <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
               <h2 className="mb-4 text-base font-semibold">Vos coordonnées</h2>
 
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="full_name">Nom complet</Label>
-                  <Input
-                    id="full_name"
-                    placeholder="Fatou Diallo"
-                    autoComplete="name"
-                    aria-invalid={!!errors.full_name}
-                    {...register("full_name")}
-                  />
-                  {errors.full_name && (
-                    <p className="text-xs text-destructive">{errors.full_name.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Adresse email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="fatou@example.com"
-                    autoComplete="email"
-                    aria-invalid={!!errors.email}
-                    {...register("email")}
-                  />
-                  {errors.email && (
-                    <p className="text-xs text-destructive">{errors.email.message}</p>
-                  )}
-                </div>
-
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">Numéro de téléphone</Label>
                   <div className="flex gap-2">
@@ -406,12 +473,46 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                     <p className="text-xs text-destructive">{errors.phone.message}</p>
                   )}
                 </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="full_name">Nom complet</Label>
+                  <Input
+                    id="full_name"
+                    placeholder="Fatou Diallo"
+                    autoComplete="name"
+                    aria-invalid={!!errors.full_name}
+                    {...register("full_name")}
+                  />
+                  {errors.full_name && (
+                    <p className="text-xs text-destructive">{errors.full_name.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Adresse email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    inputMode="email"
+                    placeholder="fatou@example.com"
+                    autoComplete="email"
+                    aria-invalid={!!errors.email}
+                    aria-describedby="email-help"
+                    {...register("email")}
+                  />
+                  <p id="email-help" className="text-xs text-muted-foreground">
+                    Pour le reçu et le suivi de la commande.
+                  </p>
+                  {errors.email && (
+                    <p className="text-xs text-destructive">{errors.email.message}</p>
+                  )}
+                </div>
               </div>
             </section>
 
-            {/* Section 2 – Livraison */}
+            {/* Section 2 – Livraison (articles physiques seulement) */}
             {requiresShipping && (
-              <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
                 <h2 className="mb-4 text-base font-semibold">Adresse de livraison</h2>
 
                 <div className="space-y-4">
@@ -451,7 +552,10 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
                           <SelectTrigger id="country" className="w-full" aria-invalid={!!errors.country}>
-                            <SelectValue placeholder="Sélectionner un pays" />
+                            <SelectValue placeholder="Sélectionner un pays">
+                              {AFRICAN_COUNTRIES.find((c) => c.code === field.value)?.name ??
+                                "Sélectionner un pays"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {AFRICAN_COUNTRIES.map((c) => (
@@ -466,128 +570,141 @@ export default function CheckoutForm({ mobileMoneyEnabled = false }: CheckoutFor
                     {errors.country && (
                       <p className="text-xs text-destructive">{errors.country.message}</p>
                     )}
+                    {shippingUnavailable && (
+                      <p className="text-xs text-destructive" role="alert">
+                        {shopName} ne livre pas dans ce pays. Choisis un autre pays de
+                        livraison ou contacte le vendeur.
+                      </p>
+                    )}
                   </div>
                 </div>
               </section>
             )}
 
             {/* Section 3 – Mode de paiement */}
-            <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
               <h2 className="mb-4 text-base font-semibold">Mode de paiement</h2>
               <PaymentMethods
                 value={payment}
                 onChange={setPaymentSelection}
                 mobileMoneyDisabled={!mobileMoneyEnabled}
-                buyerCountry={shippingCountry}
+                buyerCountry={buyerCountry}
                 buyerCountryLabel={countryLabel}
                 shopCurrency={currency}
               />
             </section>
 
-            {/* Section 4 – Code promo */}
-            <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold flex items-center gap-2">
-                <Tag className="size-4" />
-                Code promo
-              </h2>
-              {appliedPromo ? (
-                <div className="flex items-center justify-between rounded-lg border-2 border-[var(--success)] bg-[var(--success)]/10 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Check className="size-4 text-[var(--success)]" />
-                    <div>
-                      <p className="text-sm font-bold text-foreground">{appliedPromo.code}</p>
-                      <p className="text-xs text-muted-foreground">
-                        −{formatPrice(appliedPromo.discount, currency)} appliqué
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={removePromo}
-                    className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    aria-label="Retirer le code promo"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="MONCODE"
-                    value={promoInput}
-                    onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                    className="uppercase"
-                    maxLength={30}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={applyPromo}
-                    disabled={!promoInput.trim() || isCheckingPromo}
-                  >
-                    {isCheckingPromo ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
-                  </Button>
-                </div>
-              )}
-            </section>
+            {/* Section 4 – Code promo et note, repliés : rares, et ils
+                éloignaient le bouton de paiement sur téléphone */}
+            <section className="rounded-xl border border-border bg-card shadow-sm">
+              <button
+                type="button"
+                onClick={() => setExtrasOpen((v) => !v)}
+                aria-expanded={showExtras}
+                aria-controls="checkout-extras"
+                className="flex w-full items-center justify-between gap-3 p-5 text-left text-sm font-semibold sm:p-6"
+              >
+                <span className="flex items-center gap-2">
+                  <Tag className="size-4" />
+                  {appliedPromo
+                    ? `Code ${appliedPromo.code} appliqué`
+                    : "Ajouter un code promo ou une note"}
+                </span>
+                <ChevronDown
+                  className={cn("size-4 text-muted-foreground transition-transform", showExtras && "rotate-180")}
+                  aria-hidden="true"
+                />
+              </button>
 
-            {/* Section 5 – Notes */}
-            <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold">Notes optionnelles</h2>
-              <Textarea
-                placeholder="Instructions spéciales, informations de livraison..."
-                rows={3}
-                className="resize-none"
-                {...register("notes")}
-              />
-              {errors.notes && (
-                <p className="mt-1 text-xs text-destructive">{errors.notes.message}</p>
-              )}
+              <div id="checkout-extras" hidden={!showExtras} className="space-y-5 border-t border-border p-5 sm:p-6">
+                <div className="space-y-1.5">
+                  <Label htmlFor="promo">Code promo</Label>
+                  {appliedPromo ? (
+                    <div className="flex items-center justify-between rounded-lg border-2 border-[var(--success)] bg-[var(--success)]/10 px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Check className="size-4 text-[var(--success)]" />
+                        <div>
+                          <p className="text-sm font-bold text-foreground">{appliedPromo.code}</p>
+                          <p className="text-xs text-muted-foreground">
+                            −{formatPrice(appliedPromo.discount, currency)} appliqué
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removePromo}
+                        className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Retirer le code promo"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        id="promo"
+                        placeholder="MONCODE"
+                        value={promoInput}
+                        onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void applyPromo();
+                          }
+                        }}
+                        className="uppercase"
+                        maxLength={30}
+                        autoComplete="off"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={applyPromo}
+                        disabled={!promoInput.trim() || isCheckingPromo}
+                      >
+                        {isCheckingPromo ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="notes">Note pour le vendeur</Label>
+                  <Textarea
+                    id="notes"
+                    placeholder="Instructions spéciales, informations de livraison..."
+                    rows={3}
+                    className="resize-none"
+                    {...register("notes")}
+                  />
+                  {errors.notes && (
+                    <p className="text-xs text-destructive">{errors.notes.message}</p>
+                  )}
+                </div>
+              </div>
             </section>
 
             <div className="lg:hidden">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="h-12 w-full gap-2 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Traitement en cours…
-                  </>
-                ) : (
-                  `Payer ${total.toLocaleString("fr-FR")} ${currencyMeta.symbol}`
-                )}
-              </Button>
+              {payButton}
+              <p className="mt-2 text-center text-xs text-muted-foreground">{paymentBlurb}</p>
             </div>
           </div>
 
-          {/* RIGHT COLUMN */}
+          {/* Colonne de droite (ordinateur) */}
           <div className="hidden lg:block">
             <OrderSummary
               items={items}
               shopName={shopName}
+              shopLogo={shop?.logo_url}
+              accent={accent}
               currency={currency}
-              shipping={0}
+              shipping={shipping}
+              physical={physical}
               discount={discount}
               discountLabel={appliedPromo?.code}
             >
               <Separator className="my-2" />
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="mt-2 h-12 w-full gap-2 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Traitement en cours…
-                  </>
-                ) : (
-                  `Payer ${formatPrice(total, currency)}`
-                )}
-              </Button>
+              <div className="mt-2">{payButton}</div>
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 {paymentBlurb}
               </p>

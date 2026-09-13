@@ -123,6 +123,7 @@ export function ProductPage({
       variantLabel,
       shopId: shop.id,
       shopSlug: shop.slug,
+      isDigital: product.is_digital,
     });
 
     toast.success("Ajouté au panier", {

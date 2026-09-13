@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -14,6 +15,8 @@ export interface CartItem {
   variantLabel?: string;
   shopId: string;
   shopSlug: string;
+  /** Absent sur les paniers d'avant ce drapeau : réputé physique. */
+  isDigital?: boolean;
 }
 
 interface CartStore {
@@ -98,3 +101,27 @@ export const useCart = create<CartStore>()(
     }
   )
 );
+
+const noopSubscribe = () => () => {};
+
+/**
+ * Le panier est-il lisible ? Faux sur le serveur et pendant l'hydratation
+ * (React y lit l'état initial du store, vide, pas le localStorage), vrai
+ * ensuite et une fois la persistance relue. Une page qui décide sur
+ * `items.length === 0` avant ça renvoie l'acheteur d'où il vient alors que
+ * son panier est plein — c'est ce que faisait /checkout à chaque
+ * rechargement.
+ */
+export function useCartReady(): boolean {
+  const mounted = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  const hydrated = useSyncExternalStore(
+    (onChange) => useCart.persist.onFinishHydration(onChange),
+    () => useCart.persist.hasHydrated(),
+    () => false,
+  );
+  return mounted && hydrated;
+}
