@@ -326,7 +326,9 @@ model Order {
   id               String           @id @default(uuid()) @db.Uuid
   shopId           String           @map("shop_id") @db.Uuid
   customerId       String?          @map("customer_id") @db.Uuid
-  buyerEmail       String           @map("buyer_email")
+  /// Facultatif : une commande passée sur WhatsApp n'a ni e-mail ni téléphone
+  /// tant que le vendeur ne les renseigne pas.
+  buyerEmail       String?          @map("buyer_email")
   buyerName        String           @map("buyer_name")
   buyerPhone       String?          @map("buyer_phone")
   status           OrderStatus      @default(pending)

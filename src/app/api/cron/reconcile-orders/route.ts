@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
+import { expireStaleManualOrders } from "@/lib/orders/expire-manual";
 import { remindStalePayouts } from "@/lib/payouts/notifications";
 
 export const runtime = "nodejs";
@@ -47,5 +48,12 @@ export async function GET(request: NextRequest) {
   });
   console.info("[cron] reversements en attente:", payouts);
 
-  return NextResponse.json({ ...result, payouts });
+  // Et les commandes WhatsApp que personne n'a marquées payées en sept jours.
+  const expired = await expireStaleManualOrders().catch((error) => {
+    console.error("[cron] expiration des commandes WhatsApp:", error);
+    return { expired: -1, errors: 1 };
+  });
+  console.info("[cron] commandes WhatsApp expirées:", expired);
+
+  return NextResponse.json({ ...result, payouts, manual_orders: expired });
 }

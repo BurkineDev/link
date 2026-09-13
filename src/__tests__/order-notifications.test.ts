@@ -13,6 +13,7 @@ let _shop: Record<string, unknown> | null = null;
 let _cloudConfigured = false;
 const _cloud: string[] = [];
 let _stockShortfall: unknown = null;
+let _buyerEmail: string | null = "awa@example.com";
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
@@ -24,7 +25,7 @@ jest.mock("@/lib/prisma", () => ({
         currency: "XOF",
         buyerName: "Awa Diop",
         buyerPhone: "+221771234567",
-        buyerEmail: "awa@example.com",
+        buyerEmail: _buyerEmail,
         shippingAddress: { address: "Rue 12", city: "Dakar", country: "SN" },
         items: [
           {
@@ -66,6 +67,7 @@ beforeEach(() => {
   _cloud.length = 0;
   _cloudConfigured = false;
   _stockShortfall = null;
+  _buyerEmail = "awa@example.com";
   _shop = {
     name: "Boutique Awa",
     whatsappNumber: null,
@@ -156,6 +158,15 @@ describe("notifySellerOfPaidOrder — stock insuffisant au paiement", () => {
     const mail = _emails.find((m) => m.to === "vendeuse@example.com")!;
     expect(mail.text).not.toMatch(/stock insuffisant/i);
     expect(_cloud).toEqual(["template:221771234567"]);
+  });
+});
+
+describe("commande sans e-mail (WhatsApp)", () => {
+  it("n'envoie rien à l'acheteur, prévient le vendeur sans ligne e-mail", async () => {
+    _buyerEmail = null;
+    await notifyPaidOrder(ORDER_ID);
+    expect(_emails.map((m) => m.to)).toEqual(["vendeuse@example.com"]);
+    expect(_emails[0]!.text).not.toMatch(/E-mail :/);
   });
 });
 

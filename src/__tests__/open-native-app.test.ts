@@ -98,3 +98,28 @@ test("iOS sans schéma natif : navigation web immédiate (Universal Link), sans 
   expect(assigned).toEqual(["https://www.tiktok.com/@amy.creator"]);
   expect(timers).toHaveLength(0);
 });
+
+test("Android avec filet (navigation après un appel réseau) : intent puis wa.me si la page reste visible", () => {
+  openNativeApp("whatsapp://send?phone=22670123456", "https://wa.me/22670123456", {
+    androidPackage: "com.whatsapp",
+    userAgent: ANDROID,
+    androidFallbackDelayMs: 2000,
+  });
+  expect(assigned).toHaveLength(1);
+  expect(assigned[0]).toMatch(/^intent:\/\/send\?phone=22670123456#Intent;scheme=whatsapp;package=com\.whatsapp;/);
+  expect(timers).toHaveLength(1);
+  expect(timers[0].ms).toBe(2000);
+  timers[0].cb();
+  expect(assigned[1]).toBe("https://wa.me/22670123456");
+});
+
+test("Android avec filet : l'app a pris la main (page cachée), pas de repli", () => {
+  openNativeApp("whatsapp://send?phone=22670123456", "https://wa.me/22670123456", {
+    androidPackage: "com.whatsapp",
+    userAgent: ANDROID,
+    androidFallbackDelayMs: 2000,
+  });
+  hidden = true;
+  timers[0].cb();
+  expect(assigned).toHaveLength(1);
+});

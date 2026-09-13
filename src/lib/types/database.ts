@@ -461,7 +461,8 @@ export type OrderRow = {
   id: string;
   shop_id: string;
   customer_id: string | null;
-  buyer_email: string;
+  /** Absent pour une commande passée sur WhatsApp. */
+  buyer_email: string | null;
   buyer_name: string;
   buyer_phone: string | null;
   status: OrderStatus;

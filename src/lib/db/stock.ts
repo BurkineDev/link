@@ -233,12 +233,20 @@ export const PENDING_HOLD_MS = 30 * 60 * 1000;
  * boutique, par article. C'est une réservation douce : rien n'est
  * décrémenté, un panier abandonné libère de lui-même au bout de 30 min, et
  * une commande fantôme ne peut bloquer un article que ce temps-là.
+ *
+ * Les commandes WhatsApp (`manual`) n'engagent rien : elles se créent d'un
+ * tap anonyme, sans paiement en cours, et deux curieux suffiraient à bloquer
+ * toute la boutique pendant trente minutes. C'est le vendeur qui tranche
+ * dans la conversation ; le manque éventuel lui est signalé quand il marque
+ * la commande payée.
  */
 async function pendingUnits(shopId: string, now: Date): Promise<Map<string, number>> {
   const rows = await prisma.order.findMany({
     where: {
       shopId,
       paymentStatus: "pending",
+      // `not` seul exclurait aussi les commandes sans prestataire (NULL).
+      OR: [{ paymentProvider: null }, { paymentProvider: { not: "manual" } }],
       stockReservedAt: null,
       createdAt: { gt: new Date(now.getTime() - PENDING_HOLD_MS) },
     },
