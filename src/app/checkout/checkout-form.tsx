@@ -8,12 +8,13 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2, ChevronLeft, ChevronDown, Check, X, Tag } from "lucide-react";
 
-import { useCart, useCartReady } from "@/hooks/use-cart";
+import { useCart, useCartReady, type CartItem } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, type Currency } from "@/lib/constants";
 import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { dialCodeEntry, dialCodeFor, nsnHint, toE164 } from "@/lib/phone/dial-codes";
 import { cartNeedsShipping, quoteShipping } from "@/lib/checkout/shipping";
-import type { CheckoutShop } from "@/lib/checkout/shop-context";
+import type { CheckoutShop, CheckoutShopStatus } from "@/lib/checkout/shop-context";
+import { CheckoutSkeleton } from "@/components/checkout/checkout-skeleton";
 import { readableTextOn } from "@/lib/bio-themes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
 import {
   Select,
   SelectContent,
@@ -104,43 +106,132 @@ const PHONE_CODE_OPTIONS = AFRICAN_COUNTRIES.map((c) => ({
 })).filter((c) => c.dialCode);
 
 // ---------------------------------------------------------------------------
-// Component
+// Enveloppe : attend le panier et la boutique avant de montrer le formulaire
 // ---------------------------------------------------------------------------
 
 interface CheckoutFormProps {
   mobileMoneyEnabled?: boolean;
-  /** Boutique chargée côté serveur depuis `?shop=` ; null si absente ou inconnue. */
+  /** Boutique chargée côté serveur depuis `?shop=` ; null si absente, inconnue ou en panne. */
   shop?: CheckoutShop | null;
+  shopStatus?: CheckoutShopStatus;
 }
 
-export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopParam = null }: CheckoutFormProps) {
+/**
+ * Le panier vit dans le navigateur, la boutique vient du serveur : le
+ * formulaire n'est monté qu'une fois les deux connus et d'accord, avec ses
+ * valeurs par défaut définitives (adresse ou non, pays). Sans boutique
+ * résolue, aucun total n'est jamais proposé : la livraison en dépend.
+ */
+export default function CheckoutForm({
+  mobileMoneyEnabled = false,
+  shop: shopParam = null,
+  shopStatus = "missing",
+}: CheckoutFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { items, getTotal, shopId } = useCart();
+  const { items, shopId } = useCart();
   const cartReady = useCartReady();
 
   // La boutique de la page doit être celle du panier : une adresse bricolée
   // (`?shop=autre`) ne montre ni le logo ni les frais d'une autre boutique.
   const shop = shopParam && shopParam.id === shopId ? shopParam : null;
-  const cartSlug = items[0]?.shopSlug ?? null;
+  const askedById = searchParams.get("shop") === shopId;
 
-  // Sans contexte (ancien lien, adresse tapée), on recharge la page avec le
-  // bon `?shop=` — une seule fois : si la boutique reste introuvable, on
-  // continue sans identité plutôt que de boucler.
+  // Sans contexte (ancien lien, retour d'un prestataire, slug renommé), on
+  // recharge la page par l'identifiant du panier — stable, lui. Une seule
+  // fois : si la boutique reste introuvable par identifiant, on le dit.
   useEffect(() => {
-    if (!cartReady || shop || !cartSlug) return;
-    if (searchParams.get("shop") === cartSlug) return;
-    router.replace(`/checkout?shop=${encodeURIComponent(cartSlug)}`);
-  }, [cartReady, shop, cartSlug, searchParams, router]);
+    if (!cartReady || shop || !shopId || askedById) return;
+    router.replace(`/checkout?shop=${encodeURIComponent(shopId)}`);
+  }, [cartReady, shop, shopId, askedById, router]);
+
+  // Panier vide : retour d'où l'on vient — mais seulement une fois le panier
+  // réellement lu, sinon chaque rechargement renvoyait l'acheteur en arrière
+  // avec un panier plein. Sans historique (lien ouvert directement), la
+  // boutique plutôt qu'une page blanche.
+  useEffect(() => {
+    if (!cartReady || items.length > 0) return;
+    if (window.history.length > 1) router.back();
+    else router.replace(shopParam ? `/${shopParam.slug}` : "/");
+  }, [cartReady, items.length, router, shopParam]);
+
+  // Même rendu que le serveur tant que le panier n'est pas lu : pas de
+  // désaccord d'hydratation, et ce que le serveur sait déjà s'affiche.
+  if (!cartReady || items.length === 0) return <CheckoutSkeleton shop={shopParam} />;
+
+  if (!shop) {
+    if (!askedById) return <CheckoutSkeleton shop={null} />;
+    return (
+      <CheckoutNotice
+        title={shopStatus === "error" ? "Boutique momentanément injoignable" : "Boutique indisponible"}
+        body={
+          shopStatus === "error"
+            ? "Impossible de charger la boutique pour l'instant. Réessaie dans un instant : ton panier est conservé."
+            : "Cette boutique n'accepte plus de commandes pour le moment. Ton panier est conservé si elle rouvre."
+        }
+        action={
+          shopStatus === "error" ? (
+            <Button type="button" onClick={() => router.refresh()}>
+              Réessayer
+            </Button>
+          ) : (
+            <Button asChild>
+              <Link href={`/${items[0]?.shopSlug ?? ""}`}>Retourner à la boutique</Link>
+            </Button>
+          )
+        }
+      />
+    );
+  }
+
+  return <CheckoutFormBody items={items} shop={shop} mobileMoneyEnabled={mobileMoneyEnabled} />;
+}
+
+function CheckoutNotice({ title, body, action }: { title: string; body: string; action: React.ReactNode }) {
+  return (
+    <div className="mx-auto max-w-lg px-4 py-16 text-center">
+      <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+      <p className="mt-3 text-muted-foreground">{body}</p>
+      <div className="mt-6 flex justify-center">{action}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Formulaire
+// ---------------------------------------------------------------------------
+
+/** Pays proposé d'office : le premier que la boutique livre, sinon la Côte d'Ivoire. */
+function defaultShippingCountry(shop: CheckoutShop): string {
+  if (shop.shipping_enabled) {
+    for (const zone of shop.shipping_zones) {
+      const covered = zone.countries.find((code) =>
+        AFRICAN_COUNTRIES.some((c) => c.code === code.toUpperCase()),
+      );
+      if (covered) return covered.toUpperCase();
+    }
+  }
+  return "CI";
+}
+
+interface CheckoutFormBodyProps {
+  items: CartItem[];
+  shop: CheckoutShop;
+  mobileMoneyEnabled: boolean;
+}
+
+function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyProps) {
+  const router = useRouter();
+  const updatePrices = useCart((s) => s.updatePrices);
 
   const physical = cartNeedsShipping(items);
-  const currency: Currency = shop?.currency ?? ((items[0]?.currency as Currency) ?? "XOF");
-  const accent = shop?.theme_color;
-  const accentInk = accent ? readableTextOn(accent) : undefined;
-
-  const shopName =
-    shop?.name ??
-    (cartSlug ? cartSlug.charAt(0).toUpperCase() + cartSlug.slice(1) : "Boutique");
+  // Les prix du panier sont dans la devise où ils ont été ajoutés ; si la
+  // boutique a changé de devise depuis, on ne mélange pas : on arrête.
+  const currency = (items[0]?.currency as Currency) ?? shop.currency;
+  const currencyMismatch = currency !== shop.currency;
+  const accent = shop.theme_color;
+  const accentInk = readableTextOn(accent);
+  const shopName = shop.name;
 
   const [phoneIso2, setPhoneIso2] = useState("CI");
   // Un choix manuel de l'acheteur l'emporte : on ne le lui reprend pas quand
@@ -176,19 +267,12 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       requires_shipping: physical,
-      country: "CI",
+      country: defaultShippingCountry(shop),
     },
   });
 
-  // Un panier tout numérique n'a pas d'adresse à donner ; un panier chargé
-  // après le premier rendu (persistance) est rattrapé ici.
-  useEffect(() => {
-    setValue("requires_shipping", physical);
-  }, [physical, setValue]);
-
   const requiresShipping = useWatch({ control, name: "requires_shipping" });
   const shippingCountry = useWatch({ control, name: "country" });
-  const notesValue = useWatch({ control, name: "notes" });
 
   // L'indicatif suit le pays de livraison tant que l'acheteur ne l'a pas
   // choisi lui-même. Dérivé plutôt que synchronisé : il n'y a qu'une seule
@@ -224,53 +308,44 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
       ? { type: "card" as PaymentType, mobileProvider: undefined }
       : paymentSelection;
 
-  // Panier vide : retour d'où l'on vient — mais seulement une fois le panier
-  // réellement lu, sinon chaque rechargement de la page renvoyait l'acheteur
-  // en arrière avec un panier plein.
-  useEffect(() => {
-    if (cartReady && items.length === 0) router.back();
-  }, [cartReady, items.length, router]);
-
-  const subtotal = getTotal();
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discount = appliedPromo?.discount ?? 0;
   // Même règle que l'API : ce que l'acheteur voit ici est ce qu'il paie.
   const shipping = quoteShipping({
     physical,
-    shippingEnabled: shop?.shipping_enabled ?? false,
-    zones: shop?.shipping_zones ?? [],
+    shippingEnabled: shop.shipping_enabled,
+    zones: shop.shipping_zones,
     country: requiresShipping ? shippingCountry : null,
     subtotal,
   });
   const total = orderTotal({ items, currency, shipping, discount });
   const shippingUnavailable = shipping.kind === "unavailable";
-  const showExtras = extrasOpen || appliedPromo !== null || !!notesValue;
+  const blocked = shippingUnavailable || currencyMismatch;
 
   // ---------------------------------------------------------------------------
-  async function applyPromo() {
-    if (!shopId || !promoInput.trim()) return;
+  async function applyPromo(code = promoInput, orderTotal = subtotal): Promise<boolean> {
+    const normalized = code.trim().toUpperCase();
+    if (!normalized) return false;
     setIsCheckingPromo(true);
     try {
       const res = await fetch("/api/promo-codes/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shopId,
-          code: promoInput.trim().toUpperCase(),
-          orderTotal: subtotal,
-        }),
+        body: JSON.stringify({ shopId: shop.id, code: normalized, orderTotal }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        setAppliedPromo(null);
         toast.error(data.error ?? "Code promo invalide.");
-        return;
+        return false;
       }
       setAppliedPromo({
-        code: promoInput.trim().toUpperCase(),
+        code: normalized,
         discount: data.discount,
         discount_type: data.discount_type,
         discount_value: data.discount_value,
       });
-      toast.success("Code promo appliqué !");
+      return true;
     } finally {
       setIsCheckingPromo(false);
     }
@@ -282,11 +357,6 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
   }
 
   async function onSubmit(values: CheckoutFormValues) {
-    if (!shopId) {
-      toast.error("Boutique introuvable. Veuillez rafraîchir la page.");
-      return;
-    }
-
     const phone = toE164(values.phone, phoneCountry);
     if (!phone) {
       setError("phone", {
@@ -300,7 +370,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
 
     try {
       const payload = {
-        shopId,
+        shopId: shop.id,
         buyerDetails: {
           full_name: values.full_name,
           email: values.email,
@@ -339,6 +409,28 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
       const data = await res.json();
 
       if (!res.ok) {
+        // Le vendeur a changé ses prix depuis l'ajout au panier : le récap
+        // se met à jour (et la remise avec), l'acheteur revalide.
+        if (res.status === 409 && data.code === "PRICE_CHANGED" && Array.isArray(data.items)) {
+          const changes = data.items as Array<{ product_id: string; variant_id: string | null; unit_price: number }>;
+          updatePrices(changes);
+          const newSubtotal = items.reduce((sum, i) => {
+            const change = changes.find(
+              (c) => c.product_id === i.productId && (c.variant_id ?? undefined) === i.variantId,
+            );
+            return sum + (change ? change.unit_price : i.price) * i.quantity;
+          }, 0);
+          if (appliedPromo) await applyPromo(appliedPromo.code, newSubtotal);
+          toast.error("Le prix de certains articles a changé : vérifie le récapitulatif avant de payer.");
+          return;
+        }
+        // L'article est finalement à livrer (drapeau du panier périmé) :
+        // la section adresse apparaît.
+        if (res.status === 422 && data.code === "SHIPPING_ADDRESS_REQUIRED") {
+          setValue("requires_shipping", true);
+          toast.error("Cet article se livre : indique ton adresse.");
+          return;
+        }
         throw new Error(data.error ?? "Une erreur est survenue. Veuillez réessayer.");
       }
 
@@ -356,10 +448,6 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
     }
   }
 
-  // Même rendu que le serveur tant que le panier n'est pas lu : pas de
-  // désaccord d'hydratation, pas de formulaire vide qui clignote.
-  if (!cartReady || items.length === 0) return null;
-
   const paymentBlurb =
     payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
@@ -368,18 +456,17 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
   const payButton = (
     <Button
       type="submit"
-      disabled={isSubmitting || shippingUnavailable}
-      className={cn(
-        "h-12 w-full gap-2 border-0 text-base font-semibold",
-        !accent && "bg-primary text-primary-foreground hover:bg-primary/90",
-      )}
-      style={accent ? { backgroundColor: accent, color: accentInk } : undefined}
+      disabled={isSubmitting || blocked}
+      className="h-12 w-full gap-2 border-0 text-base font-semibold"
+      style={{ backgroundColor: accent, color: accentInk }}
     >
       {isSubmitting ? (
         <>
           <Loader2 className="size-4 animate-spin" />
           Traitement en cours…
         </>
+      ) : currencyMismatch ? (
+        "Les prix ont changé"
       ) : shippingUnavailable ? (
         "Livraison indisponible pour ce pays"
       ) : (
@@ -402,12 +489,25 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
         <h1 className="text-2xl font-bold tracking-tight">Finaliser la commande</h1>
       </div>
 
+      {currencyMismatch && (
+        <div
+          role="alert"
+          className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          Les prix de la boutique ont changé de devise depuis que tu as rempli ton panier.{" "}
+          <Link href={`/${shop.slug}`} className="font-semibold underline">
+            Retourne à la boutique
+          </Link>{" "}
+          pour le refaire.
+        </div>
+      )}
+
       {/* Téléphone : chez qui, quoi, combien — avant le premier champ */}
       <div className="mb-6 lg:hidden">
         <MobileOrderSummary
           items={items}
           shopName={shopName}
-          shopLogo={shop?.logo_url}
+          shopLogo={shop.logo_url}
           accent={accent}
           currency={currency}
           shipping={shipping}
@@ -600,7 +700,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
               <button
                 type="button"
                 onClick={() => setExtrasOpen((v) => !v)}
-                aria-expanded={showExtras}
+                aria-expanded={extrasOpen}
                 aria-controls="checkout-extras"
                 className="flex w-full items-center justify-between gap-3 p-5 text-left text-sm font-semibold sm:p-6"
               >
@@ -611,12 +711,12 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
                     : "Ajouter un code promo ou une note"}
                 </span>
                 <ChevronDown
-                  className={cn("size-4 text-muted-foreground transition-transform", showExtras && "rotate-180")}
+                  className={cn("size-4 text-muted-foreground transition-transform", extrasOpen && "rotate-180")}
                   aria-hidden="true"
                 />
               </button>
 
-              <div id="checkout-extras" hidden={!showExtras} className="space-y-5 border-t border-border p-5 sm:p-6">
+              <div id="checkout-extras" hidden={!extrasOpen} className="space-y-5 border-t border-border p-5 sm:p-6">
                 <div className="space-y-1.5">
                   <Label htmlFor="promo">Code promo</Label>
                   {appliedPromo ? (
@@ -655,11 +755,12 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
                         className="uppercase"
                         maxLength={30}
                         autoComplete="off"
+                        aria-label="Code promo"
                       />
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={applyPromo}
+                        onClick={() => void applyPromo()}
                         disabled={!promoInput.trim() || isCheckingPromo}
                       >
                         {isCheckingPromo ? <Loader2 className="size-4 animate-spin" /> : "Appliquer"}
@@ -674,6 +775,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
                     id="notes"
                     placeholder="Instructions spéciales, informations de livraison..."
                     rows={3}
+                    maxLength={500}
                     className="resize-none"
                     {...register("notes")}
                   />
@@ -695,7 +797,7 @@ export default function CheckoutForm({ mobileMoneyEnabled = false, shop: shopPar
             <OrderSummary
               items={items}
               shopName={shopName}
-              shopLogo={shop?.logo_url}
+              shopLogo={shop.logo_url}
               accent={accent}
               currency={currency}
               shipping={shipping}

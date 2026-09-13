@@ -63,7 +63,10 @@ export function ShopIdentity({
     <div className="flex min-w-0 items-center gap-3">
       {logoUrl ? (
         <div className={cn("relative shrink-0 overflow-hidden rounded-lg border border-border", size)}>
-          <Image src={logoUrl} alt="" fill className="object-cover" sizes="40px" />
+          {/* <img> nu : un logo hébergé hors des `remotePatterns` ferait
+              planter next/image, et la page de paiement avec. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoUrl} alt="" className="size-full object-cover" loading="lazy" />
         </div>
       ) : (
         <div
@@ -111,13 +114,16 @@ function OrderLines({
             <span
               className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-muted-foreground text-[10px] font-bold text-background"
               style={accent ? { backgroundColor: accent, color: readableTextOn(accent) } : undefined}
-              aria-label={`Quantité : ${item.quantity}`}
+              aria-hidden="true"
             >
               {item.quantity}
             </span>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+            <p className="truncate text-sm font-medium text-foreground">
+              {item.name}
+              <span className="sr-only"> × {item.quantity}</span>
+            </p>
             {item.variantLabel && (
               <p className="text-xs text-muted-foreground">{item.variantLabel}</p>
             )}
@@ -270,27 +276,30 @@ export function MobileOrderSummary({
       className={cn("overflow-hidden rounded-xl border border-border bg-card shadow-sm", className)}
       aria-label="Récapitulatif de la commande"
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls="mobile-order-details"
-        className="flex w-full items-center gap-3 p-4 text-left"
-      >
+      {/* Toute la ligne se tape (le bouton s'étend dessus), mais le bouton
+          lui-même ne contient que du texte : un nom accessible propre. */}
+      <div className="relative flex items-center gap-3 p-4">
         <ShopIdentity name={shopName} logoUrl={shopLogo} accent={accent} compact />
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="mobile-order-details"
+          aria-label={`${open ? "Masquer" : "Voir"} le détail : ${count} article${count > 1 ? "s" : ""}, total ${formatPrice(total, currency)}`}
+          className="ml-auto flex shrink-0 items-center gap-2 text-right after:absolute after:inset-0 after:content-['']"
+        >
+          <span>
+            <span className="block text-xs text-muted-foreground">
               {count} article{count > 1 ? "s" : ""}
-            </p>
-            <p className="font-semibold tabular-nums">{formatPrice(total, currency)}</p>
-          </div>
+            </span>
+            <span className="block font-semibold tabular-nums">{formatPrice(total, currency)}</span>
+          </span>
           <ChevronDown
             className={cn("size-5 text-muted-foreground transition-transform", open && "rotate-180")}
             aria-hidden="true"
           />
-        </div>
-      </button>
+        </button>
+      </div>
 
       <div id="mobile-order-details" hidden={!open} className="space-y-4 border-t border-border p-4">
         <OrderLines items={items} currency={currency} accent={accent} />

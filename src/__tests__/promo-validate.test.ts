@@ -44,6 +44,7 @@ beforeEach(() => {
     usesCount: 0,
     expiresAt: null,
     isActive: true,
+    shop: { currency: "XOF" },
   };
   mockFindUnique.mockClear();
   mockEnforce.mockReset();
@@ -95,5 +96,17 @@ describe("POST /api/promo-codes/validate", () => {
     _promo = null;
     const res = await POST(makeRequest({ shopId: SHOP_ID, code: "INCONNU", orderTotal: 10_000 }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("arrondi de la remise", () => {
+  test("pourcentage arrondi à la précision de la devise de la boutique, comme à la consommation", async () => {
+    _promo = { ..._promo!, discountValue: 10, shop: { currency: "XOF" } };
+    let res = await POST(makeRequest({ shopId: SHOP_ID, code: "BIENVENUE", orderTotal: 1_995 }));
+    expect(await res.json()).toMatchObject({ ok: true, discount: 200 });
+
+    _promo = { ..._promo!, shop: { currency: "EUR" } };
+    res = await POST(makeRequest({ shopId: SHOP_ID, code: "BIENVENUE", orderTotal: 15.6 }));
+    expect(await res.json()).toMatchObject({ ok: true, discount: 1.56 });
   });
 });
