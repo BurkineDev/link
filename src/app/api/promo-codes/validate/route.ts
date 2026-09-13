@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { percentDiscount } from "@/lib/checkout/money";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
 /**
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       usesCount: true,
       expiresAt: true,
       isActive: true,
+      shop: { select: { currency: true } },
     },
   });
 
@@ -98,9 +100,11 @@ export async function POST(request: NextRequest) {
   }
 
   const discountValue = Number(promo.discountValue);
+  // Même arrondi que la consommation du code au checkout : ce que la page
+  // affiche est ce que l'API déduira.
   const discount =
     promo.discountType === "percent"
-      ? Math.round((orderTotal * discountValue) / 100)
+      ? percentDiscount(orderTotal, discountValue, promo.shop.currency)
       : Math.min(discountValue, orderTotal);
 
   return NextResponse.json({

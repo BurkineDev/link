@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkStockAvailability } from "@/lib/db/stock";
 import { quoteShipping, shippingAmount as shippingAmountOf } from "@/lib/checkout/shipping";
+import { roundToCurrency } from "@/lib/checkout/money";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
 import { getStripe, toStripeAmount } from "@/lib/stripe";
@@ -234,6 +235,12 @@ export async function POST(request: NextRequest) {
     let subtotalAmount = 0;
     const orderItems: OrderItem[] = [];
 
+    const changedPrices: Array<{
+      product_id: string;
+      variant_id: string | null;
+      product_name: string;
+      unit_price: number;
+    }> = [];
     for (const item of items) {
       const product = productMap.get(item.product_id);
       if (!product) {
@@ -275,6 +282,18 @@ export async function POST(request: NextRequest) {
 
       // `Decimal` ou nombre selon la source : `Number()` accepte les deux.
       const unitPrice = Number(variant?.price ?? product.price);
+      // Le prix de la base fait foi (le client ne dicte rien), mais un
+      // panier gardé pendant que le vendeur change ses prix ne doit pas
+      // être facturé à l'aveugle : la page affiche l'ancien prix, on
+      // renvoie le nouveau et elle se met à jour avant de repartir.
+      if (Math.abs(unitPrice - item.unit_price) >= 0.005) {
+        changedPrices.push({
+          product_id: item.product_id,
+          variant_id: item.variant_id ?? null,
+          product_name: product.name,
+          unit_price: unitPrice,
+        });
+      }
       const subtotal = unitPrice * item.quantity;
       subtotalAmount += subtotal;
 
@@ -297,6 +316,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (changedPrices.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Le prix de certains articles a changé. Vérifie le récapitulatif avant de payer.",
+          code: "PRICE_CHANGED",
+          items: changedPrices,
+        },
+        { status: 409 },
+      );
+    }
+
     // -- Apply promo code (atomic) --------------------------------------------
     let discountAmount = 0;
     let appliedPromoCode: string | null = null;
@@ -314,7 +344,7 @@ export async function POST(request: NextRequest) {
     if (promoCode) {
       let redeem: Awaited<ReturnType<typeof redeemPromoCode>>;
       try {
-        redeem = await redeemPromoCode(shopId, promoCode.toUpperCase(), subtotalAmount);
+        redeem = await redeemPromoCode(shopId, promoCode.toUpperCase(), subtotalAmount, shop.currency);
       } catch (error) {
         console.error("[checkout] redeem_promo_code error:", error);
         return NextResponse.json(
@@ -350,7 +380,7 @@ export async function POST(request: NextRequest) {
       if (!shippingAddress) {
         await releasePromo();
         return NextResponse.json(
-          { error: "Une adresse de livraison est requise." },
+          { error: "Une adresse de livraison est requise.", code: "SHIPPING_ADDRESS_REQUIRED" },
           { status: 422 },
         );
       }
@@ -398,9 +428,12 @@ export async function POST(request: NextRequest) {
       shippingAmount = shippingAmountOf(quote);
     }
 
-    const totalAmount = Math.max(
-      0,
-      subtotalAmount - discountAmount + shippingAmount,
+    // À la précision de la devise : la valeur écrite en base est exactement
+    // celle que Stripe et Genius Pay encaissent, sinon le rapprochement
+    // « montant payé ≥ total » échoue sur un demi-franc.
+    const totalAmount = roundToCurrency(
+      Math.max(0, subtotalAmount - discountAmount + shippingAmount),
+      shop.currency,
     );
 
     // -- Stock : vérification seule -------------------------------------------
@@ -564,7 +597,7 @@ export async function POST(request: NextRequest) {
           // qu'après cet appel. Un gabarit `{REFERENCE}` rendait l'URL
           // invalide et Genius Pay la refusait (validation.url).
           success_url: `${appUrl}/checkout/success?provider=geniuspay&order=${order.id}`,
-          error_url: `${appUrl}/checkout?cancelled=1`,
+          error_url: `${appUrl}/checkout?shop=${shop.id}&cancelled=1`,
           metadata: {
             orderId: order.id,
             shopId,
@@ -650,7 +683,7 @@ export async function POST(request: NextRequest) {
         customer_email: buyerDetails.email,
         client_reference_id: order.id,
         success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/checkout?cancelled=1`,
+        cancel_url: `${appUrl}/checkout?shop=${shop.id}&cancelled=1`,
         locale: "fr",
         payment_method_types: ["card"],
         billing_address_collection: "auto",

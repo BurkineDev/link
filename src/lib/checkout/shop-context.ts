@@ -25,12 +25,25 @@ export interface CheckoutShop {
   shipping_zones: ShippingZoneQuote[];
 }
 
-export async function loadCheckoutShop(slug: string): Promise<CheckoutShop | null> {
-  const normalized = slug.trim().toLowerCase();
+/** Comment la page a obtenu (ou non) sa boutique. */
+export type CheckoutShopStatus = "ok" | "not_found" | "error" | "missing";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * `ref` est l'identifiant de la boutique (stable, posé par le panier) ou son
+ * slug (lisible, posé par un lien) : un slug renommé entre l'ajout au
+ * panier et le paiement ne doit pas priver la page de ses règles de
+ * livraison.
+ */
+export async function loadCheckoutShop(ref: string): Promise<CheckoutShop | null> {
+  const normalized = ref.trim().toLowerCase();
   if (!/^[a-z0-9_-]{1,50}$/.test(normalized)) return null;
 
   const shop = await prisma.shop.findFirst({
-    where: { slug: normalized, isPublished: true },
+    where: UUID.test(normalized)
+      ? { id: normalized, isPublished: true }
+      : { slug: normalized, isPublished: true },
     select: {
       id: true,
       slug: true,

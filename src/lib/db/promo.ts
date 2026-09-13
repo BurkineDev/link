@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { percentDiscount } from "@/lib/checkout/money";
 import type { PromoDiscountType } from "../../../prisma/generated/client/client";
 
 /**
@@ -40,6 +41,7 @@ export async function redeemPromoCode(
   shopId: string | null | undefined,
   code: string | null | undefined,
   orderTotal: number | null | undefined,
+  currency: string = "XOF",
 ): Promise<RedeemPromoResult> {
   if (!shopId || !code || orderTotal === null || orderTotal === undefined) {
     return { ok: false, reason: "invalid_input" };
@@ -84,14 +86,14 @@ export async function redeemPromoCode(
     }
 
     const discountValue = promo.discountValue.toNumber();
-    // Un pourcentage est arrondi au centime ; un montant fixe est pris tel
-    // quel. Dans les deux cas on plafonne au total pour ne jamais produire une
-    // remise supérieure à la commande.
-    const rawDiscount =
+    // Un pourcentage est arrondi à la précision de la devise — la même règle
+    // que la validation côté page (src/lib/checkout/money.ts) ; un montant
+    // fixe est pris tel quel. Dans les deux cas on plafonne au total pour ne
+    // jamais produire une remise supérieure à la commande.
+    const discount =
       promo.discountType === "percent"
-        ? roundToCents((orderTotal * discountValue) / 100)
-        : discountValue;
-    const discount = Math.min(rawDiscount, orderTotal);
+        ? percentDiscount(orderTotal, discountValue, currency)
+        : Math.min(discountValue, orderTotal);
 
     await tx.promoCode.update({
       where: { id: promo.id },
@@ -133,8 +135,4 @@ export async function releasePromoRedemption(
  */
 function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
-}
-
-function roundToCents(value: number): number {
-  return Math.round(value * 100) / 100;
 }

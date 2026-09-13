@@ -236,6 +236,9 @@ function mockStripeMissingUrl() {
 beforeEach(() => {
   setup(); // reset to defaults
   _blockedResponse = null;
+  mockPrisma.order.create.mockClear();
+  mockPrisma.shippingZone.findMany.mockClear();
+  (jest.requireMock("@/lib/db/promo") as { redeemPromoCode: jest.Mock }).redeemPromoCode.mockClear();
   mockCreateSession.mockReset();
   mockCreateCoupon.mockReset();
   mockCreateCoupon.mockResolvedValue({ id: "coupon_order_123" });
@@ -260,17 +263,22 @@ describe("POST /api/checkout", () => {
     expect(json).toHaveProperty("orderId");
   });
 
-  // TC-02 — price tampering: unit_price in body is ignored
-  test("TC-02: client unit_price is ignored — DB price is used", async () => {
-    mockStripeOk();
-
-    const payload = validPayload({
-      items: [{ product_id: PRODUCT_ID, quantity: 1, unit_price: 1 }],
+  // TC-02 — prix du client ≠ prix en base : le prix en base fait foi, mais
+  // la page est prévenue avant tout effet (ni promo consommée, ni commande).
+  test("TC-02: un unit_price différent de la base → 409 PRICE_CHANGED avec les prix à jour, sans commande", async () => {
+    const res = await POST(
+      makeRequest(validPayload({ items: [{ product_id: PRODUCT_ID, quantity: 1, unit_price: 1 }], promoCode: "WAX10" })),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: expect.stringMatching(/prix .* changé/i),
+      code: "PRICE_CHANGED",
+      items: [{ product_id: PRODUCT_ID, variant_id: null, product_name: "Tissu wax", unit_price: 5000 }],
     });
-    await POST(makeRequest(payload));
-
-    const stripeSession = mockCreateSession.mock.calls[0][0];
-    expect(stripeSession.line_items[0].price_data.unit_amount).toBe(5000);
+    expect(mockPrisma.order.create).not.toHaveBeenCalled();
+    const promo = jest.requireMock("@/lib/db/promo") as { redeemPromoCode: jest.Mock };
+    expect(promo.redeemPromoCode).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   test("TC-02b: a selected variant uses its DB price and snapshot", async () => {
@@ -280,7 +288,7 @@ describe("POST /api/checkout", () => {
     });
     mockStripeOk();
 
-    await POST(
+    const res = await POST(
       makeRequest(
         validPayload({
           items: [
@@ -288,12 +296,13 @@ describe("POST /api/checkout", () => {
               product_id: PRODUCT_ID,
               variant_id: VARIANT_ID,
               quantity: 1,
-              unit_price: 1,
+              unit_price: 7_500,
             },
           ],
         }),
       ),
     );
+    expect(res.status).toBe(200);
 
     const stripeSession = mockCreateSession.mock.calls[0][0];
     expect(stripeSession.line_items[0].price_data.unit_amount).toBe(7_500);
@@ -351,10 +360,11 @@ describe("POST /api/checkout", () => {
 
     const res = await POST(makeRequest(validPayload()));
     expect(res.status).toBe(200);
-    const order = (mockPrisma.order.create.mock.calls.at(-1) as unknown as [{ data: { shippingAmount: number; totalAmount: number } }])[0].data;
+    expect(mockPrisma.order.create).toHaveBeenCalledTimes(1);
+    const order = (mockPrisma.order.create.mock.calls[0] as unknown as [{ data: { shippingAmount: number; totalAmount: number } }])[0].data;
     expect(order.shippingAmount).toBe(1_500);
     expect(order.totalAmount).toBe(11_500);
-    const stripeSession = mockCreateSession.mock.calls.at(-1)![0];
+    const stripeSession = mockCreateSession.mock.calls[0][0];
     const shippingLine = stripeSession.line_items.find(
       (line: { price_data: { product_data: { name: string } } }) => /livraison/i.test(line.price_data.product_data.name),
     );
@@ -368,8 +378,9 @@ describe("POST /api/checkout", () => {
     setup({ shop: { ...BASE_SHOP, shipping_enabled: true } });
     _zones = [{ countries: ["BF"], rate: 1_500, freeAbove: 10_000 }];
     mockStripeOk();
-    await POST(makeRequest(validPayload()));
-    expect((mockPrisma.order.create.mock.calls.at(-1) as unknown as [{ data: { shippingAmount: number } }])[0].data.shippingAmount).toBe(0);
+    expect((await POST(makeRequest(validPayload()))).status).toBe(200);
+    expect(mockPrisma.order.create).toHaveBeenCalledTimes(1);
+    expect((mockPrisma.order.create.mock.calls[0] as unknown as [{ data: { shippingAmount: number } }])[0].data.shippingAmount).toBe(0);
 
     mockPrisma.order.create.mockClear();
     const res = await POST(
@@ -378,6 +389,27 @@ describe("POST /api/checkout", () => {
     const body = await res.json();
     expect([res.status, body]).toEqual([422, expect.objectContaining({ code: "SHIPPING_UNAVAILABLE" })]);
     expect(mockPrisma.order.create).not.toHaveBeenCalled();
+  });
+
+  test("TC-SH3: article physique sans adresse chez un vendeur qui livre → 422 SHIPPING_ADDRESS_REQUIRED", async () => {
+    setup({ shop: { ...BASE_SHOP, shipping_enabled: true } });
+    const res = await POST(makeRequest(validPayload({ shippingAddress: null })));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "SHIPPING_ADDRESS_REQUIRED" });
+  });
+
+  test("TC-MONEY: la remise est consommée dans la devise de la boutique, le total est arrondi à sa précision et les URL de retour portent la boutique", async () => {
+    setup({ redeemResult: { ok: true, discount: 199.5 } });
+    mockStripeOk();
+    const res = await POST(makeRequest(validPayload({ promoCode: "DIX" })));
+    expect(res.status).toBe(200);
+    const promo = jest.requireMock("@/lib/db/promo") as { redeemPromoCode: jest.Mock };
+    expect(promo.redeemPromoCode).toHaveBeenCalledWith(SHOP_ID, "DIX", 10_000, "XOF");
+    const order = (mockPrisma.order.create.mock.calls[0] as unknown as [{ data: { totalAmount: number } }])[0].data;
+    // 10 000 − 199,5 = 9 800,5 → 9 801 en XOF (0 décimale) : Stripe et Genius Pay ne connaissent pas le demi-franc.
+    expect(order.totalAmount).toBe(9_801);
+    const stripeSession = mockCreateSession.mock.calls[0][0];
+    expect(stripeSession.cancel_url).toBe(`http://localhost:3000/checkout?shop=${SHOP_ID}&cancelled=1`);
   });
 
   // TC-03 — boutique non publiée
