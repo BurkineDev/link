@@ -47,6 +47,7 @@ export default async function OrderTrackingPage({
       buyerName: true,
       status: true,
       paymentStatus: true,
+      paymentProvider: true,
       totalAmount: true,
       shippingAmount: true,
       discountAmount: true,
@@ -76,6 +77,7 @@ export default async function OrderTrackingPage({
     buyer_name: orderRow.buyerName,
     status: orderRow.status,
     payment_status: orderRow.paymentStatus,
+    payment_provider: orderRow.paymentProvider,
     total_amount: Number(orderRow.totalAmount),
     shipping_amount: Number(orderRow.shippingAmount),
     discount_amount: Number(orderRow.discountAmount),
@@ -128,6 +130,13 @@ export default async function OrderTrackingPage({
             <span className="text-sm">Statut actuel</span>
             <span className="font-semibold">{LABELS[order.status]}</span>
           </div>
+          {/* Paiement à la livraison : l'acheteur sait ce qu'il aura à sortir. */}
+          {order.payment_provider === "cash_on_delivery" && order.payment_status !== "paid" && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              À régler à la livraison : <strong>{money(order.total_amount, order.currency)}</strong>, en
+              espèces ou en Mobile Money.
+            </p>
+          )}
         </header>
 
         <section className="rounded-2xl border bg-background p-6 shadow-sm">

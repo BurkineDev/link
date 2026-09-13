@@ -174,14 +174,17 @@ describe("checkStockAvailability — réservation douce", () => {
       ok: false, reason: "insufficient_stock", product_id: P1, product_name: "Tissu wax", available: 1, requested: 2,
     });
     const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { paymentStatus: string; stockReservedAt: null; createdAt: { gt: Date }; OR: unknown[] } }]>)[0]![0];
-    expect(call.where).toMatchObject({ shopId: "shop", paymentStatus: "pending", stockReservedAt: null });
+    expect(call.where).toMatchObject({ shopId: "shop", status: "pending", paymentStatus: "pending", stockReservedAt: null });
     expect(Date.now() - call.where.createdAt.gt.getTime()).toBeGreaterThanOrEqual(30 * 60 * 1000 - 1000);
   });
 
-  test("les commandes WhatsApp (manual) n'engagent rien : deux curieux ne bloquent pas la boutique", async () => {
+  test("les commandes WhatsApp (manual) et à la livraison n'engagent rien ici : l'une n'est pas tenue, l'autre est prélevée pour de bon", async () => {
     await checkStockAvailability([{ product_id: P1, quantity: 1 }], { shopId: "shop" });
     const call = (prismaMock.order.findMany.mock.calls as unknown as Array<[{ where: { OR: unknown[] } }]>)[0]![0];
-    expect(call.where.OR).toEqual([{ paymentProvider: null }, { paymentProvider: { not: "manual" } }]);
+    expect(call.where.OR).toEqual([
+      { paymentProvider: null },
+      { paymentProvider: { notIn: ["manual", "cash_on_delivery"] } },
+    ]);
   });
 
   test("sans boutique (appel interne) : pas de réservation douce", async () => {
@@ -341,6 +344,69 @@ describe("transitionOrderStatus — commande WhatsApp non payée", () => {
       updated: true,
       status: "confirmed",
     });
+  });
+});
+
+describe("paiement à la livraison — stock prélevé à la caisse", () => {
+  const OWNER = "66666666-6666-4666-8666-666666666666";
+  const cod = (over: Record<string, unknown> = {}) =>
+    order({
+      paymentProvider: "cash_on_delivery",
+      status: "confirmed",
+      stockReservedAt: new Date("2026-09-13T10:00:00Z"),
+      shop: { ownerId: OWNER },
+      ...over,
+    });
+
+  test("« Marquer comme payée » à la remise ne prélève pas le stock une seconde fois, rien au registre", async () => {
+    _order = cod({ status: "shipped" });
+    const res = await settlePaidOrder(ORDER, `cash_on_delivery:${OWNER}:1`, "cash_on_delivery");
+    expect(res).toMatchObject({ settled: true, offline: true, commission: 0, stockShortfall: [] });
+    expect(_products[P1]!.stock).toBe(5);
+    expect(_variants[V1]!.stock).toBe(1);
+    expect(tx.product.update).not.toHaveBeenCalled();
+    expect(tx.transactionLedger.createMany).not.toHaveBeenCalled();
+    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "shipped", paymentProvider: "cash_on_delivery" });
+  });
+
+  test("le vendeur peut la faire avancer (préparation, expédition) sans encaissement préalable", async () => {
+    _order = cod();
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "processing", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "processing",
+    });
+    expect(_products[P1]!.stock).toBe(5);
+  });
+
+  test("l'annulation rend le stock en rayon et efface la réservation", async () => {
+    _order = cod();
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "cancelled",
+    });
+    expect(_products[P1]!.stock).toBe(7);
+    expect(_updates[0]).toMatchObject({ status: "cancelled", stockReservedAt: null });
+    expect(_events[0]).toMatchObject({ status: "cancelled" });
+  });
+
+  test("une commande en ligne en attente annulée ne rend rien (rien n'avait été prélevé)", async () => {
+    _order = order({ paymentProvider: "geniuspay", shop: { ownerId: OWNER } });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "cancelled",
+    });
+    expect(_products[P1]!.stock).toBe(5);
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+    expect(_updates[0]).toEqual({ status: "cancelled" });
+  });
+
+  test("un autre vendeur ne peut pas l'annuler", async () => {
+    _order = cod();
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: "someone-else" })).toEqual({
+      updated: false,
+      reason: "forbidden",
+    });
+    expect(_products[P1]!.stock).toBe(5);
   });
 });
 

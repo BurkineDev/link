@@ -204,4 +204,16 @@ describe("POST /api/orders/[id]/mark-paid", () => {
     const json = await res.json();
     expect(json.order).toMatchObject({ id: ORDER_ID, payment_status: "paid", buyer_email: null });
   });
+
+  test("commande à régler à la livraison, déjà expédiée → encaissée à la remise, sans reculer de statut", async () => {
+    _user = { id: "u-owner" };
+    _existing = { status: "shipped", paymentProvider: "cash_on_delivery", paymentStatus: "pending", shop: { ownerId: "u-owner" } };
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(mockSettle).toHaveBeenCalledWith(
+      ORDER_ID,
+      expect.stringMatching(/^cash_on_delivery:u-owner:\d+$/),
+      "cash_on_delivery",
+    );
+  });
 });

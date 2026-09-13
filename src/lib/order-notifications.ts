@@ -123,7 +123,17 @@ export async function notifyBuyerOfPaidOrder(orderId: string): Promise<void> {
   });
 }
 
+/** Ce que la commande attend du vendeur : la préparer, ou la préparer ET encaisser. */
+export type SellerNotificationMode = "paid" | "cash_on_delivery";
+
 export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
+  return notifySellerOfOrder(orderId, "paid");
+}
+
+export async function notifySellerOfOrder(
+  orderId: string,
+  mode: SellerNotificationMode,
+): Promise<void> {
   const orderRow = await prisma.order.findUnique({
     where: { id: orderId },
     select: {
@@ -191,6 +201,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
   const results = await Promise.allSettled([
     shop.email
       ? sendSellerEmail({
+          mode,
           to: shop.email,
           shopName: shop.name,
           orderId: order.id,
@@ -218,7 +229,12 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
           itemCount,
           totalLabel,
           detailUrl,
-          stockWarning,
+          stockWarning:
+            mode === "cash_on_delivery"
+              ? [`Paiement à la livraison : ${totalLabel} à encaisser à la remise du colis.`, stockWarning]
+                  .filter(Boolean)
+                  .join(" ")
+              : stockWarning,
         })
       : Promise.resolve(),
   ]);
@@ -231,6 +247,7 @@ export async function notifySellerOfPaidOrder(orderId: string): Promise<void> {
 }
 
 async function sendSellerEmail(args: {
+  mode: SellerNotificationMode;
   to: string;
   shopName: string;
   orderId: string;
@@ -273,11 +290,22 @@ async function sendSellerEmail(args: {
     address ? `<li>Livraison : ${escapeEmailHtml(address)}</li>` : "",
   ].join("");
 
+  const cod = args.mode === "cash_on_delivery";
+  const title = cod ? "Nouvelle commande à livrer" : "Nouvelle commande payée";
+  const lead = cod
+    ? `Un client a commandé <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>, à régler à la livraison.`
+    : `Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.`;
+  const footer = cod
+    ? "Prépare la commande, livre-la et encaisse à la remise. Une fois l'argent reçu, marque-la payée depuis ton tableau de bord."
+    : "Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.";
+
   await sendTransactionalEmail({
     to: args.to,
-    subject: `Nouvelle commande payée — ${args.totalLabel} (${shortId})`,
-    text: `Nouvelle commande payée sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}\n\n${contactText}${warningText}\n\nVoir la commande : ${args.detailUrl}`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Nouvelle commande payée</h1><p>Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul>${warningHtml}<p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.</p></div>`,
+    subject: cod
+      ? `Nouvelle commande à livrer — ${args.totalLabel} à encaisser (${shortId})`
+      : `Nouvelle commande payée — ${args.totalLabel} (${shortId})`,
+    text: `${title} sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}${cod ? " — à encaisser à la livraison" : ""}\n\n${contactText}${warningText}\n\n${footer}\n\nVoir la commande : ${args.detailUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>${title}</h1><p>${lead}</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul>${warningHtml}<p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">${escapeEmailHtml(footer)}</p></div>`,
     idempotencyKey: `order-seller/${args.orderId}`,
   });
 }
@@ -336,10 +364,67 @@ async function sendSellerWhatsApp(args: {
 function formatShippingAddress(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const a = value as Record<string, unknown>;
-  const parts = ["address", "city", "country"]
+  const parts = ["address_line1", "address", "city", "country"]
     .map((key) => (typeof a[key] === "string" ? (a[key] as string).trim() : ""))
     .filter(Boolean);
   return parts.length ? parts.join(", ") : null;
+}
+
+/**
+ * Commande à régler à la livraison : l'acheteur reçoit sa confirmation et
+ * son lien de suivi (s'il a laissé un e-mail), le vendeur ce qu'il doit
+ * préparer et encaisser.
+ */
+export async function notifyBuyerOfCashOnDeliveryOrder(orderId: string): Promise<void> {
+  const orderRow = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      shopId: true,
+      buyerName: true,
+      buyerEmail: true,
+      totalAmount: true,
+      currency: true,
+      items: true,
+      trackingToken: true,
+    },
+  });
+  if (!orderRow?.buyerEmail) return;
+
+  const shop = await prisma.shop.findUnique({
+    where: { id: orderRow.shopId },
+    select: { name: true },
+  });
+  const items = (orderRow.items as unknown as OrderItem[]) ?? [];
+  const totalLabel = formatTotal(Number(orderRow.totalAmount), orderRow.currency as Currency);
+  const trackingUrl = publicOrderUrl(orderRow.trackingToken);
+  const itemText = items
+    .map(
+      (item) =>
+        `• ${item.product_snapshot.product_name}${item.product_snapshot.variant_name ? ` — ${item.product_snapshot.variant_name}` : ""} × ${item.quantity}`,
+    )
+    .join("\n");
+  const shopName = shop?.name ?? "Bio-Lien";
+
+  await sendTransactionalEmail({
+    to: orderRow.buyerEmail,
+    subject: `Commande enregistrée chez ${shopName} — à régler à la livraison`,
+    text: `Bonjour ${orderRow.buyerName},\n\nTa commande est enregistrée. Tu règles ${totalLabel} à la livraison, en espèces ou en Mobile Money.\n\n${itemText}\n\nSuivre la commande : ${trackingUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Commande enregistrée</h1><p>Bonjour ${escapeEmailHtml(orderRow.buyerName)}, ta commande chez <strong>${escapeEmailHtml(shopName)}</strong> est enregistrée. Tu règles <strong>${escapeEmailHtml(totalLabel)}</strong> à la livraison, en espèces ou en Mobile Money.</p><ul>${items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><p><a href="${escapeEmailHtml(trackingUrl)}">Suivre ma commande</a></p></div>`,
+    idempotencyKey: `order-cod-buyer/${orderRow.id}`,
+  });
+}
+
+export async function notifyCashOnDeliveryOrder(orderId: string): Promise<void> {
+  const results = await Promise.allSettled([
+    notifyBuyerOfCashOnDeliveryOrder(orderId),
+    notifySellerOfOrder(orderId, "cash_on_delivery"),
+  ]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.warn("[order-notifications] cod channel failed", result.reason);
+    }
+  }
 }
 
 export async function notifyPaidOrder(orderId: string): Promise<void> {

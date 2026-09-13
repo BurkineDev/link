@@ -303,10 +303,6 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
   // Même logique pour la devise : Genius Pay règle en XOF, une boutique en
   // XAF ou KES ne peut pas voir sa commande confirmée.
   const mobileMoneyCurrencyOk = isMobileMoneyCurrency(currency);
-  const payment =
-    (!mobileMoneyCovered || !mobileMoneyCurrencyOk) && paymentSelection.type === "mobile_money"
-      ? { type: "card" as PaymentType, mobileProvider: undefined }
-      : paymentSelection;
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discount = appliedPromo?.discount ?? 0;
@@ -321,6 +317,20 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
   const total = orderTotal({ items, currency, shipping, discount });
   const shippingUnavailable = shipping.kind === "unavailable";
   const blocked = shippingUnavailable || currencyMismatch;
+
+  // Paiement à la livraison : seulement si le vendeur l'accepte et que le
+  // colis part vraiment quelque part (panier physique, zone desservie).
+  const cashOnDeliveryAvailable =
+    shop.cash_on_delivery &&
+    physical &&
+    requiresShipping === true &&
+    (shipping.kind === "paid" || shipping.kind === "free");
+  const payment =
+    (!mobileMoneyCovered || !mobileMoneyCurrencyOk) && paymentSelection.type === "mobile_money"
+      ? { type: "card" as PaymentType, mobileProvider: undefined }
+      : paymentSelection.type === "cash_on_delivery" && !cashOnDeliveryAvailable
+        ? { type: "card" as PaymentType, mobileProvider: undefined }
+        : paymentSelection;
 
   // ---------------------------------------------------------------------------
   async function applyPromo(code = promoInput, orderTotal = subtotal): Promise<boolean> {
@@ -451,7 +461,9 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
   const paymentBlurb =
     payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
-      : "Paiement sécurisé via Stripe";
+      : payment.type === "cash_on_delivery"
+        ? "Rien à payer maintenant : tu règles à la livraison"
+        : "Paiement sécurisé via Stripe";
 
   const payButton = (
     <Button
@@ -470,7 +482,9 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
       ) : shippingUnavailable ? (
         "Livraison indisponible pour ce pays"
       ) : (
-        `Payer ${formatPrice(total, currency)}`
+        payment.type === "cash_on_delivery"
+          ? `Commander — ${formatPrice(total, currency)} à la livraison`
+          : `Payer ${formatPrice(total, currency)}`
       )}
     </Button>
   );
@@ -691,6 +705,7 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
                 buyerCountry={buyerCountry}
                 buyerCountryLabel={countryLabel}
                 shopCurrency={currency}
+                cashOnDelivery={cashOnDeliveryAvailable}
               />
             </section>
 

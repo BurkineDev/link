@@ -7,7 +7,8 @@ import { serializeOrder } from "@/lib/db/serialize";
 
 /**
  * POST /api/orders/[id]/mark-paid — le vendeur a reçu l'argent hors
- * plateforme (commande WhatsApp payée en espèces ou par Mobile Money direct).
+ * plateforme (commande WhatsApp payée en espèces ou par Mobile Money direct,
+ * commande réglée à la livraison).
  * Même règlement que les webhooks — stock prélevé, fiche client si e-mail,
  * fichiers numériques — sans aucune ligne au registre : Bio-Lien n'a rien
  * encaissé, il n'y a rien à reverser.
@@ -29,7 +30,7 @@ export async function POST(
   });
   if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
   if (order.shop.ownerId !== user.id) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-  if (order.paymentProvider !== "manual") {
+  if (order.paymentProvider !== "manual" && order.paymentProvider !== "cash_on_delivery") {
     return NextResponse.json(
       { error: "Cette commande est réglée en ligne : son paiement est confirmé automatiquement." },
       { status: 409 },
@@ -47,7 +48,11 @@ export async function POST(
     return NextResponse.json({ error: "Cette commande est déjà réglée." }, { status: 409 });
   }
 
-  const result = await settlePaidOrder(id, `manual:${user.id}:${Date.now()}`, "manual");
+  const result = await settlePaidOrder(
+    id,
+    `${order.paymentProvider}:${user.id}:${Date.now()}`,
+    order.paymentProvider,
+  );
   if (!result.settled) {
     return NextResponse.json({ error: "Cette commande est déjà réglée." }, { status: 409 });
   }

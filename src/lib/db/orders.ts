@@ -167,10 +167,10 @@ export async function settlePaidOrder(
       },
     });
 
-    // Une commande réglée hors plateforme (WhatsApp, espèces, Mobile Money
-    // direct au vendeur) : Bio-Lien n'a touché aucun argent, donc ni
-    // commission ni net à reverser — rien au registre.
-    if (paymentProvider === "manual") {
+    // Une commande réglée hors plateforme (WhatsApp, espèces à la livraison,
+    // Mobile Money direct au vendeur) : Bio-Lien n'a touché aucun argent,
+    // donc ni commission ni net à reverser — rien au registre.
+    if (paymentProvider === "manual" || paymentProvider === "cash_on_delivery") {
       const undeliveredOffline = new Set(
         stockShortfall.filter((item) => item.taken === 0).map((item) => item.product_id),
       );
@@ -515,6 +515,8 @@ export async function transitionOrderStatus(input: {
         status: true,
         paymentStatus: true,
         paymentProvider: true,
+        stockReservedAt: true,
+        items: true,
         shop: { select: { ownerId: true } },
       },
     });
@@ -551,7 +553,18 @@ export async function transitionOrderStatus(input: {
       return { updated: false, reason: "manual_order_requires_payment" } as const;
     }
 
-    await tx.order.update({ where: { id: order.id }, data: { status } });
+    // Annulation d'une commande dont le stock avait été prélevé d'avance
+    // (paiement à la livraison) : il revient en rayon.
+    const restores =
+      status === "cancelled" && order.paymentStatus === "pending" && order.stockReservedAt !== null;
+    if (restores) {
+      await restoreStock(tx, order.items);
+    }
+
+    await tx.order.update({
+      where: { id: order.id },
+      data: restores ? { status, stockReservedAt: null } : { status },
+    });
     await tx.orderStatusEvent.create({
       data: {
         orderId: order.id,

@@ -239,14 +239,25 @@ export const PENDING_HOLD_MS = 30 * 60 * 1000;
  * toute la boutique pendant trente minutes. C'est le vendeur qui tranche
  * dans la conversation ; le manque éventuel lui est signalé quand il marque
  * la commande payée.
+ *
+ * Les commandes à régler à la livraison non plus : leur stock est prélevé
+ * pour de bon à la caisse (`stockReservedAt`), et rendu si elles sont
+ * annulées — une commande annulée, encore « en attente de paiement » faute
+ * d'encaissement, ne doit pas bloquer l'article trente minutes de plus.
+ * D'où aussi le filtre sur le statut : seule une commande vraiment en
+ * attente engage quelque chose.
  */
 async function pendingUnits(shopId: string, now: Date): Promise<Map<string, number>> {
   const rows = await prisma.order.findMany({
     where: {
       shopId,
+      status: "pending",
       paymentStatus: "pending",
-      // `not` seul exclurait aussi les commandes sans prestataire (NULL).
-      OR: [{ paymentProvider: null }, { paymentProvider: { not: "manual" } }],
+      // `notIn` seul exclurait aussi les commandes sans prestataire (NULL).
+      OR: [
+        { paymentProvider: null },
+        { paymentProvider: { notIn: ["manual", "cash_on_delivery"] } },
+      ],
       stockReservedAt: null,
       createdAt: { gt: new Date(now.getTime() - PENDING_HOLD_MS) },
     },

@@ -1,10 +1,10 @@
 "use client";
 
-import { CreditCard, Info, ShieldCheck, Smartphone } from "lucide-react";
+import { CreditCard, HandCoins, Info, ShieldCheck, Smartphone } from "lucide-react";
 import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { cn } from "@/lib/utils";
 
-export type PaymentType = "card" | "mobile_money";
+export type PaymentType = "card" | "mobile_money" | "cash_on_delivery";
 
 export type MobileProvider =
   | "wave"
@@ -24,6 +24,12 @@ interface PaymentMethodsProps {
   buyerCountryLabel?: string | null;
   /** Devise de la boutique : le Mobile Money ne règle qu'en XOF. */
   shopCurrency?: string | null;
+  /**
+   * Paiement à la livraison : proposé quand le vendeur l'accepte, que le
+   * panier se livre et que la zone est desservie. Absent sinon — pas grisé :
+   * ce n'est pas une panne, c'est une offre du vendeur.
+   */
+  cashOnDelivery?: boolean;
 }
 
 const PROVIDERS: { id: MobileProvider; label: string; emoji: string }[] = [
@@ -40,6 +46,7 @@ export function PaymentMethods({
   buyerCountry,
   buyerCountryLabel,
   shopCurrency,
+  cashOnDelivery = false,
 }: PaymentMethodsProps) {
   // Genius Pay accepte le paiement puis n'envoie jamais le push quand le pays
   // n'est pas couvert. Mieux vaut le dire avant que l'acheteur attende.
@@ -131,6 +138,40 @@ export function PaymentMethods({
         )}
       </button>
 
+      {/* Paiement à la livraison : le vendeur encaisse en main propre */}
+      {cashOnDelivery && (
+        <button
+          type="button"
+          onClick={() => onChange({ type: "cash_on_delivery" })}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors duration-150",
+            value.type === "cash_on_delivery"
+              ? "border-primary bg-primary/10"
+              : "border-border bg-background hover:border-foreground/30",
+          )}
+        >
+          <span
+            className={cn(
+              "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+              value.type === "cash_on_delivery" ? "border-primary bg-primary" : "border-border",
+            )}
+          >
+            {value.type === "cash_on_delivery" && (
+              <span className="size-2 rounded-full bg-primary-foreground" />
+            )}
+          </span>
+
+          <HandCoins className="size-5 shrink-0 text-foreground" />
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Paiement à la livraison</p>
+            <p className="text-xs text-muted-foreground">
+              Tu paies en espèces ou en Mobile Money à la remise du colis
+            </p>
+          </div>
+        </button>
+      )}
+
       {wrongCurrency && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
           <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -189,10 +230,17 @@ export function PaymentMethods({
         </div>
       )}
 
-      <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-        <ShieldCheck className="size-3.5 text-[var(--success)] shrink-0" />
-        Paiement chiffré. Tes coordonnées ne sont jamais stockées.
-      </div>
+      {value.type === "cash_on_delivery" ? (
+        <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+          <Info className="size-3.5 shrink-0" />
+          Rien à payer maintenant : le vendeur prépare ta commande et encaisse à la livraison.
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+          <ShieldCheck className="size-3.5 text-[var(--success)] shrink-0" />
+          Paiement chiffré. Tes coordonnées ne sont jamais stockées.
+        </div>
+      )}
     </div>
   );
 }

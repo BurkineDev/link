@@ -130,6 +130,7 @@ enum PaymentProvider {
   pawapay
   stripe
   geniuspay
+  cash_on_delivery
 
   @@map("payment_provider")
 }
@@ -236,6 +237,8 @@ model Shop {
   customDomainVerifiedAt DateTime? @map("custom_domain_verified_at")
   showBioLienBadge      Boolean    @default(true) @map("show_biolien_badge")
   shippingEnabled       Boolean    @default(false) @map("shipping_enabled")
+  /** Paiement à la livraison : le vendeur encaisse en main propre, sans passerelle. */
+  cashOnDelivery        Boolean    @default(false) @map("cash_on_delivery")
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
   owner                 Profile    @relation(fields: [ownerId], references: [id], onDelete: Cascade)

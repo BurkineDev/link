@@ -49,7 +49,8 @@ export type PaymentProvider =
   | "free"
   | "pawapay"
   | "stripe"
-  | "geniuspay";
+  | "geniuspay"
+  | "cash_on_delivery";
 
 export type SubscriptionPlan = "free" | "starter" | "pro";
 
@@ -270,6 +271,7 @@ export type ShopRow = {
   custom_domain_verified_at: string | null;
   show_biolien_badge: boolean;
   shipping_enabled: boolean;
+  cash_on_delivery: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -624,6 +626,7 @@ export type ShopInsert = Omit<
   | "custom_domain_verified_at"
   | "show_biolien_badge"
   | "shipping_enabled"
+  | "cash_on_delivery"
 > & {
   tiktok_pixel_id?: string | null;
   meta_pixel_id?: string | null;
@@ -642,6 +645,7 @@ export type ShopInsert = Omit<
   custom_domain_verified_at?: string | null;
   show_biolien_badge?: boolean;
   shipping_enabled?: boolean;
+  cash_on_delivery?: boolean;
 };
 
 export type TemplateInsert = Omit<TemplateRow, "id" | "is_premium"> & {

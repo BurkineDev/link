@@ -69,6 +69,19 @@ function awaitsManualPayment(order: OrderRow): boolean {
   return order.payment_provider === "manual" && order.payment_status === "pending";
 }
 
+/** Commande à régler à la livraison : ferme, à préparer, et à encaisser à la remise. */
+function awaitsCashOnDelivery(order: OrderRow): boolean {
+  return order.payment_provider === "cash_on_delivery" && order.payment_status === "pending";
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  manual: "WhatsApp / hors ligne",
+  cash_on_delivery: "Paiement à la livraison",
+  geniuspay: "Mobile Money (Genius Pay)",
+  stripe: "Carte bancaire (Stripe)",
+  free: "Gratuit (code promo)",
+};
+
 // ---- Filter tabs ----
 
 interface FilterTab {
@@ -353,10 +366,8 @@ function OrderDetailSheet({
             <div className="rounded-xl border border-border bg-muted/30 p-3 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <CreditCardIcon className="size-4 text-muted-foreground" />
-                <span className="text-sm capitalize">
-                  {order.payment_provider === "manual"
-                    ? "WhatsApp / hors ligne"
-                    : (order.payment_provider ?? "Non renseigné")}
+                <span className="text-sm">
+                  {PROVIDER_LABELS[order.payment_provider ?? ""] ?? (order.payment_provider ?? "Non renseigné")}
                 </span>
                 <span
                   className={cn(
@@ -388,11 +399,12 @@ function OrderDetailSheet({
                   {formatCurrency(order.total_amount, order.currency)}
                 </span>
               </div>
-              {awaitsManualPayment(order) && order.status !== "cancelled" && (
+              {(awaitsManualPayment(order) || awaitsCashOnDelivery(order)) && order.status !== "cancelled" && (
                 <div className="border-t border-border pt-3">
                   <p className="mb-2 text-xs text-muted-foreground">
-                    Tu as reçu l&apos;argent (espèces, Mobile Money direct) ? Marque la commande
-                    payée : le stock est prélevé et la commande passe en « Confirmée ».
+                    {awaitsCashOnDelivery(order)
+                      ? "Argent reçu à la livraison ? Marque la commande payée : elle compte alors dans tes ventes."
+                      : "Tu as reçu l'argent (espèces, Mobile Money direct) ? Marque la commande payée : le stock est prélevé et la commande passe en « Confirmée »."}
                   </p>
                   <Button
                     type="button"
@@ -579,6 +591,14 @@ export function OrdersClient({
                                 title="Commande WhatsApp : à marquer payée quand l'argent est reçu"
                               >
                                 Non payée
+                              </span>
+                            ) : null}
+                            {awaitsCashOnDelivery(order) && order.status !== "cancelled" ? (
+                              <span
+                                className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300"
+                                title="Paiement à la livraison : à encaisser à la remise du colis"
+                              >
+                                À encaisser
                               </span>
                             ) : null}
                             {order.stock_shortfall && order.stock_shortfall.length > 0 ? (

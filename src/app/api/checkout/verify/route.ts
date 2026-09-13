@@ -58,10 +58,14 @@ export async function GET(request: NextRequest) {
       provider === "geniuspay" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
     const isFreeByOrder =
       provider === "free" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
+    // Paiement à la livraison : rien à vérifier chez un prestataire, la
+    // commande est ferme dès sa création — il s'agit de la montrer.
+    const isCodByOrder =
+      provider === "cash_on_delivery" && !!orderId && /^[0-9a-f-]{36}$/i.test(orderId);
     const isGenius = provider === "geniuspay" && (!!reference || isGeniusByOrder);
     const isStripe = !!sessionId;
 
-    if (!isGenius && !isStripe && !isFreeByOrder) {
+    if (!isGenius && !isStripe && !isFreeByOrder && !isCodByOrder) {
       return NextResponse.json(
         { error: "Paramètres de vérification manquants." },
         { status: 400 },
@@ -72,7 +76,7 @@ export async function GET(request: NextRequest) {
     // sur plusieurs commandes en attente) : `findFirst`, avec la valeur
     // toujours renseignée par construction.
     const row =
-      isGeniusByOrder || isFreeByOrder
+      isGeniusByOrder || isFreeByOrder || isCodByOrder
         ? await prisma.order.findUnique({ where: { id: orderId! } })
         : await prisma.order.findFirst({
             where: { paymentRef: (isGenius ? reference : sessionId) as string },
@@ -100,6 +104,9 @@ export async function GET(request: NextRequest) {
      */
     const withShop = async (orderObj: typeof order) => {
       const paid = orderObj.payment_status === "paid";
+      // Une commande à régler à la livraison est ferme : son suivi lui
+      // appartient déjà, même sans paiement.
+      const firm = paid || orderObj.payment_provider === "cash_on_delivery";
       const [shop, downloads] = await Promise.all([
         prisma.shop.findUnique({
           where: { id: orderObj.shop_id },
@@ -121,11 +128,12 @@ export async function GET(request: NextRequest) {
         currency: orderObj.currency,
         status: orderObj.status,
         payment_status: orderObj.payment_status,
+        payment_provider: orderObj.payment_provider,
         items: orderObj.items,
         shop_name: shop?.name,
         shop_slug: shop?.slug,
         shop_whatsapp: shop?.whatsappNumber ?? null,
-        tracking_token: paid ? orderObj.tracking_token : null,
+        tracking_token: firm ? orderObj.tracking_token : null,
         downloads: downloads.map((d) => ({
           token: d.token,
           file_name: d.fileName,
@@ -136,6 +144,16 @@ export async function GET(request: NextRequest) {
 
     // Already settled — idempotent return.
     if (order.payment_status === "paid") {
+      return NextResponse.json({ order: await withShop(order) });
+    }
+
+    if (isCodByOrder) {
+      if (order.payment_provider !== "cash_on_delivery" || order.status === "cancelled") {
+        return NextResponse.json(
+          { error: "Cette commande n'est pas confirmée." },
+          { status: 409 },
+        );
+      }
       return NextResponse.json({ order: await withShop(order) });
     }
 

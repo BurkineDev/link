@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { checkStockAvailability } from "@/lib/db/stock";
+import { checkStockAvailability, releaseStock, reserveStock } from "@/lib/db/stock";
 import { quoteShipping, shippingAmount as shippingAmountOf } from "@/lib/checkout/shipping";
 import { roundToCurrency } from "@/lib/checkout/money";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
@@ -16,7 +16,7 @@ import {
 import type { OrderItem } from "@/lib/types/database";
 import type { Prisma } from "../../../../prisma/generated/client/client";
 import type { Currency } from "@/lib/constants";
-import { notifyPaidOrder } from "@/lib/order-notifications";
+import { notifyCashOnDeliveryOrder, notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
@@ -77,7 +77,7 @@ const checkoutRequestSchema = z.object({
    * buyer's phone country code; the optional `mobileProvider` overrides that.
    */
   paymentMethod: z.object({
-    type: z.enum(["card", "mobile_money"]),
+    type: z.enum(["card", "mobile_money", "cash_on_delivery"]),
     mobileProvider: z
       .enum(["wave", "orange_money", "mtn_money", "moov_money", "airtel_money"])
       .optional(),
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
         isPublished: true,
         ownerId: true,
         shippingEnabled: true,
+        cashOnDelivery: true,
       },
     });
 
@@ -428,6 +429,22 @@ export async function POST(request: NextRequest) {
       shippingAmount = shippingAmountOf(quote);
     }
 
+    // Paiement à la livraison : une offre du vendeur, pour un colis qui part
+    // vraiment quelque part. Sans ça, l'option n'est pas proposée à l'écran ;
+    // la refuser ici couvre une adresse bricolée.
+    if (paymentMethod.type === "cash_on_delivery") {
+      if (!shop.cashOnDelivery || !hasPhysicalItems || !shop.shippingEnabled || !shippingAddress) {
+        await releasePromo();
+        return NextResponse.json(
+          {
+            error: "Le paiement à la livraison n'est pas proposé pour cette commande.",
+            code: "COD_UNAVAILABLE",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // À la précision de la devise : la valeur écrite en base est exactement
     // celle que Stripe et Genius Pay encaissent, sinon le rapprochement
     // « montant payé ≥ total » échoue sur un demi-franc.
@@ -481,7 +498,11 @@ export async function POST(request: NextRequest) {
 
     // -- Create order ---------------------------------------------------------
     const paymentProvider =
-      paymentMethod.type === "mobile_money" ? ("geniuspay" as const) : ("stripe" as const);
+      paymentMethod.type === "mobile_money"
+        ? ("geniuspay" as const)
+        : paymentMethod.type === "cash_on_delivery"
+          ? ("cash_on_delivery" as const)
+          : ("stripe" as const);
 
     // La commande et ses lignes sont créées d'un seul tenant : Prisma
     // enveloppe une création imbriquée dans une transaction. L'ancienne
@@ -576,6 +597,75 @@ export async function POST(request: NextRequest) {
         paymentLink: `${appUrl}/checkout/success?provider=free&order=${order.id}`,
         orderId: order.id,
         provider: "free" as const,
+      });
+    }
+
+    // -- Paiement à la livraison ------------------------------------------------
+    // Pas de passerelle : la commande est ferme dès maintenant, le vendeur la
+    // prépare et encaisse à la remise. Le stock est donc prélevé tout de
+    // suite (il n'y aura pas de « règlement » pour le faire), et rendu si
+    // la commande est annulée.
+    if (paymentMethod.type === "cash_on_delivery") {
+      let reservation: Awaited<ReturnType<typeof reserveStock>>;
+      try {
+        reservation = await reserveStock(stockPayload);
+      } catch (error) {
+        console.error("[checkout] cod stock reservation error:", error);
+        await rollback();
+        return NextResponse.json(
+          { error: "Impossible de réserver le stock. Veuillez réessayer." },
+          { status: 500 },
+        );
+      }
+      if (!reservation.ok) {
+        await rollback();
+        return NextResponse.json(
+          {
+            error:
+              reservation.reason === "insufficient_stock" && reservation.product_name
+                ? `Stock insuffisant pour « ${reservation.product_name} » (${reservation.available ?? 0} disponible${(reservation.available ?? 0) > 1 ? "s" : ""}).`
+                : "Un article du panier n'est plus disponible.",
+            code: "OUT_OF_STOCK",
+          },
+          { status: 409 },
+        );
+      }
+
+      try {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "confirmed",
+            stockReservedAt: new Date(),
+            paymentRef: `cod:${order.id}`,
+            statusEvents: {
+              create: {
+                status: "confirmed",
+                publicMessage:
+                  "Commande enregistrée. Tu règles à la livraison ; le vendeur prépare ton colis.",
+              },
+            },
+          },
+        });
+      } catch (error) {
+        console.error("[checkout] cod confirmation error:", error);
+        await releaseStock(stockPayload).catch(() => {});
+        await rollback();
+        return NextResponse.json(
+          { error: "Impossible d'enregistrer la commande." },
+          { status: 500 },
+        );
+      }
+
+      scheduleAfterResponse(
+        () => notifyCashOnDeliveryOrder(order.id),
+        (error) => console.warn("[checkout] cod notification failed", error),
+      );
+
+      return NextResponse.json({
+        paymentLink: `${appUrl}/checkout/success?provider=cash_on_delivery&order=${order.id}`,
+        orderId: order.id,
+        provider: "cash_on_delivery" as const,
       });
     }
 
