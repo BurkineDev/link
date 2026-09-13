@@ -1,5 +1,6 @@
 import { isValidE164 } from "@/lib/phone/dial-codes";
 import { NextRequest, NextResponse } from "next/server";
+import { getEffectivePlan } from "@/lib/subscription";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -164,6 +165,34 @@ export async function PATCH(
             code: "OUTSTANDING_BALANCE",
           },
           { status: 409 },
+        );
+      }
+    }
+
+    // Masquer le badge Bio-Lien est une contrepartie des plans payants :
+    // le plan gratuit le garde, c'est ce qui le finance.
+    if (parsed.data.show_biolien_badge === false) {
+      const sub = await prisma.creatorSubscription.findUnique({
+        where: { userId: user.id },
+        select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
+      });
+      const plan = getEffectivePlan(
+        sub
+          ? {
+              plan: sub.plan,
+              status: sub.status,
+              provider: sub.provider,
+              current_period_end: sub.currentPeriodEnd?.toISOString() ?? null,
+            }
+          : null,
+      );
+      if (plan === "free") {
+        return NextResponse.json(
+          {
+            error: "Masquer le badge Bio-Lien est réservé aux plans Starter et Pro.",
+            code: "PLAN_REQUIRED",
+          },
+          { status: 402 },
         );
       }
     }

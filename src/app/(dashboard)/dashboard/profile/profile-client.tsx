@@ -155,7 +155,7 @@ export function ProfileClient({
                       } · ${Math.round(
                         PLAN_LIMITS[effectivePlan].commissionRate * 100,
                       )} % de commission`
-                    : "Jusqu'à 5 produits · 5% de commission sur les ventes"}
+                    : `Jusqu'à ${PLAN_LIMITS.free.maxProducts} produits · ${Math.round(PLAN_LIMITS.free.commissionRate * 100)} % de commission sur les ventes`}
                 </p>
                 {subscription?.current_period_end && isPaid && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">

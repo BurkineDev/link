@@ -21,6 +21,8 @@ import { JsonLd, storeJsonLd } from "@/lib/seo/json-ld";
 import { resolveBioPageBlocks, type LegacyLink } from "@/lib/blocks/resolve";
 import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
+import { getEffectivePlan } from "@/lib/subscription";
+import { showBioLienBadge } from "@/lib/plans/badge";
 import { AndroidGoScript } from "@/components/shop/android-go-script";
 
 interface Props {
@@ -130,7 +132,7 @@ export default async function Page({ params }: Props) {
     notFound();
   }
 
-  const [productRows, categoryRows, linkRows, blockRows] = await Promise.all([
+  const [productRows, categoryRows, linkRows, blockRows, subscription] = await Promise.all([
     prisma.product.findMany({
       where: { shopId: shopRow.id, isPublished: true },
       orderBy: { createdAt: "desc" },
@@ -147,7 +149,23 @@ export default async function Page({ params }: Props) {
       where: { shopId: shopRow.id },
       orderBy: { position: "asc" },
     }),
+    // Le badge Bio-Lien se retire sur un plan payant : le plan effectif du
+    // propriétaire est lu ici, à chaque revalidation de la page.
+    prisma.creatorSubscription.findUnique({
+      where: { userId: shopRow.ownerId },
+      select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
+    }),
   ]);
+  const ownerPlan = getEffectivePlan(
+    subscription
+      ? {
+          plan: subscription.plan,
+          status: subscription.status,
+          provider: subscription.provider,
+          current_period_end: subscription.currentPeriodEnd?.toISOString() ?? null,
+        }
+      : null,
+  );
 
   // Les composants d'affichage attendent encore la forme Supabase
   // (snake_case) ; les sérialiseurs la reproduisent à l'identique.
@@ -189,6 +207,7 @@ export default async function Page({ params }: Props) {
         categories={categories}
         blocks={blocks}
         pageUrl={pageUrl}
+        showBadge={showBioLienBadge(ownerPlan, shop.show_biolien_badge)}
       />
     </>
   );

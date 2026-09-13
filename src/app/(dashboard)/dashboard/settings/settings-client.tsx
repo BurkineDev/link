@@ -79,12 +79,15 @@ import {
   type BioThemeId,
 } from "@/lib/bio-themes";
 import { LinksSection } from "@/components/dashboard/links-section";
+import { Switch } from "@/components/ui/switch";
 
 interface SettingsClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
   /** La rédaction assistée fait partie du plan Pro. */
   canUseAi: boolean;
+  /** Retirer le badge Bio-Lien fait partie des plans payants. */
+  canHideBadge: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +366,7 @@ export function SettingsClient({
   shop,
   links,
   canUseAi,
+  canHideBadge,
 }: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -414,6 +418,7 @@ export function SettingsClient({
   );
   const [ctaShape, setCtaShape] = useState<ShopCtaShape>(shop.cta_shape);
   const [bioTheme, setBioTheme] = useState<BioThemeId>(shop.bio_theme);
+  const [showBadge, setShowBadge] = useState<boolean>(shop.show_biolien_badge);
 
   // ---- Contact ----
   const [contactEmail, setContactEmail] = useState(shop.contact_email ?? "");
@@ -496,6 +501,9 @@ export function SettingsClient({
       border_radius: borderRadius,
       cta_shape: ctaShape,
       bio_theme: bioTheme,
+      // Le plan gratuit garde le badge : on n'envoie le réglage que si on
+      // a le droit d'y toucher (le serveur le vérifie aussi).
+      ...(canHideBadge ? { show_biolien_badge: showBadge } : {}),
     });
 
     setSaving(false);
@@ -514,6 +522,7 @@ export function SettingsClient({
     setBorderRadius(shop.border_radius);
     setCtaShape(shop.cta_shape);
     setBioTheme(shop.bio_theme);
+    setShowBadge(shop.show_biolien_badge);
   };
 
   const saveContact = async () => {
@@ -603,7 +612,8 @@ export function SettingsClient({
     fontFamily !== shop.font_family ||
     borderRadius !== shop.border_radius ||
     ctaShape !== shop.cta_shape ||
-    bioTheme !== shop.bio_theme;
+    bioTheme !== shop.bio_theme ||
+    (canHideBadge && showBadge !== shop.show_biolien_badge);
 
   const contactDirty =
     contactEmail !== (shop.contact_email ?? "") ||
@@ -921,6 +931,42 @@ export function SettingsClient({
                       onChange={setAccentColor}
                     />
                   </div>
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* Badge Bio-Lien */}
+              <section className="space-y-3">
+                <header className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Badge Bio-Lien
+                  </h3>
+                </header>
+                <div className="flex items-start justify-between gap-4 rounded-xl border border-border p-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="show-badge" className="text-sm font-medium">
+                      Afficher « Crée ta page sur Bio-Lien » en bas de ta page
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      {canHideBadge
+                        ? "Ton plan te permet de le retirer."
+                        : "Le retirer fait partie des plans Starter et Pro."}{" "}
+                      {!canHideBadge && (
+                        <Link href="/pricing" className="font-semibold text-foreground underline underline-offset-2">
+                          Voir les plans
+                        </Link>
+                      )}
+                    </p>
+                  </div>
+                  <Switch
+                    id="show-badge"
+                    checked={canHideBadge ? showBadge : true}
+                    onCheckedChange={(checked) => setShowBadge(checked)}
+                    disabled={!canHideBadge}
+                    aria-label="Afficher le badge Bio-Lien"
+                  />
                 </div>
               </section>
 

@@ -22,42 +22,30 @@ import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/utils/format";
 import {
   BOOSTS,
+  PLAN_LIMITS,
   PREPAID_MONTHS,
   getPrepaidPrice,
   prepaidSavingsPercent,
   type PrepaidMonths,
 } from "@/lib/subscription";
+import {
+  PLAN_FEATURES,
+  PLAN_TAGLINES,
+  cardPriceLabel,
+  commissionNote,
+  planPricing,
+} from "@/lib/plans/catalog";
 
 type Plan = "free" | "starter" | "pro";
 
-const FREE_FEATURES = [
-  "Jusqu'à 5 produits",
-  "Lien @username unique",
-  "Paiements carte bancaire + Mobile Money",
-  "Templates inclus",
-  "Analytics de base",
-];
-
-const STARTER_FEATURES = [
-  "Jusqu'à 20 produits",
-  "Commission réduite à 3 %",
-  "Suppression du badge Bio-Lien",
-  "Analytics standard",
-  "Support email",
-];
-
-const PRO_FEATURES = [
-  "Produits illimités",
-  "0 % de commission sur tes ventes",
-  "Analytics avancés (top produits, AOV, tendances)",
-  "Templates premium",
-  "Support prioritaire",
-];
-
-const PRICE_LABELS = {
-  starter: { month: "4,99", year: "49" },
-  pro: { month: "9,99", year: "59" },
-} as const;
+// Fonctionnalités et prix viennent du catalogue (src/lib/plans/catalog.ts),
+// lui-même dérivé des constantes qui facturent : cette page ne peut plus
+// annoncer un tarif que Stripe ou Mobile Money ne pratique pas.
+const FREE_FEATURES = PLAN_FEATURES.free;
+const STARTER_FEATURES = PLAN_FEATURES.starter;
+const PRO_FEATURES = PLAN_FEATURES.pro;
+const STARTER = planPricing("starter");
+const PRO = planPricing("pro");
 
 const MONTH_LABEL: Record<PrepaidMonths, string> = {
   1: "1 mois",
@@ -244,7 +232,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                Démarre et teste ta boutique
+                {PLAN_TAGLINES.free}
               </p>
 
               <Button
@@ -272,7 +260,7 @@ export function PricingClient({
               </ul>
 
               <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                5 % de commission sur chaque vente.
+                {commissionNote("free")}
               </p>
             </CardContent>
           </Card>
@@ -298,7 +286,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                Pour les vendeurs qui veulent plus que 5 produits
+                {PLAN_TAGLINES.starter}
               </p>
 
               {currentPlan === "starter" ? (
@@ -349,7 +337,7 @@ export function PricingClient({
                   disabled={checkingOutPlan !== null}
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
                 >
-                  Payer par carte ({PRICE_LABELS.starter[months === 12 ? "year" : "month"]} $CA)
+                  Payer par carte ({cardPriceLabel("starter", months === 12 ? "year" : "month")})
                 </button>
               </div>
             </CardContent>
@@ -381,7 +369,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                Pour les créateurs sérieux qui veulent grandir
+                {PLAN_TAGLINES.pro}
               </p>
 
               {currentPlan === "pro" ? (
@@ -431,7 +419,7 @@ export function PricingClient({
                   disabled={checkingOutPlan !== null}
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
                 >
-                  Payer par carte ({PRICE_LABELS.pro[months === 12 ? "year" : "month"]} $CA)
+                  Payer par carte ({cardPriceLabel("pro", months === 12 ? "year" : "month")})
                 </button>
               </div>
             </CardContent>
@@ -468,7 +456,7 @@ export function PricingClient({
             {[
               {
                 q: "Quelle est la différence entre les plans ?",
-                a: "Découverte (gratuit, 5 produits, 5 % de commission) sert à tester. Starter (2 000 FCFA/mois, 20 produits, 3 %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (4 000 FCFA/mois, illimité, 0 %) est le plan optimal dès que tu vends régulièrement.",
+                a: `Découverte (gratuit, ${PLAN_LIMITS.free.maxProducts} produits, ${Math.round(PLAN_LIMITS.free.commissionRate * 100)} % de commission) sert à tester. Starter (${STARTER.prepaid.months1}/mois, ${PLAN_LIMITS.starter.maxProducts} produits, ${Math.round(PLAN_LIMITS.starter.commissionRate * 100)} %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (${PRO.prepaid.months1}/mois, illimité, ${Math.round(PLAN_LIMITS.pro.commissionRate * 100)} %) est le plan optimal dès que tu vends régulièrement.`,
               },
               {
                 q: "Comment fonctionne la commission ?",
@@ -476,7 +464,7 @@ export function PricingClient({
               },
               {
                 q: "Comment se passe le paiement de l'abonnement ?",
-                a: "Tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 3 mois ou 1 an revient moins cher que mois par mois. Deux moyens de payer : le Mobile Money là où notre partenaire le propose, et la carte bancaire partout, facturée en dollars canadiens.",
+                a: `Tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux. Acheter 1 an revient ${PRO.prepaid.yearlySavingsPercent} % moins cher que mois par mois. Deux moyens de payer : le Mobile Money là où notre partenaire le propose, et la carte bancaire partout, facturée en dollars canadiens (${STARTER.card.month} ou ${STARTER.card.year} pour Starter, ${PRO.card.month} ou ${PRO.card.year} pour Pro).`,
               },
               {
                 q: "Le Mobile Money est-il disponible dans mon pays ?",

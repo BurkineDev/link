@@ -46,6 +46,12 @@ interface ShopPageProps {
   blocks: ResolvedBlock[];
   /** Absolute URL of this page — used by the share sheet and the QR code. */
   pageUrl: string;
+  /**
+   * Le badge « Crée ta page sur Bio-Lien » est la contrepartie du plan
+   * gratuit ; un plan payant peut le retirer. Décidé côté serveur (plan
+   * effectif + réglage de la boutique), la page se contente d'obéir.
+   */
+  showBadge?: boolean;
 }
 
 type BioTab = "links" | "shop";
@@ -86,6 +92,7 @@ export function ShopPage({
   categories,
   blocks,
   pageUrl,
+  showBadge = true,
 }: ShopPageProps) {
   const palette = resolveBioTheme(shop);
 
@@ -409,6 +416,7 @@ export function ShopPage({
              Le slug voyage : la page d'inscription peut alors nommer la
              boutique que le visiteur vient de voir, et l'inscription reste
              rattachable à celle qui l'a amenée. */}
+        {showBadge && (
         <div className="mt-10 flex justify-center">
           <Link
             href={`/register?de=${encodeURIComponent(shop.slug)}`}
@@ -430,6 +438,7 @@ export function ShopPage({
             Crée ta page sur Bio-Lien
           </Link>
         </div>
+        )}
       </main>
 
       {/* ── Floating order CTA ── */}

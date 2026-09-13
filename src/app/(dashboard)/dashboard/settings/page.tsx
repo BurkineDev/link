@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShop, serializeShopLink } from "@/lib/db/serialize";
 import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
+import { canHideBadge } from "@/lib/plans/badge";
 import type { ShopLinkRow, ShopRow } from "@/lib/types/database";
 import { SettingsClient } from "./settings-client";
 
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
       shop={shop}
       links={links}
       canUseAi={getPlanLimits(plan).aiWriting}
+      canHideBadge={canHideBadge(plan)}
     />
   );
 }
