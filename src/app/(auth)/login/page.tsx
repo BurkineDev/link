@@ -2,7 +2,8 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { safeNextPath } from "@/lib/validations/next-path";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -114,8 +115,17 @@ function RegistrationBanner() {
   );
 }
 
+/**
+ * Où aller une fois connecté : la page protégée demandée (`?next=`, posé
+ * par le proxy et re-validé ici) sinon le tableau de bord. Lu au moment du
+ * clic, hors rendu : pas de Suspense à ajouter.
+ */
+function nextDestination(): string {
+  const next = new URLSearchParams(window.location.search).get("next");
+  return safeNextPath(next) ?? "/dashboard";
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -145,9 +155,14 @@ export default function LoginPage() {
       return;
     }
 
-    toast.success("Connexion réussie. Bon retour !");
-    router.refresh();
-    router.push("/dashboard");
+    // Navigation complète, pas `router.push()` : tant que l'onboarding n'est
+    // pas terminé, le layout du tableau de bord redirige /dashboard vers
+    // /dashboard/onboarding, et le routeur client refaisait alors la même
+    // requête RSC en boucle — page blanche pour tout nouveau vendeur
+    // (reproduit avec et sans `router.refresh()`). Une vraie navigation suit
+    // la redirection une fois et repart avec la session fraîche. Le toast
+    // ne survivrait pas au rechargement : inutile d'en afficher un.
+    window.location.assign(nextDestination());
   }
 
   // ── Google OAuth ───────────────────────────────────────────────────────────
@@ -155,7 +170,7 @@ export default function LoginPage() {
     setIsGoogleLoading(true);
     const { error } = await signIn.social({
       provider: "google",
-      callbackURL: "/dashboard",
+      callbackURL: nextDestination(),
     });
 
     if (error) {
