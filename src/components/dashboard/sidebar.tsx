@@ -20,6 +20,7 @@ import {
   BanknoteIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import { browserDraftStorage, clearAllDrafts } from "@/lib/onboarding/draft";
 
 type NavItemDef = {
   label: string;
@@ -113,6 +114,7 @@ export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 
   const router = useRouter();
 
   async function handleSignOut() {
+    clearAllDrafts(browserDraftStorage());
     await signOut();
     router.push("/login");
   }

@@ -18,26 +18,36 @@ import { z } from "zod";
 
 export const DRAFT_VERSION = 1;
 
+/**
+ * Chaque feuille tolère une valeur hors borne (elle est simplement vidée) :
+ * un champ trop long ne doit jamais faire perdre tout le brouillon — c'est
+ * précisément le scénario que le brouillon existe pour couvrir. Seule la
+ * version est stricte : un ancien format repart de zéro.
+ */
+const text = (max: number) => z.string().max(max).catch("");
+
 const draftSchema = z.object({
   version: z.literal(DRAFT_VERSION),
-  step: z.number().int().min(1).max(4),
+  step: z.number().int().min(1).max(4).catch(1),
   step1: z
-    .object({ fullName: z.string().max(100), username: z.string().max(30) })
-    .nullable(),
+    .object({ fullName: text(100), username: text(30) })
+    .nullable()
+    .catch(null),
   step2: z
     .object({
-      shopName: z.string().max(100),
-      shopSlug: z.string().max(50),
-      description: z.string().max(500).optional(),
-      currency: z.string().max(3),
-      checkoutMode: z.enum(["whatsapp", "online"]),
-      whatsappNumber: z.string().max(20).optional(),
+      shopName: text(100),
+      shopSlug: text(50),
+      description: z.string().max(500).optional().catch(undefined),
+      currency: z.string().max(3).catch("XOF"),
+      checkoutMode: z.enum(["whatsapp", "online"]).catch("whatsapp"),
+      whatsappNumber: z.string().max(20).optional().catch(undefined),
     })
-    .nullable(),
-  intentions: z.array(z.string().max(50)).max(20),
-  handles: z.record(z.string().max(50), z.string().max(200)),
-  announcement: z.string().max(2000),
-  bioTheme: z.string().max(50),
+    .nullable()
+    .catch(null),
+  intentions: z.array(z.string().max(50)).max(20).catch([]),
+  handles: z.record(z.string().max(50), text(200)).catch({}),
+  announcement: text(2000),
+  bioTheme: text(50),
   savedAt: z.number(),
 });
 
@@ -117,6 +127,28 @@ export function saveDraft(
 export function clearDraft(storage: DraftStorage | null | undefined, userId: string): void {
   try {
     storage?.removeItem(draftKey(userId));
+  } catch {
+    // Rien à faire.
+  }
+}
+
+const DRAFT_PREFIX = "bl_onboarding_draft:";
+
+/**
+ * À la déconnexion : nom, numéro WhatsApp et pseudos n'ont rien à faire
+ * dans le navigateur d'un téléphone partagé une fois le vendeur parti.
+ */
+export function clearAllDrafts(storage: (DraftStorage & { length?: number; key?: (i: number) => string | null }) | null | undefined): void {
+  if (!storage) return;
+  try {
+    const keys: string[] = [];
+    if (typeof storage.key === "function" && typeof storage.length === "number") {
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (key?.startsWith(DRAFT_PREFIX)) keys.push(key);
+      }
+    }
+    for (const key of keys) storage.removeItem(key);
   } catch {
     // Rien à faire.
   }

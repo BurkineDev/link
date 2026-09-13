@@ -67,7 +67,9 @@ export default async function DashboardLayout({
   // Un vendeur qui n'a pas terminé son onboarding est ramené dessus, quelle
   // que soit la page du tableau de bord demandée. Ce contrôle vivait dans le
   // proxy ; il est ici parce que c'est le seul endroit qui lit la base.
-  if (!isOnboarding && !isTeamArea && !profile?.onboardingCompleted) {
+  // Une boutique existante vaut onboarding terminé : les comptes de l'ancien
+  // flux (boutique créée, drapeau jamais posé) n'ont rien à ressaisir.
+  if (!isOnboarding && !isTeamArea && !profile?.onboardingCompleted && !shop) {
     redirect("/dashboard/onboarding");
   }
   // Et l'inverse : un onboarding déjà terminé ne se rejoue pas (rechargement

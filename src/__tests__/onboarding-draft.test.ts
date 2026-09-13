@@ -5,6 +5,7 @@
 import {
   DRAFT_TTL_MS,
   DRAFT_VERSION,
+  clearAllDrafts,
   clearDraft,
   draftKey,
   isDraftMeaningful,
@@ -79,4 +80,26 @@ test("écran de reprise : jamais au-delà de ce que la saisie permet", () => {
   expect(resumeStep(draft({ step: 2, step1: null }), false)).toBe(1);
   // Le compte fournit le profil : la boutique suffit.
   expect(resumeStep(draft({ step: 2, step1: null }), true)).toBe(2);
+});
+
+test("un champ hors borne est vidé seul : le reste du brouillon survit", () => {
+  const s = storage();
+  saveDraft(s, "u1", { ...FILLED, step2: { ...FILLED.step2, description: "x".repeat(600) }, handles: { instagram: "y".repeat(250) } }, NOW);
+  const back = loadDraft(s, "u1", NOW);
+  expect(back).not.toBeNull();
+  expect(back!.step2).toMatchObject({ shopName: "Wax & Co", shopSlug: "wax-and-co", whatsappNumber: "+22670123456", description: undefined });
+  expect(back!.handles).toEqual({ instagram: "" });
+  expect(back!.step1).toEqual(FILLED.step1);
+  // Un écran hors bornes retombe au premier ; un thème inconnu est vidé.
+  s.setItem(draftKey("u1"), JSON.stringify({ ...FILLED, step: 9, bioTheme: "z".repeat(60), version: DRAFT_VERSION, savedAt: NOW }));
+  expect(loadDraft(s, "u1", NOW)).toMatchObject({ step: 1, bioTheme: "" });
+});
+
+test("clearAllDrafts efface tous les brouillons et rien d'autre", () => {
+  const s = storage({ autre: "1" });
+  saveDraft(s, "u1", FILLED, NOW);
+  saveDraft(s, "u2", FILLED, NOW);
+  const withKeys = { ...s, get length() { return s.map.size; }, key: (i: number) => [...s.map.keys()][i] ?? null };
+  clearAllDrafts(withKeys);
+  expect([...s.map.keys()]).toEqual(["autre"]);
 });

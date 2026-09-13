@@ -93,24 +93,35 @@ export async function POST(request: NextRequest) {
   }
 
   // Un onboarding ne se termine qu'une fois : rejoué (double envoi, page
-  // rechargée sur l'écran final), il créerait une seconde boutique.
+  // rechargée sur l'écran final), il créerait une seconde boutique. Une
+  // boutique existante sans le drapeau (comptes de l'ancien flux en quatre
+  // écritures) est réparée au passage : sinon le vendeur tournait entre
+  // l'onboarding et le tableau de bord.
   const existing = await prisma.shop.findFirst({
     where: { ownerId: user.id },
-    select: { id: true },
+    select: { id: true, slug: true },
   });
   if (existing) {
+    await prisma.profile.updateMany({
+      where: { id: user.id, onboardingCompleted: false },
+      data: { onboardingCompleted: true },
+    });
     return NextResponse.json(
-      { error: "Ta boutique existe déjà.", code: "ALREADY_ONBOARDED", shopId: existing.id },
+      { error: "Ta boutique existe déjà.", code: "ALREADY_ONBOARDED", shopId: existing.id, slug: existing.slug },
       { status: 409 },
     );
   }
 
   try {
     const shopId = await prisma.$transaction(async (tx) => {
-      await tx.profile.update({
-        where: { id: user.id },
-        data: { fullName, username },
+      // Garde atomique : deux envois simultanés (tap répété, rechargement
+      // pendant un démarrage à froid) se sérialisent sur la ligne du profil,
+      // et le second voit le drapeau déjà posé.
+      const claimed = await tx.profile.updateMany({
+        where: { id: user.id, onboardingCompleted: false },
+        data: { fullName, username, onboardingCompleted: true },
       });
+      if (claimed.count === 0) throw new AlreadyOnboardedError();
 
       const created = await tx.shop.create({
         data: {
@@ -140,26 +151,46 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      await tx.profile.update({
-        where: { id: user.id },
-        data: { onboardingCompleted: true },
-      });
-
       return created.id;
     });
 
     return NextResponse.json({ shopId }, { status: 201 });
   } catch (error) {
+    if (error instanceof AlreadyOnboardedError) {
+      const shop = await prisma.shop.findFirst({
+        where: { ownerId: user.id },
+        select: { id: true, slug: true },
+      });
+      return NextResponse.json(
+        { error: "Ta boutique existe déjà.", code: "ALREADY_ONBOARDED", shopId: shop?.id ?? null, slug: shop?.slug ?? null },
+        { status: 409 },
+      );
+    }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
+      // Quel champ ? La page doit ramener le vendeur au bon écran — il n'a
+      // peut-être jamais vu celui du pseudo.
+      const target = String((error.meta as { target?: unknown } | undefined)?.target ?? "");
+      const usernameTaken = /username/i.test(target);
       return NextResponse.json(
-        { error: "Ce pseudo ou cette adresse de boutique est déjà pris(e)." },
+        {
+          error: usernameTaken
+            ? "Ce pseudo est déjà pris."
+            : "Cette adresse de boutique est déjà prise.",
+          code: usernameTaken ? "USERNAME_TAKEN" : "SLUG_TAKEN",
+        },
         { status: 409 },
       );
     }
     console.error("[api/onboarding] error", error);
     return NextResponse.json({ error: "Une erreur est survenue" }, { status: 500 });
+  }
+}
+
+class AlreadyOnboardedError extends Error {
+  constructor() {
+    super("already onboarded");
   }
 }

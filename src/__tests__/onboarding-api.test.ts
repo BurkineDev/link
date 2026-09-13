@@ -3,21 +3,38 @@
  */
 import { NextRequest } from "next/server";
 
+class KnownError extends Error {
+  constructor(public code: string, public meta?: Record<string, unknown>) {
+    super(code);
+  }
+}
 jest.mock("../../prisma/generated/client/client", () => ({
-  Prisma: { PrismaClientKnownRequestError: class extends Error { code = "P2002"; } },
+  Prisma: { PrismaClientKnownRequestError: KnownError },
 }));
 
 let _user: { id: string } | null = { id: "u-1" };
-let _existingShop: { id: string } | null = null;
+let _existingShop: { id: string; slug: string } | null = null;
+let _claimCount = 1;
+let _createError: Error | null = null;
 const _writes: Array<[string, unknown]> = [];
 const tx = {
-  profile: { update: jest.fn(async (args: unknown) => { _writes.push(["profile.update", args]); return {}; }) },
-  shop: { create: jest.fn(async (args: unknown) => { _writes.push(["shop.create", args]); return { id: "shop-1" }; }) },
+  profile: {
+    updateMany: jest.fn(async (args: unknown) => { _writes.push(["tx.profile.updateMany", args]); return { count: _claimCount }; }),
+  },
+  shop: {
+    create: jest.fn(async (args: unknown) => {
+      if (_createError) throw _createError;
+      _writes.push(["shop.create", args]);
+      return { id: "shop-1" };
+    }),
+  },
   pageBlock: { createMany: jest.fn(async (args: unknown) => { _writes.push(["pageBlock.createMany", args]); return { count: 1 }; }) },
 };
+const profileUpdateMany = jest.fn(async (args: unknown) => { _writes.push(["profile.updateMany", args]); return { count: 1 }; });
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     shop: { findFirst: jest.fn(async () => _existingShop) },
+    profile: { updateMany: (args: unknown) => profileUpdateMany(args) },
     $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   },
 }));
@@ -39,24 +56,55 @@ function post(body: unknown) {
 beforeEach(() => {
   _user = { id: "u-1" };
   _existingShop = null;
+  _claimCount = 1;
+  _createError = null;
   _writes.length = 0;
+  jest.clearAllMocks();
 });
 
-test("crée profil, boutique (non publiée) et blocs, sans objectif obligatoire", async () => {
+test("crée profil (drapeau posé d'emblée, sous verrou), boutique non publiée et blocs, sans objectif obligatoire", async () => {
   const res = await post(BODY);
   expect(res.status).toBe(201);
   expect(await res.json()).toEqual({ shopId: "shop-1" });
-  expect(_writes.map(([name]) => name)).toEqual(["profile.update", "shop.create", "pageBlock.createMany", "profile.update"]);
+  expect(_writes.map(([name]) => name)).toEqual(["tx.profile.updateMany", "shop.create", "pageBlock.createMany"]);
+  expect(_writes[0]![1]).toEqual({
+    where: { id: "u-1", onboardingCompleted: false },
+    data: { fullName: "Amara Diallo", username: "amara", onboardingCompleted: true },
+  });
   expect((_writes[1]![1] as { data: Record<string, unknown> }).data).toMatchObject({ isPublished: false, intentions: [], whatsappNumber: "+22670123456" });
-  expect((_writes[3]![1] as { data: Record<string, unknown> }).data).toEqual({ onboardingCompleted: true });
 });
 
-test("rejoué avec une boutique existante → 409 ALREADY_ONBOARDED, rien n'est écrit", async () => {
-  _existingShop = { id: "shop-0" };
+test("rejoué avec une boutique existante → 409 ALREADY_ONBOARDED avec le slug, drapeau réparé, rien d'autre écrit", async () => {
+  _existingShop = { id: "shop-0", slug: "ma-boutique" };
   const res = await post(BODY);
   expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ code: "ALREADY_ONBOARDED", shopId: "shop-0" });
-  expect(_writes).toHaveLength(0);
+  expect(await res.json()).toMatchObject({ code: "ALREADY_ONBOARDED", shopId: "shop-0", slug: "ma-boutique" });
+  expect(profileUpdateMany).toHaveBeenCalledWith({ where: { id: "u-1", onboardingCompleted: false }, data: { onboardingCompleted: true } });
+  expect(_writes.map(([name]) => name)).toEqual(["profile.updateMany"]);
+});
+
+test("deux envois simultanés : le second ne prend pas le verrou et reçoit 409, sans boutique", async () => {
+  _claimCount = 0;
+  _existingShop = null; // la lecture rapide n'a rien vu…
+  const res = await post(BODY);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ code: "ALREADY_ONBOARDED" });
+  expect(tx.shop.create).not.toHaveBeenCalled();
+  expect(_writes.map(([name]) => name)).toEqual(["tx.profile.updateMany"]);
+});
+
+test("pseudo ou adresse pris entre-temps → 409 avec le champ désigné", async () => {
+  _createError = new KnownError("P2002", { target: ["slug"] });
+  let res = await post(BODY);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ code: "SLUG_TAKEN" });
+  _createError = new KnownError("P2002", { target: ["username"] });
+  res = await post(BODY);
+  expect(await res.json()).toMatchObject({ code: "USERNAME_TAKEN" });
+  _createError = new Error("boom");
+  const error = jest.spyOn(console, "error").mockImplementation(() => {});
+  expect((await post(BODY)).status).toBe(500);
+  error.mockRestore();
 });
 
 test("anonyme → 401 ; numéro WhatsApp sans indicatif → 422", async () => {
