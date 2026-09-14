@@ -53,6 +53,29 @@ Le développement local et les previews Vercel utilisent la branche Neon
 avec `vercel env pull`, et ne collez jamais les URL de `development` dans
 Vercel Production.
 
+### Santé, alertes et rapport quotidien
+
+Tout ce qui casse en silence (webhook rejeté, paiement arrivé après
+annulation, réconciliation en panne, e-mail mort, cron muet) est écrit dans
+`ops_events` par `src/lib/ops/events.ts` et visible dans **Équipe → Santé**
+(`/dashboard/admin/ops`, réservé à `ADMIN_EMAILS`). Une alerte **critique**
+part aussitôt par e-mail à `ADMIN_EMAILS` (au plus une par problème toutes
+les six heures) ; le reste attend le **rapport quotidien**, envoyé à la fin
+du cron de 03:00 UTC — s'il n'arrive pas, c'est que le cron n'a pas tourné.
+
+- `GET /api/health` (public, sans secret) répond **200** ou **503** selon que
+  la base répond, que toutes les migrations du build sont appliquées
+  (l'incident du 13/09/2026 : code déployé avant sa migration) et que le
+  cron a tourné depuis moins de 26 h. Branchez-le sur un moniteur gratuit
+  (UptimeRobot, Better Stack…) toutes les cinq minutes : c'est lui qui
+  appelle quand la page répond 503.
+- `OPS_ALERT_WEBHOOK_URL` (optionnel) : un webhook sortant (Slack, ntfy…)
+  qui reçoit chaque alerte critique en JSON (`text`, `title`, `severity`),
+  utile quand c'est l'e-mail lui-même qui est en panne.
+- Déploiement : appliquer `npm run db:deploy` (ou `prisma migrate deploy`)
+  **avant** de fusionner une PR qui porte une migration — `/api/health`
+  passe au rouge sinon, mais les pages, elles, tombent en 500.
+
 ## Notifications WhatsApp du vendeur
 
 Quand une commande passe en « payé » (webhooks Stripe et GeniusPay), le

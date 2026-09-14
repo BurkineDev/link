@@ -9,6 +9,7 @@ import {
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { ops } from "@/lib/ops/events";
 
 export const runtime = "nodejs";
 
@@ -47,7 +48,18 @@ export async function POST(request: NextRequest) {
   const event = request.headers.get("x-webhook-event") ?? "";
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
-    console.warn("[geniuspay-webhook] invalid signature or stale timestamp");
+    // Secret absent ou tourné, horloge en dérive, ou vraie attaque : dans
+    // les trois cas le fondateur doit le savoir — un secret mal collé
+    // arrête toutes les ventes Mobile Money sans autre symptôme.
+    ops.critical({
+      kind: "webhook.signature_rejected",
+      title: "Webhook Genius Pay rejeté (signature)",
+      detail: process.env.GENIUSPAY_WEBHOOK_SECRET
+        ? "Signature invalide ou horodatage hors des 300 s. Si ça se répète, vérifie le secret webhook chez Genius Pay et sur Vercel."
+        : "GENIUSPAY_WEBHOOK_SECRET n'est pas défini : aucun webhook Genius Pay ne peut être accepté.",
+      context: { event, hasSignature: Boolean(signature), hasTimestamp: Boolean(timestamp) },
+      dedupeKey: "webhook.signature_rejected:geniuspay",
+    });
     return new NextResponse(null, { status: 401 });
   }
 
@@ -86,10 +98,15 @@ export async function POST(request: NextRequest) {
         : null;
 
   if (!orderId) {
-    console.warn(
-      "[geniuspay-webhook] missing orderId metadata for reference:",
-      data.reference,
-    );
+    // Un paiement réel sans commande désignée : rattrapable par la page de
+    // succès ou le cron (via paymentRef), mais à regarder.
+    ops.warning({
+      kind: "webhook.order_not_found",
+      title: "Paiement Genius Pay sans identifiant de commande",
+      detail: "Les métadonnées ne portent pas d'orderId. La commande sera rattrapée par sa référence (page de succès, cron) si elle existe.",
+      context: { provider: "geniuspay", reference: data.reference, status: data.status, amount: data.amount, currency: data.currency },
+      dedupeKey: `webhook.order_not_found:geniuspay:${data.reference}`,
+    });
     return new NextResponse(null, { status: 200 });
   }
 
@@ -106,14 +123,31 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[geniuspay-webhook] DB read error:", error);
+    ops.critical({
+      kind: "webhook.handler_error",
+      title: "Webhook Genius Pay : base injoignable",
+      detail: `La lecture de la commande a échoué (${errorSummary(error)}). Genius Pay réessaiera ; si ça persiste, les paiements ne sont plus confirmés.`,
+      context: { provider: "geniuspay", reference: data.reference, orderId },
+      dedupeKey: "webhook.handler_error:geniuspay",
+    });
     return new NextResponse(null, { status: 500 });
   }
 
   if (!order) {
-    console.warn(
-      "[geniuspay-webhook] order not found for reference:",
-      data.reference,
-    );
+    // Argent encaissé chez Genius Pay pour une commande que la base ne
+    // connaît pas : le cron ne peut rien, il part des commandes.
+    const paid = mapStatusToPaymentStatus(data.status ?? "pending") === "paid";
+    ops[paid ? "critical" : "warning"]({
+      kind: "webhook.order_not_found",
+      title: paid
+        ? "Paiement Genius Pay encaissé pour une commande introuvable"
+        : "Webhook Genius Pay pour une commande introuvable",
+      detail: paid
+        ? "Le paiement est confirmé côté Genius Pay mais aucune commande ne porte cet identifiant : à rapprocher (et rembourser) à la main."
+        : "Aucune commande ne porte cet identifiant.",
+      context: { provider: "geniuspay", reference: data.reference, orderId, status: data.status, amount: data.amount, currency: data.currency },
+      dedupeKey: `webhook.order_not_found:geniuspay:${orderId}`,
+    });
     return new NextResponse(null, { status: 200 });
   }
 
@@ -135,8 +169,26 @@ export async function POST(request: NextRequest) {
         provider: "geniuspay",
       });
       console.info("[geniuspay-webhook] refund on order", order.id, result);
+      if (!result.recorded) {
+        // Un remboursement réel non contre-passé laisse le net vendeur
+        // « disponible » au reversement.
+        ops.critical({
+          kind: "webhook.refund_not_recorded",
+          title: "Remboursement Genius Pay non contre-passé au registre",
+          detail: `recordOrderRefund a répondu « ${result.reason} » : vérifie le registre avant tout reversement de cette boutique.`,
+          context: { provider: "geniuspay", orderId: order.id, reference: data.reference, amount: data.amount, reason: result.reason },
+          dedupeKey: `webhook.refund_not_recorded:${order.id}`,
+        });
+      }
     } catch (error) {
       console.error("[geniuspay-webhook] refund error:", error);
+      ops.critical({
+        kind: "webhook.handler_error",
+        title: "Webhook Genius Pay : remboursement en erreur",
+        detail: errorSummary(error),
+        context: { provider: "geniuspay", orderId: order.id, reference: data.reference },
+        dedupeKey: `webhook.handler_error:geniuspay:refund:${order.id}`,
+      });
       return new NextResponse(null, { status: 500 });
     }
     return new NextResponse(null, { status: 200 });
@@ -149,6 +201,20 @@ export async function POST(request: NextRequest) {
     order.paymentStatus === "partially_refunded" ||
     order.paymentStatus === "failed"
   ) {
+    // Sauf un cas qui n'a rien d'idempotent : le paiement arrive APRÈS
+    // que la commande a été annulée (réconciliation à 2 h, webhook
+    // « failed » antérieur). L'acheteur a été débité, le stock est rendu,
+    // personne ne livre. On n'écrit rien (la commande est close) mais le
+    // fondateur doit rembourser ou rappeler l'acheteur.
+    if (nextPaymentStatus === "paid" && order.paymentStatus === "failed") {
+      ops.critical({
+        kind: "webhook.late_payment",
+        title: "Paiement Genius Pay reçu sur une commande annulée",
+        detail: "L'acheteur a payé après l'annulation de sa commande (expirée ou marquée échouée). Rien n'a été livré ni réservé : rembourse-le ou contacte-le, puis règle la commande à la main si le vendeur peut livrer.",
+        context: { provider: "geniuspay", orderId: order.id, reference: data.reference, amount: data.amount, currency: data.currency },
+        dedupeKey: `webhook.late_payment:${order.id}`,
+      });
+    }
     return new NextResponse(null, { status: 200 });
   }
 
@@ -165,6 +231,16 @@ export async function POST(request: NextRequest) {
         "[geniuspay-webhook] amount/currency mismatch for order:",
         order.id,
       );
+      // L'acheteur a été débité d'un autre montant (ou dans une autre
+      // devise) : la commande restera « en attente » tant que quelqu'un
+      // n'a pas tranché.
+      ops.critical({
+        kind: "webhook.amount_mismatch",
+        title: "Paiement Genius Pay d'un montant inattendu",
+        detail: `Genius Pay confirme ${data.amount ?? "?"} ${data.currency ?? ""} pour une commande de ${Number(order.totalAmount)} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+        context: { provider: "geniuspay", orderId: order.id, reference: data.reference, received: data.amount, receivedCurrency: data.currency, expected: Number(order.totalAmount), expectedCurrency: order.currency },
+        dedupeKey: `webhook.amount_mismatch:${order.id}`,
+      });
       return new NextResponse(null, { status: 200 });
     }
 
@@ -182,6 +258,13 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       // 500 : Genius Pay réessaiera, et le règlement est idempotent.
       console.error("[geniuspay-webhook] update error:", error);
+      ops.critical({
+        kind: "webhook.handler_error",
+        title: "Webhook Genius Pay : règlement en erreur",
+        detail: `settlePaidOrder a levé (${errorSummary(error)}). Genius Pay réessaiera ; si ça persiste, l'acheteur a payé et la commande reste en attente.`,
+        context: { provider: "geniuspay", orderId: order.id, reference: data.reference },
+        dedupeKey: `webhook.handler_error:geniuspay:settle:${order.id}`,
+      });
       return new NextResponse(null, { status: 500 });
     }
 
@@ -254,6 +337,17 @@ async function handleSubscriptionEvent(data: WebhookData) {
   try {
     const applied = await applySubscriptionPayment(reference);
     console.info("[geniuspay-webhook] subscription", reference, applied);
+    if (!applied.applied && applied.reason === "unknown_reference") {
+      // Le vendeur a payé sa période, aucune ligne ne porte la référence :
+      // la période ne sera jamais créditée sans intervention.
+      ops.critical({
+        kind: "webhook.unknown_reference",
+        title: "Abonnement Mobile Money payé sur une référence inconnue",
+        detail: "Genius Pay confirme un paiement d'abonnement qu'aucune ligne subscription_payments ne porte. Le vendeur a payé sans être crédité : à retrouver dans Genius Pay et créditer à la main.",
+        context: { provider: "geniuspay", kind: "subscription", reference, amount: data.amount, currency: data.currency },
+        dedupeKey: `webhook.unknown_reference:subscription:${reference}`,
+      });
+    }
   } catch (error) {
     // 500 : Genius Pay réessaiera, et l'opération est idempotente — une
     // nouvelle tentative ne peut pas créditer deux périodes.
@@ -296,10 +390,23 @@ async function handleBoostEvent(data: WebhookData) {
   try {
     const applied = await applyBoostPayment(reference);
     console.info("[geniuspay-webhook] boost", reference, applied);
+    if (!applied.applied && applied.reason === "unknown_reference") {
+      ops.critical({
+        kind: "webhook.unknown_reference",
+        title: "Boost Mobile Money payé sur une référence inconnue",
+        detail: "Genius Pay confirme un paiement de boost qu'aucune ligne boost_purchases ne porte : le vendeur a payé sans que sa boutique soit mise en avant.",
+        context: { provider: "geniuspay", kind: "boost", reference, amount: data.amount, currency: data.currency },
+        dedupeKey: `webhook.unknown_reference:boost:${reference}`,
+      });
+    }
   } catch (error) {
     console.error("[geniuspay-webhook] apply_boost_payment", error);
     return new NextResponse(null, { status: 500 });
   }
 
   return new NextResponse(null, { status: 200 });
+}
+
+function errorSummary(error: unknown): string {
+  return error instanceof Error ? error.message.split("\n")[0]!.slice(0, 160) : String(error).slice(0, 160);
 }

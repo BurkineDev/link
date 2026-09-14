@@ -60,7 +60,7 @@ type VerifyState =
   | { status: "loading" }
   | { status: "pending"; reference: string | null; timedOut: boolean }
   | { status: "success"; order: OrderDetails }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; code?: string | null; reference?: string | null };
 
 // Le Mobile Money est asynchrone : l'acheteur revient du site de l'opérateur
 // souvent avant que celui-ci ait notifié Genius Pay. Une seule vérification
@@ -120,7 +120,7 @@ function SuccessContent() {
 
     const poll = async () => {
       let res: Response;
-      let data: { order?: OrderDetails; error?: string; reference?: string } = {};
+      let data: { order?: OrderDetails; error?: string; code?: string; reference?: string } = {};
 
       try {
         res = await fetch(`/api/checkout/verify?${buildQuery()}`);
@@ -159,6 +159,8 @@ function SuccessContent() {
       setState({
         status: "error",
         message: data.error ?? "Vérification échouée.",
+        code: data.code ?? null,
+        reference: data.reference ?? null,
       });
     };
 
@@ -284,9 +286,16 @@ function SuccessContent() {
           <XCircle className="size-10 text-destructive" />
         </div>
         <h1 className="mb-2 text-2xl font-bold">
-          {provider === "cash_on_delivery" ? "Commande introuvable ou annulée" : "Paiement non confirmé"}
+          {state.code === "LATE_PAYMENT"
+            ? "Paiement reçu, commande à régulariser"
+            : provider === "cash_on_delivery"
+              ? "Commande introuvable ou annulée"
+              : "Paiement non confirmé"}
         </h1>
         <p className="mb-6 text-muted-foreground">{state.message}</p>
+        {state.code === "LATE_PAYMENT" && state.reference && (
+          <p className="mb-6 font-mono text-sm">Référence : {state.reference}</p>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row">
           {/* Renvoie bien tous les paramètres : l'ancien bouton ne réémettait
               que `session_id`, donc il ne pouvait rien vérifier pour un

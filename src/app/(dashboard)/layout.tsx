@@ -63,6 +63,14 @@ export default async function DashboardLayout({
   const pendingPayouts = isAdmin
     ? await prisma.payout.count({ where: { status: { in: [...OPEN_PAYOUT_STATUSES] } } })
     : 0;
+  // Alertes critiques non traitées : même logique, l'équipe doit les voir
+  // sans ouvrir sa boîte mail. Une table absente (migration en retard) ne
+  // doit pas casser tout le tableau de bord.
+  const openAlerts = isAdmin
+    ? await prisma.opsEvent
+        .count({ where: { severity: "critical", acknowledgedAt: null } })
+        .catch(() => 0)
+    : 0;
 
   // Un vendeur qui n'a pas terminé son onboarding est ramené dessus, quelle
   // que soit la page du tableau de bord demandée. Ce contrôle vivait dans le
@@ -107,6 +115,7 @@ export default async function DashboardLayout({
           shopName={shop?.name}
           isAdmin={isAdmin}
           pendingPayouts={pendingPayouts}
+          openAlerts={openAlerts}
         />
       </div>
 

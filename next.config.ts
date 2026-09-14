@@ -1,6 +1,19 @@
 import type { NextConfig } from "next";
+import { readdirSync } from "node:fs";
+
+// Les migrations embarquées dans le build, pour que `/api/health` compare
+// le code déployé à la base (incident du 2026-09-13 : code en ligne avant
+// sa migration, pages en 500 pendant 22 minutes sans que rien ne le dise).
+const embeddedMigrations = readdirSync("prisma/migrations", { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort()
+  .join(",");
 
 const nextConfig: NextConfig = {
+  env: {
+    PRISMA_MIGRATIONS: embeddedMigrations,
+  },
   images: {
     remotePatterns: [
       // Cloudflare R2 : le sous-domaine public du bucket Bio-Lien, puis le

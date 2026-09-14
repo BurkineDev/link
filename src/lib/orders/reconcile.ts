@@ -27,6 +27,7 @@ import {
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { ops } from "@/lib/ops/events";
 
 /**
  * On laisse d'abord sa chance au webhook : inutile d'appeler Genius Pay pour
@@ -77,7 +78,19 @@ const EMPTY: ReconcileResult = {
 export async function reconcilePendingGeniusPayOrders(
   opts: { shopId?: string; limit?: number } = {},
 ): Promise<ReconcileResult> {
-  if (!isGeniusPayConfigured()) return EMPTY;
+  if (!isGeniusPayConfigured()) {
+    // Une variable GENIUSPAY_* perdue : plus aucun rattrapage, et un
+    // résultat vide indiscernable d'une nuit calme — d'où l'alerte.
+    if (process.env.NODE_ENV === "production") {
+      ops.critical({
+        kind: "reconcile.not_configured",
+        title: "Réconciliation Genius Pay désactivée : configuration absente",
+        detail: "GENIUSPAY_API_KEY, GENIUSPAY_API_SECRET ou GENIUSPAY_WEBHOOK_SECRET manque : les commandes Mobile Money au webhook perdu ne seront plus rattrapées.",
+        dedupeKey: "reconcile.not_configured",
+      });
+    }
+    return EMPTY;
+  }
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const cutoff = new Date(Date.now() - MIN_AGE_MS);
@@ -110,6 +123,14 @@ export async function reconcilePendingGeniusPayOrders(
     });
   } catch (error) {
     console.error("[reconcile] read error:", error);
+    // Une panne de base n'est pas « rien à faire » (constat A18).
+    ops.critical({
+      kind: "reconcile.db_error",
+      title: "Réconciliation : lecture des commandes impossible",
+      detail: `La base n'a pas répondu (${error instanceof Error ? error.message.split("\n")[0]!.slice(0, 160) : String(error)}). Aucune commande Mobile Money n'a été rattrapée à ce passage.`,
+      context: { shopId: opts.shopId ?? null, limit },
+      dedupeKey: "reconcile.db_error",
+    });
     return EMPTY;
   }
 
@@ -127,6 +148,7 @@ export async function reconcilePendingGeniusPayOrders(
   const result: ReconcileResult = { ...EMPTY };
 
   // Séquentiel : le lot est petit et Genius Pay applique un rate limit.
+  const failures: Array<{ orderId: string; error: string }> = [];
   for (const order of orders) {
     result.checked += 1;
     try {
@@ -135,7 +157,28 @@ export async function reconcilePendingGeniusPayOrders(
     } catch (err) {
       result.errors += 1;
       console.error("[reconcile] order", order.id, err);
+      failures.push({
+        orderId: order.id,
+        error: err instanceof Error ? err.message.split("\n")[0]!.slice(0, 120) : String(err).slice(0, 120),
+      });
     }
+  }
+
+  if (failures.length > 0) {
+    // Tout le lot en erreur = Genius Pay injoignable ou clés invalides ;
+    // quelques-unes = à regarder au rapport du matin.
+    const allFailed = failures.length === result.checked;
+    ops[allFailed ? "critical" : "warning"]({
+      kind: "reconcile.provider_errors",
+      title: allFailed
+        ? `Réconciliation : Genius Pay en erreur sur ${failures.length} commande(s) sur ${result.checked}`
+        : `Réconciliation : ${failures.length} commande(s) en erreur sur ${result.checked}`,
+      detail: allFailed
+        ? "Aucune commande n'a pu être vérifiée : Genius Pay injoignable, clés invalides ou compte suspendu. Les commandes en attente ne bougent pas."
+        : "Ces commandes n'ont pas pu être vérifiées ; elles seront réessayées au prochain passage.",
+      context: { checked: result.checked, errors: failures.length, sample: failures.slice(0, 5) },
+      dedupeKey: "reconcile.provider_errors",
+    });
   }
 
   return result;
@@ -157,6 +200,13 @@ async function settleOrder(
 
     if (!amountOk || !currencyOk) {
       console.warn("[reconcile] amount/currency mismatch on order", order.id);
+      ops.critical({
+        kind: "reconcile.amount_mismatch",
+        title: "Paiement Genius Pay d'un montant inattendu (réconciliation)",
+        detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.totalAmount} ${order.currency}. Elle restera en attente à chaque passage tant que personne n'a tranché : régler ou rembourser à la main.`,
+        context: { orderId: order.id, reference: order.paymentRef, received: payment.amount, receivedCurrency: payment.currency, expected: order.totalAmount, expectedCurrency: order.currency },
+        dedupeKey: `webhook.amount_mismatch:${order.id}`,
+      });
       return "stillPending";
     }
 

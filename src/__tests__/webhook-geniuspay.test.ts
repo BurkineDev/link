@@ -77,6 +77,10 @@ jest.mock("@/lib/order-notifications", () => ({
   notifyPaidOrder: mockNotifySellerOfPaidOrder,
 }));
 
+// Alertes fondateur : on vérifie ce qui est signalé, pas l'envoi lui-même.
+const mockOps = { critical: jest.fn(), warning: jest.fn(), info: jest.fn() };
+jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: jest.fn(), recordOpsEventAfterResponse: jest.fn() }));
+
 import { POST } from "@/app/api/webhooks/geniuspay/route";
 
 // ---------------------------------------------------------------------------
@@ -108,6 +112,9 @@ beforeEach(() => {
   _verifyResult = true;
   mockNotifySellerOfPaidOrder.mockClear();
   mockRecordRefund.mockClear();
+  mockOps.critical.mockClear();
+  mockOps.warning.mockClear();
+  mockOps.info.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -155,6 +162,10 @@ describe("POST /api/webhooks/geniuspay", () => {
     _verifyResult = false;
     const res = await POST(makeRequest(validPayload()));
     expect(res.status).toBe(401);
+    // …et le fondateur l'apprend : un secret mal collé arrête toutes les ventes.
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.signature_rejected", dedupeKey: "webhook.signature_rejected:geniuspay" }),
+    );
   });
 
   test("returns 200 for webhook.test event even without details", async () => {
@@ -181,6 +192,31 @@ describe("POST /api/webhooks/geniuspay", () => {
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
     expect(mockNotifySellerOfPaidOrder).not.toHaveBeenCalled();
+    expect(mockOps.critical).not.toHaveBeenCalled();
+  });
+
+  test("un paiement confirmé sur une commande déjà annulée : 200 sans écriture, mais alerte critique", async () => {
+    if (_order) _order.payment_status = "failed";
+    const res = await POST(makeRequest(validPayload()));
+    expect(res.status).toBe(200);
+    expect(_updateResult).toBeNull();
+    expect(_rpcResult).toBeNull();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "webhook.late_payment",
+        dedupeKey: `webhook.late_payment:${ORDER_ID}`,
+        context: expect.objectContaining({ orderId: ORDER_ID, amount: 10000 }),
+      }),
+    );
+  });
+
+  test("commande introuvable pour un paiement confirmé : 200 et alerte critique", async () => {
+    _order = null;
+    const res = await POST(makeRequest(validPayload()));
+    expect(res.status).toBe(200);
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.order_not_found", dedupeKey: `webhook.order_not_found:geniuspay:${ORDER_ID}` }),
+    );
   });
 
   test("updates order and notifies seller on successful payment", async () => {
@@ -209,6 +245,20 @@ describe("POST /api/webhooks/geniuspay", () => {
     const res = await POST(makeRequest(payload));
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
+    // L'acheteur a été débité d'un autre montant : à trancher à la main.
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "webhook.amount_mismatch",
+        dedupeKey: `webhook.amount_mismatch:${ORDER_ID}`,
+        context: expect.objectContaining({ received: 5000, expected: 10000 }),
+      }),
+    );
+  });
+
+  test("un paiement normal ne déclenche aucune alerte", async () => {
+    await POST(makeRequest(validPayload()));
+    expect(mockOps.critical).not.toHaveBeenCalled();
+    expect(mockOps.warning).not.toHaveBeenCalled();
   });
 
   test("releases stock and cancels order on failed payment", async () => {

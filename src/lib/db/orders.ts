@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { claimStock, type StockShortfall } from "@/lib/db/stock";
+import { ops } from "@/lib/ops/events";
 import {
   Prisma,
   type PaymentProvider,
@@ -52,7 +53,7 @@ export async function settlePaidOrder(
   paymentRef: string,
   paymentProvider: PaymentProvider,
 ): Promise<SettleResult> {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Verrou de ligne : les webhooks concurrents attendent ici.
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       select id from public.orders where id = ${orderId}::uuid for update
@@ -264,6 +265,29 @@ export async function settlePaidOrder(
 
     return { settled: true, customerId, commission: fee, plan, stockShortfall, offline: false } as const;
   });
+
+  // Deux acheteurs ont payé la dernière pièce : le vendeur le sait par son
+  // e-mail, qui le renvoie vers l'équipe pour un remboursement — l'équipe
+  // doit donc le savoir aussi, au rapport du matin.
+  if (result.settled && result.stockShortfall.length > 0) {
+    ops.warning({
+      kind: "order.stock_shortfall",
+      title: "Commande réglée avec un manque de stock",
+      detail: "Le stock ne couvrait pas tout au moment du règlement ; le vendeur doit livrer partiellement ou demander un remboursement à l'équipe.",
+      context: {
+        orderId,
+        provider: paymentProvider,
+        shortfall: result.stockShortfall.map((item) => ({
+          product: item.product_name ?? item.product_id,
+          requested: item.requested,
+          taken: item.taken,
+        })),
+      },
+      dedupeKey: `order.stock_shortfall:${orderId}`,
+    });
+  }
+
+  return result;
 }
 
 /**

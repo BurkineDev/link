@@ -101,6 +101,10 @@ jest.mock("@/lib/order-notifications", () => ({
   notifyPaidOrder: mockNotify,
 }));
 
+// Alertes fondateur : on vérifie ce qui est signalé, pas l'envoi lui-même.
+const mockOps = { critical: jest.fn(), warning: jest.fn(), info: jest.fn() };
+jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: jest.fn(), recordOpsEventAfterResponse: jest.fn() }));
+
 import { POST } from "@/app/api/webhooks/stripe/route";
 
 // ---------------------------------------------------------------------------
@@ -174,6 +178,9 @@ beforeEach(() => {
   mockNotify.mockClear();
   mockRecordRefund.mockClear();
   mockReverseChargeback.mockClear();
+  mockOps.critical.mockClear();
+  mockOps.warning.mockClear();
+  mockOps.info.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -191,6 +198,9 @@ describe("POST /api/webhooks/stripe", () => {
     delete process.env.STRIPE_WEBHOOK_SECRET;
     const res = await POST(makeRequest());
     expect(res.status).toBe(400);
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.signature_rejected", dedupeKey: "webhook.signature_rejected:stripe", context: expect.objectContaining({ hasSecret: false }) }),
+    );
   });
 
   test("invalid signature (constructEvent throws) returns 400", async () => {
@@ -198,6 +208,7 @@ describe("POST /api/webhooks/stripe", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(400);
     expect(_updateResult).toBeNull();
+    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "webhook.signature_rejected" }));
   });
 
   test("completed + paid confirms order and notifies seller", async () => {
@@ -218,6 +229,17 @@ describe("POST /api/webhooks/stripe", () => {
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
     expect(mockNotify).not.toHaveBeenCalled();
+    expect(mockOps.critical).not.toHaveBeenCalled();
+  });
+
+  test("paid session on a cancelled order: 200, nothing written, critical alert", async () => {
+    if (_order) _order.payment_status = "failed";
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect(_settleResult).toBeNull();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.late_payment", dedupeKey: `webhook.late_payment:${ORDER_ID}` }),
+    );
   });
 
   test("underpaid session does not confirm the order", async () => {
@@ -226,6 +248,9 @@ describe("POST /api/webhooks/stripe", () => {
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
     expect(mockNotify).not.toHaveBeenCalled();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.amount_mismatch", context: expect.objectContaining({ received: 5000, expected: 10000 }) }),
+    );
   });
 
   test("currency mismatch does not confirm the order", async () => {
@@ -240,6 +265,8 @@ describe("POST /api/webhooks/stripe", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
+    // Rien d'encaissé : pas d'alerte.
+    expect(mockOps.critical).not.toHaveBeenCalled();
   });
 
   test("missing orderId metadata returns 200 without update", async () => {
@@ -247,6 +274,7 @@ describe("POST /api/webhooks/stripe", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
+    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "webhook.order_not_found" }));
   });
 
   test("unknown order returns 200 without update", async () => {
@@ -254,6 +282,9 @@ describe("POST /api/webhooks/stripe", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
     expect(_updateResult).toBeNull();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.order_not_found", dedupeKey: `webhook.order_not_found:stripe:${ORDER_ID}` }),
+    );
   });
 
   test("expired session cancels order and releases stock", async () => {
@@ -309,6 +340,10 @@ describe("POST /api/webhooks/stripe", () => {
       provider: "stripe",
       kind: "chargeback",
     });
+    // Un litige a une date limite de réponse : alerte immédiate.
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.dispute_opened", dedupeKey: "webhook.dispute:dp_1" }),
+    );
 
     _event = {
       type: "charge.dispute.closed",
@@ -324,5 +359,15 @@ describe("POST /api/webhooks/stripe", () => {
     mockReverseChargeback.mockClear();
     expect((await POST(makeRequest())).status).toBe(200);
     expect(mockReverseChargeback).not.toHaveBeenCalled();
+    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "webhook.dispute_lost" }));
+  });
+
+  test("handler error: 500 and a critical alert naming the event", async () => {
+    _orderError = new Error("column does not exist");
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(500);
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.handler_error", dedupeKey: "webhook.handler_error:stripe:checkout.session.completed" }),
+    );
   });
 });
