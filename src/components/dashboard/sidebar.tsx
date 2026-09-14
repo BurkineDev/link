@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "@/components/brand/brand-shell";
 import {
+  Activity,
   LayoutDashboardIcon,
   PackageIcon,
   ShoppingBagIcon,
@@ -100,16 +101,19 @@ interface SidebarProps {
   isAdmin?: boolean;
   /** Demandes de reversement en attente, affichées à côté de l'entrée Équipe. */
   pendingPayouts?: number;
+  /** Alertes critiques non traitées (écran Santé). */
+  openAlerts?: number;
 }
 
 const ADMIN_GROUP: { label: string; items: NavItemDef[] } = {
   label: "Équipe",
   items: [
     { label: "Reversements", href: "/dashboard/admin/payouts", icon: BanknoteIcon },
+    { label: "Santé", href: "/dashboard/admin/ops", icon: Activity },
   ],
 };
 
-export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 0 }: SidebarProps) {
+export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 0, openAlerts = 0 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -170,6 +174,15 @@ export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 
                       aria-label={`${pendingPayouts} à traiter`}
                     >
                       {pendingPayouts}
+                    </span>
+                  ) : null}
+                  {item.href === "/dashboard/admin/ops" && openAlerts > 0 ? (
+                    <span
+                      className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums"
+                      style={{ background: "#e11d48", color: "#fff" }}
+                      aria-label={`${openAlerts} alerte(s) critique(s)`}
+                    >
+                      {openAlerts}
                     </span>
                   ) : null}
                 </Link>

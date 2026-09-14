@@ -18,6 +18,7 @@ import type { Prisma } from "../../../../prisma/generated/client/client";
 import type { Currency } from "@/lib/constants";
 import { notifyCashOnDeliveryOrder, notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { ops } from "@/lib/ops/events";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
@@ -566,10 +567,30 @@ export async function POST(request: NextRequest) {
         await cancelUnpaidOrder(order.id, null, paymentProvider);
       } catch (error) {
         console.error("[checkout] cancel_unpaid_order error:", error);
+        // Commande fantôme : en attente, sans référence de paiement, donc
+        // hors de portée de la réconciliation et de l'expiration.
+        ops.critical({
+          kind: "checkout.rollback_failed",
+          title: "Commande fantôme : annulation impossible après échec de la passerelle",
+          detail: "La commande reste « en attente » sans référence de paiement ; ni la réconciliation ni l'expiration ne la verront. À annuler à la main depuis Commandes.",
+          context: { orderId: order.id, provider: paymentProvider, shopId },
+          dedupeKey: `checkout.rollback_failed:${order.id}`,
+        });
       }
       // The database transaction has returned the promo use as well.
       appliedPromoCode = null;
     };
+
+    // Une passerelle injoignable ou mal configurée refuse chaque acheteur :
+    // si c'est systématique, plus aucune vente n'aboutit.
+    const gatewayDown = (provider: "geniuspay" | "stripe", reason: string) =>
+      ops.critical({
+        kind: "checkout.gateway_error",
+        title: provider === "geniuspay" ? "Genius Pay refuse les paiements" : "Stripe refuse les paiements",
+        detail: `${reason.slice(0, 200)} — l'acheteur a vu une erreur et sa commande a été annulée. Si ça se répète, vérifie les clés et l'état du prestataire.`,
+        context: { provider, orderId: order.id, shopId },
+        dedupeKey: `checkout.gateway_error:${provider}`,
+      });
 
     // A 100% promo is a valid free order. Sending a zero-value payment to a
     // gateway would fail, so settle it locally and use the order UUID as the
@@ -655,6 +676,7 @@ export async function POST(request: NextRequest) {
             "[checkout] Genius Pay returned no payment URL:",
             result.reference,
           );
+          gatewayDown("geniuspay", "Genius Pay n'a renvoyé aucune URL de paiement");
           await rollback();
           return NextResponse.json(
             { error: "Impossible d'initialiser le paiement Mobile Money." },
@@ -675,6 +697,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (err) {
         console.error("[checkout] Genius Pay create failed:", err);
+        gatewayDown("geniuspay", err instanceof Error ? err.message : "création du paiement en échec");
         await rollback();
         return NextResponse.json(
           {
@@ -694,6 +717,7 @@ export async function POST(request: NextRequest) {
       stripe = getStripe();
     } catch (err) {
       console.error("[checkout] Stripe is not configured:", err);
+      gatewayDown("stripe", "STRIPE_SECRET_KEY absent : Stripe n'est pas configuré");
       await rollback();
       return NextResponse.json(
         { error: "Le service de paiement n'est pas configuré." },
@@ -773,6 +797,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       console.error("[checkout] Stripe session creation failed:", err);
+      gatewayDown("stripe", err instanceof Error ? err.message : "création de session en échec");
       await rollback();
       return NextResponse.json(
         { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
@@ -782,6 +807,7 @@ export async function POST(request: NextRequest) {
 
     if (!checkoutSession.url) {
       console.error("[checkout] Stripe session missing url:", checkoutSession.id);
+      gatewayDown("stripe", "Stripe a renvoyé une session sans URL");
       await rollback();
       return NextResponse.json(
         { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
@@ -789,10 +815,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { paymentRef: checkoutSession.id },
-    });
+    try {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentRef: checkoutSession.id },
+      });
+    } catch (err) {
+      // Sans référence, la commande serait invisible pour la réconciliation
+      // et l'expiration ; on l'annule plutôt que de laisser un fantôme (la
+      // session Stripe expire d'elle-même).
+      console.error("[checkout] paymentRef update failed:", err);
+      await rollback();
+      return NextResponse.json(
+        { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({
       paymentLink: checkoutSession.url,

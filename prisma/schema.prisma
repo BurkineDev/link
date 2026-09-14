@@ -174,6 +174,17 @@ enum PromoDiscountType {
   @@map("promo_discount_type")
 }
 
+/// Gravité d'un événement d'exploitation : « critical » prévient le
+/// fondateur tout de suite, « warning » attend le rapport quotidien,
+/// « info » n'est qu'une trace (passage du cron, demande de reversement).
+enum OpsSeverity {
+  info
+  warning
+  critical
+
+  @@map("ops_severity")
+}
+
 model Profile {
   id                  String   @id @db.Uuid
   username            String?  @unique
@@ -722,4 +733,31 @@ model Booking {
 
   @@index([shopId, startsAt])
   @@map("bookings")
+}
+
+/// Journal d'exploitation lu par le fondateur : ce qui a cassé en silence
+/// (webhook rejeté, paiement tardif, réconciliation en erreur, e-mail
+/// mort), avec dédoublonnage par clé et prise en charge manuelle.
+model OpsEvent {
+  id             String      @id @default(uuid()) @db.Uuid
+  kind           String
+  severity       OpsSeverity
+  title          String
+  detail         String?
+  context        Json?
+  /// Même clé = même problème : la ligne ouverte est incrémentée, pas dupliquée.
+  dedupeKey      String?     @map("dedupe_key")
+  occurrences    Int         @default(1)
+  firstSeenAt    DateTime    @default(now()) @map("first_seen_at")
+  lastSeenAt     DateTime    @default(now()) @map("last_seen_at")
+  /// Dernier e-mail immédiat envoyé pour cette ligne (accélérateur anti-rafale).
+  notifiedAt     DateTime?   @map("notified_at")
+  acknowledgedAt DateTime?   @map("acknowledged_at")
+  acknowledgedBy String?     @map("acknowledged_by")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@index([dedupeKey, acknowledgedAt])
+  @@index([severity, acknowledgedAt, lastSeenAt])
+  @@index([kind, createdAt])
+  @@map("ops_events")
 }

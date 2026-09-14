@@ -9,6 +9,7 @@ import {
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
+import { ops } from "@/lib/ops/events";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
 /**
@@ -194,25 +195,25 @@ export async function GET(request: NextRequest) {
           payment.reference ?? (order.payment_ref as string),
           "geniuspay",
         );
-        if (settlement.settled) {
-          scheduleAfterResponse(
-            () => notifyPaidOrder(order.id),
-            (error) => console.warn("[verify] order notification failed", error),
-          );
-        }
-        return NextResponse.json({
-          order: await withShop({
-            ...order,
-            payment_status: "paid",
-            status: "confirmed",
-          }),
+        return settledResponse(settlement, order, withShop, {
+          provider: "geniuspay",
+          reference: payment.reference ?? order.payment_ref,
+          amount: payment.amount,
+          currency: payment.currency,
         });
       }
 
       if (nextStatus === "paid" && (!amountOk || !currencyOk)) {
         console.warn("[verify] Genius Pay mismatch for order:", order.id);
+        ops.critical({
+          kind: "webhook.amount_mismatch",
+          title: "Paiement Genius Pay d'un montant inattendu (page de succès)",
+          detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+          context: { provider: "geniuspay", orderId: order.id, reference: payment.reference, received: payment.amount, receivedCurrency: payment.currency, expected: order.total_amount, expectedCurrency: order.currency },
+          dedupeKey: `webhook.amount_mismatch:${order.id}`,
+        });
         return NextResponse.json(
-          { error: "Le montant ou la devise ne correspond pas à la commande." },
+          { error: "Le montant ou la devise ne correspond pas à la commande.", code: "AMOUNT_MISMATCH" },
           { status: 400 },
         );
       }
@@ -261,18 +262,11 @@ export async function GET(request: NextRequest) {
 
     if (isPaid && amountOk && currencyOk) {
       const settlement = await settlePaidOrder(order.id, session.id, "stripe");
-      if (settlement.settled) {
-        scheduleAfterResponse(
-          () => notifyPaidOrder(order.id),
-          (error) => console.warn("[verify] order notification failed", error),
-        );
-      }
-      return NextResponse.json({
-        order: await withShop({
-          ...order,
-          payment_status: "paid",
-          status: "confirmed",
-        }),
+      return settledResponse(settlement, order, withShop, {
+        provider: "stripe",
+        reference: session.id,
+        amount: paidAmount,
+        currency: session.currency ?? null,
       });
     }
 
@@ -283,8 +277,15 @@ export async function GET(request: NextRequest) {
 
     if (isPaid && (!amountOk || !currencyOk)) {
       console.warn("[verify] Stripe amount/currency mismatch for order:", order.id);
+      ops.critical({
+        kind: "webhook.amount_mismatch",
+        title: "Paiement Stripe d'un montant inattendu (page de succès)",
+        detail: `Stripe confirme ${paidAmount ?? "?"} ${session.currency?.toUpperCase() ?? ""} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+        context: { provider: "stripe", orderId: order.id, sessionId: session.id, received: paidAmount, receivedCurrency: session.currency, expected: order.total_amount, expectedCurrency: order.currency },
+        dedupeKey: `webhook.amount_mismatch:${order.id}`,
+      });
       return NextResponse.json(
-        { error: "Le montant ou la devise du paiement ne correspond pas à la commande." },
+        { error: "Le montant ou la devise du paiement ne correspond pas à la commande.", code: "AMOUNT_MISMATCH" },
         { status: 400 },
       );
     }
@@ -303,4 +304,55 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+/**
+ * La réponse après un règlement demandé par la page de succès.
+ *
+ * L'ancienne version renvoyait « payé / confirmée » quoi qu'ait répondu
+ * `settlePaidOrder` (constat A03 de l'audit) : un paiement confirmé après
+ * l'annulation de la commande affichait un succès à l'acheteur alors que
+ * la base disait « annulée ». On répond désormais avec l'état réel, et le
+ * fondateur est prévenu de ce paiement tardif.
+ */
+async function settledResponse(
+  settlement: Awaited<ReturnType<typeof settlePaidOrder>>,
+  order: ReturnType<typeof serializeOrder>,
+  withShop: (orderObj: ReturnType<typeof serializeOrder>) => Promise<unknown>,
+  payment: { provider: "geniuspay" | "stripe"; reference: string | null; amount: number | null; currency: string | null },
+) {
+  if (settlement.settled || settlement.reason === "already_paid") {
+    if (settlement.settled) {
+      scheduleAfterResponse(
+        () => notifyPaidOrder(order.id),
+        (error) => console.warn("[verify] order notification failed", error),
+      );
+    }
+    return NextResponse.json({
+      order: await withShop({ ...order, payment_status: "paid", status: "confirmed" }),
+    });
+  }
+
+  if (settlement.reason === "not_found") {
+    return NextResponse.json({ error: "Commande introuvable." }, { status: 404 });
+  }
+
+  // `not_pending` : la commande a été annulée (expirée, échouée) avant que
+  // le paiement soit confirmé. L'acheteur a payé ; rien n'est réservé.
+  ops.critical({
+    kind: "payment.late_after_cancel",
+    title: `Paiement ${payment.provider === "stripe" ? "Stripe" : "Mobile Money"} reçu sur une commande annulée`,
+    detail: "Le prestataire confirme le paiement mais la commande était déjà annulée (expirée ou échouée) : rien n'a été livré ni réservé. Rembourse l'acheteur ou règle la commande à la main si le vendeur peut livrer.",
+    context: { provider: payment.provider, orderId: order.id, reference: payment.reference, amount: payment.amount, currency: payment.currency, orderStatus: order.status, paymentStatus: order.payment_status },
+    dedupeKey: `webhook.late_payment:${order.id}`,
+  });
+  return NextResponse.json(
+    {
+      error:
+        "Ton paiement a bien été reçu, mais la commande avait expiré entre-temps. L'équipe Bio-Lien te contacte pour la confirmer ou te rembourser : garde ta référence.",
+      code: "LATE_PAYMENT",
+      reference: payment.reference,
+    },
+    { status: 409 },
+  );
 }

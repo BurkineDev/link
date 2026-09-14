@@ -18,6 +18,7 @@ import {
 } from "@/lib/whatsapp";
 import type { OrderItem } from "@/lib/types/database";
 import { escapeEmailHtml, sendTransactionalEmail } from "@/lib/email";
+import { ops } from "@/lib/ops/events";
 
 function formatTotal(amount: number, currency: Currency) {
   const meta = CURRENCY_META[currency] ?? CURRENCY_META.XOF;
@@ -240,10 +241,25 @@ export async function notifySellerOfOrder(
       : Promise.resolve(),
   ]);
 
+  const [emailResult] = results;
   for (const result of results) {
     if (result.status === "rejected") {
       console.warn("[order-notifications] seller channel failed", result.reason);
     }
+  }
+  // L'e-mail est le canal principal : s'il n'est pas parti, le vendeur ne
+  // sait pas qu'il a une commande (payée, ou à confirmer). WhatsApp est un
+  // complément qui a son repli (lien wa.me dans les journaux).
+  if (emailResult && emailResult.status === "rejected") {
+    ops.warning({
+      kind: "notification.failed",
+      title: mode === "cash_on_delivery"
+        ? "Vendeur non prévenu d'une commande à confirmer"
+        : "Vendeur non prévenu d'une commande payée",
+      detail: `${reasonText(emailResult.reason)} — le vendeur ne verra la commande qu'en ouvrant son tableau de bord.`,
+      context: { orderId: order.id, shop: shop.name, channel: "seller_email", hasEmail: Boolean(shop.email) },
+      dedupeKey: `notification.failed:seller:${order.id}`,
+    });
   }
 }
 
@@ -449,13 +465,29 @@ export async function notifyCashOnDeliveryOrder(orderId: string): Promise<void> 
 }
 
 export async function notifyPaidOrder(orderId: string): Promise<void> {
-  const results = await Promise.allSettled([
+  const [buyer, seller] = await Promise.allSettled([
     notifyBuyerOfPaidOrder(orderId),
     notifySellerOfPaidOrder(orderId),
   ]);
-  for (const result of results) {
+  for (const result of [buyer, seller]) {
     if (result.status === "rejected") {
       console.warn("[order-notifications] delivery failed", result.reason);
     }
   }
+  // L'acheteur d'un fichier numérique n'a que cet e-mail pour ses liens ;
+  // le vendeur, la même chose pour savoir quoi livrer. (Le canal vendeur se
+  // signale lui-même quand il a pu lire la commande.)
+  if (buyer.status === "rejected") {
+    ops.warning({
+      kind: "notification.failed",
+      title: "Acheteur non prévenu de sa commande payée",
+      detail: `${reasonText(buyer.reason)} — l'acheteur n'a reçu ni lien de suivi ni fichiers ; ils restent accessibles depuis la page de succès.`,
+      context: { orderId, channel: "buyer_email" },
+      dedupeKey: `notification.failed:buyer:${orderId}`,
+    });
+  }
+}
+
+function reasonText(reason: unknown): string {
+  return reason instanceof Error ? reason.message.split("\n")[0]!.slice(0, 160) : String(reason).slice(0, 160);
 }

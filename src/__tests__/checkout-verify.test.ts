@@ -72,10 +72,15 @@ const mockPrisma = {
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
+let _settleResult: { settled: boolean; reason?: string } = { settled: true };
 jest.mock("@/lib/db/orders", () => ({
-  settlePaidOrder: jest.fn(async () => ({ settled: true })),
+  settlePaidOrder: jest.fn(async () => _settleResult),
   cancelUnpaidOrder: jest.fn(async () => ({ cancelled: true })),
 }));
+
+// Alertes fondateur : on vérifie ce qui est signalé.
+const mockOps = { critical: jest.fn(), warning: jest.fn(), info: jest.fn() };
+jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: jest.fn(), recordOpsEventAfterResponse: jest.fn() }));
 
 const mockRetrieveSession = jest.fn();
 jest.mock("@/lib/stripe", () => ({
@@ -133,7 +138,9 @@ function mockStripeSession(s: {
 beforeEach(() => {
   _order = BASE_ORDER_DEFAULT();
   _blockedResponse = null;
+  _settleResult = { settled: true };
   mockRetrieveSession.mockReset();
+  mockOps.critical.mockClear();
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
 });
 
@@ -307,5 +314,39 @@ describe("GET /api/checkout/verify — paiement à la livraison", () => {
     expect((await GET(codRequest("nope"))).status).toBe(400);
     _order = null;
     expect((await GET(codRequest())).status).toBe(404);
+  });
+});
+
+describe("GET /api/checkout/verify — paiement tardif (A03)", () => {
+  test("règlement refusé (commande annulée entre-temps) : état réel, 409 LATE_PAYMENT, alerte critique", async () => {
+    _settleResult = { settled: false, reason: "not_pending" };
+    _order = { ...BASE_ORDER_DEFAULT(), status: "cancelled", payment_status: "failed" };
+    mockStripeSession({ payment_status: "paid", status: "complete", amount_total: 5000, currency: "xof" });
+
+    const res = await GET(makeRequest("cs_test_123"));
+    const json = await res.json();
+    expect(res.status).toBe(409);
+    expect(json.code).toBe("LATE_PAYMENT");
+    expect(json.order).toBeUndefined();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "payment.late_after_cancel", dedupeKey: "webhook.late_payment:order-001" }),
+    );
+  });
+
+  test("déjà payée par le webhook (already_paid) : succès idempotent, sans alerte", async () => {
+    _settleResult = { settled: false, reason: "already_paid" };
+    mockStripeSession({ payment_status: "paid", status: "complete", amount_total: 5000, currency: "xof" });
+    const res = await GET(makeRequest("cs_test_123"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).order.payment_status).toBe("paid");
+    expect(mockOps.critical).not.toHaveBeenCalled();
+  });
+
+  test("montant inférieur : 400 AMOUNT_MISMATCH et alerte critique", async () => {
+    mockStripeSession({ payment_status: "paid", status: "complete", amount_total: 1000, currency: "xof" });
+    const res = await GET(makeRequest("cs_test_123"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("AMOUNT_MISMATCH");
+    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "webhook.amount_mismatch" }));
   });
 });

@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import {
+  Activity,
   BarChart3Icon,
   ChevronRightIcon,
   CreditCardIcon,
@@ -140,6 +141,12 @@ export default async function MorePage() {
                   href: "/dashboard/admin/payouts",
                   icon: BanknoteIcon,
                   description: "Demandes de versement des vendeurs",
+                },
+                {
+                  label: "Santé de la plateforme",
+                  href: "/dashboard/admin/ops",
+                  icon: Activity,
+                  description: "Alertes, cron, base, migrations",
                 },
               ],
             },
