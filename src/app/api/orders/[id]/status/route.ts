@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { transitionOrderStatus } from "@/lib/db/orders";
 import { serializeOrder } from "@/lib/db/serialize";
+import { notifyBuyerOfCashOnDeliveryOrder } from "@/lib/order-notifications";
+import { scheduleAfterResponse } from "@/lib/after-response";
 
 const updateStatusSchema = z.object({
   status: z.enum(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"]),
@@ -49,7 +51,7 @@ export async function PATCH(
     // elle-même revérifie la propriété sous verrou.
     const order = await prisma.order.findUnique({
       where: { id },
-      select: { shop: { select: { ownerId: true } } },
+      select: { paymentProvider: true, shop: { select: { ownerId: true } } },
     });
 
     if (!order) {
@@ -59,15 +61,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
+    // Une commande à régler à la livraison n'a rien payé : « confirmée »
+    // veut dire que le vendeur la prend en charge, pas qu'un paiement est
+    // arrivé.
+    const defaultMessage =
+      parsed.data.status === "confirmed" && order.paymentProvider === "cash_on_delivery"
+        ? "Commande confirmée par le vendeur : il prépare ton colis, tu règles à la livraison."
+        : DEFAULT_PUBLIC_MESSAGES[parsed.data.status] ?? null;
+
     const result = await transitionOrderStatus({
       orderId: id,
       status: parsed.data.status,
       actorId: user.id,
       note: parsed.data.note ?? null,
-      publicMessage:
-        parsed.data.public_message ??
-        DEFAULT_PUBLIC_MESSAGES[parsed.data.status] ??
-        null,
+      publicMessage: parsed.data.public_message ?? defaultMessage,
     });
 
     if (!result.updated) {
@@ -89,8 +96,20 @@ export async function PATCH(
       );
     }
 
+    // La confirmation d'une commande à la livraison est le moment où
+    // l'acheteur apprend que son colis part (voir order-notifications).
+    if (result.codConfirmed) {
+      scheduleAfterResponse(
+        () => notifyBuyerOfCashOnDeliveryOrder(id),
+        (error) => console.warn("[api/orders status PATCH] cod buyer notification failed", error),
+      );
+    }
+
     const updated = await prisma.order.findUniqueOrThrow({ where: { id } });
-    return NextResponse.json({ order: serializeOrder(updated) });
+    return NextResponse.json({
+      order: serializeOrder(updated),
+      stock_shortfall: result.codConfirmed ? result.stockShortfall : undefined,
+    });
   } catch (error) {
     console.error("[api/orders status PATCH] error", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

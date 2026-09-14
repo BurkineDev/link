@@ -35,12 +35,14 @@ interface OrderDetails {
   buyer_name: string;
   buyer_email: string | null;
   total_amount: number;
+  shipping_amount?: number | null;
+  discount_amount?: number | null;
   currency: Currency;
   status: string;
   payment_status: string;
   payment_provider?: string | null;
   items: Array<{
-    product_snapshot: { product_name: string };
+    product_snapshot: { product_name: string; is_digital?: boolean };
     quantity: number;
     unit_price: number;
     subtotal: number;
@@ -281,7 +283,9 @@ function SuccessContent() {
         <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-destructive/10">
           <XCircle className="size-10 text-destructive" />
         </div>
-        <h1 className="mb-2 text-2xl font-bold">Paiement non confirmé</h1>
+        <h1 className="mb-2 text-2xl font-bold">
+          {provider === "cash_on_delivery" ? "Commande introuvable ou annulée" : "Paiement non confirmé"}
+        </h1>
         <p className="mb-6 text-muted-foreground">{state.message}</p>
         <div className="flex flex-col gap-3 sm:flex-row">
           {/* Renvoie bien tous les paramètres : l'ancien bouton ne réémettait
@@ -318,6 +322,12 @@ function SuccessContent() {
   const { order } = state;
   const currencyMeta = CURRENCY_META[order.currency];
   const cashOnDelivery = order.payment_provider === "cash_on_delivery";
+  // Une commande à la livraison attend la confirmation du vendeur ; une
+  // fois confirmée, il prépare le colis.
+  const awaitingSeller = cashOnDelivery && order.status === "pending";
+  const shippingAmount = Number(order.shipping_amount ?? 0);
+  const discountAmount = Number(order.discount_amount ?? 0);
+  const hasDigital = order.items.some((item) => item.product_snapshot.is_digital === true);
 
   const sellerWaLink =
     order.shop_whatsapp && isValidWhatsAppNumber(order.shop_whatsapp)
@@ -325,10 +335,14 @@ function SuccessContent() {
           order.shop_whatsapp,
           [
             `Bonjour ${order.shop_name ?? ""} 👋`.replace(/\s+/g, " ").trim(),
-            `Je viens de passer commande sur votre boutique Bio-Lien.`,
+            cashOnDelivery
+              ? `Je viens de passer commande sur votre boutique Bio-Lien, à régler à la livraison.`
+              : `Je viens de passer commande sur votre boutique Bio-Lien.`,
             "",
             `Référence : #${order.id.slice(0, 8).toUpperCase()}`,
-            `Total : ${formatPrice(order.total_amount)}`,
+            cashOnDelivery
+              ? `À régler à la livraison : ${formatPrice(order.total_amount)}`
+              : `Total : ${formatPrice(order.total_amount)}`,
             `Nom : ${order.buyer_name}`,
             ...(order.tracking_token
               ? [`Suivi : ${typeof window !== "undefined" ? window.location.origin : ""}/orders/track/${order.tracking_token}`]
@@ -389,15 +403,20 @@ function SuccessContent() {
         transition={{ delay: 0.3 }}
       >
         <h1 className="mb-2 text-2xl font-bold">
-          {cashOnDelivery ? "Commande enregistrée !" : "Paiement réussi !"}
+          {cashOnDelivery ? "Commande reçue !" : "Paiement réussi !"}
         </h1>
         <p className="mb-8 text-muted-foreground">
           Merci <strong>{order.buyer_name}</strong>.{" "}
-          {cashOnDelivery
-            ? `Le vendeur prépare ton colis ; tu règles ${formatPrice(order.total_amount)} à la livraison, en espèces ou en Mobile Money.`
-            : "Ta commande est enregistrée et le vendeur est prévenu."}{" "}
+          {awaitingSeller
+            ? `Le vendeur va confirmer ta commande et préparer ton colis ; tu règles ${formatPrice(order.total_amount)} à la livraison, en espèces ou en Mobile Money.`
+            : cashOnDelivery
+              ? `Le vendeur prépare ton colis ; tu règles ${formatPrice(order.total_amount)} à la livraison, en espèces ou en Mobile Money.`
+              : "Ta commande est enregistrée et le vendeur est prévenu."}{" "}
           Tout ce qu&apos;il te faut est ici : ta référence, ton suivi
           {order.downloads?.length ? " et tes fichiers" : ""}.
+          {cashOnDelivery && hasDigital
+            ? " Tes fichiers seront disponibles sur ta page de suivi dès que le vendeur aura encaissé la livraison."
+            : ""}
         </p>
       </motion.div>
 
@@ -442,6 +461,24 @@ function SuccessContent() {
 
             <Separator />
 
+            {/* Livraison et remise : ce qui explique l'écart avec les articles */}
+            {(shippingAmount > 0 || discountAmount > 0) && (
+              <div className="space-y-1 text-sm text-muted-foreground">
+                {shippingAmount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>Livraison</span>
+                    <span className="tabular-nums">{formatPrice(shippingAmount)}</span>
+                  </div>
+                )}
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-[var(--success)]">
+                    <span>Remise</span>
+                    <span className="tabular-nums">−{formatPrice(discountAmount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Total */}
             <div className="flex items-center justify-between font-semibold">
               <span>{cashOnDelivery ? "Total à régler à la livraison" : "Total payé"}</span>
@@ -463,9 +500,11 @@ function SuccessContent() {
               >
                 {order.payment_status === "paid"
                   ? "Payé"
-                  : cashOnDelivery
-                    ? "À régler à la livraison"
-                    : "En attente"}
+                  : awaitingSeller
+                    ? "En attente de confirmation du vendeur"
+                    : cashOnDelivery
+                      ? "À régler à la livraison"
+                      : "En attente"}
               </span>
             </div>
           </CardContent>

@@ -150,15 +150,23 @@ export async function settlePaidOrder(
       data: { customerId },
     });
 
+    // Un règlement à la remise du colis (paiement à la livraison) arrive
+    // après « expédiée » ou « livrée » : l'événement porte le statut réel,
+    // pas un « confirmée » qui remonterait le temps sur la page de suivi.
+    const settledStatus: OrderStatus = ADVANCED_STATUSES.has(order.status)
+      ? (order.status as OrderStatus)
+      : "confirmed";
     await tx.orderStatusEvent.create({
       data: {
         orderId: order.id,
-        status: "confirmed",
+        status: settledStatus,
         // L'acheteur n° 2 du dernier exemplaire ne doit pas attendre un colis
         // qui ne partira peut-être pas : on le prévient sans dévoiler le stock.
         publicMessage: stockShortfall.length
           ? "Paiement reçu. Le vendeur vérifie la disponibilité de l'article et te contacte rapidement."
-          : "Paiement confirmé. La commande est transmise au vendeur.",
+          : paymentProvider === "cash_on_delivery"
+            ? "Paiement reçu à la livraison. Merci !"
+            : "Paiement confirmé. La commande est transmise au vendeur.",
         note: stockShortfall.length
           ? `Stock insuffisant au moment du paiement : ${stockShortfall
               .map((item) => `${item.product_name ?? item.product_id} (${item.taken}/${item.requested})`)
@@ -475,7 +483,10 @@ const ALLOWED_TRANSITIONS: Partial<Record<OrderStatus, readonly OrderStatus[]>> 
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
   processing: ["shipped", "delivered", "cancelled"],
-  shipped: ["delivered"],
+  // Un colis à régler à la livraison peut être refusé ou jamais réclamé :
+  // l'annulation d'une commande expédiée est permise tant qu'elle n'est pas
+  // payée (une commande payée passe par le remboursement, voir plus bas).
+  shipped: ["delivered", "cancelled"],
 };
 
 export type TransitionResult =
@@ -489,7 +500,14 @@ export type TransitionResult =
         | "manual_order_requires_payment";
     }
   | { updated: false; reason: "invalid_transition"; from: OrderStatus; to: OrderStatus }
-  | { updated: true; status: OrderStatus };
+  | {
+      updated: true;
+      status: OrderStatus;
+      /** Commande à régler à la livraison que le vendeur vient de confirmer : l'acheteur est à prévenir. */
+      codConfirmed?: boolean;
+      /** Manque constaté au prélèvement du stock (confirmation d'une commande à la livraison). */
+      stockShortfall?: StockShortfall[];
+    };
 
 export async function transitionOrderStatus(input: {
   orderId: string;
@@ -512,9 +530,11 @@ export async function transitionOrderStatus(input: {
       where: { id: orderId },
       select: {
         id: true,
+        shopId: true,
         status: true,
         paymentStatus: true,
         paymentProvider: true,
+        promoCode: true,
         stockReservedAt: true,
         items: true,
         shop: { select: { ownerId: true } },
@@ -553,29 +573,66 @@ export async function transitionOrderStatus(input: {
       return { updated: false, reason: "manual_order_requires_payment" } as const;
     }
 
-    // Annulation d'une commande dont le stock avait été prélevé d'avance
-    // (paiement à la livraison) : il revient en rayon.
-    const restores =
-      status === "cancelled" && order.paymentStatus === "pending" && order.stockReservedAt !== null;
-    if (restores) {
+    // Paiement à la livraison : la commande naît « en attente » d'un tap
+    // anonyme, sans un franc versé. C'est la confirmation du vendeur (il a
+    // joint le client, vérifié l'adresse) qui la rend ferme : le stock est
+    // prélevé ici, sous le même verrou qu'au règlement, et le manque
+    // éventuel noté sur la commande.
+    const codConfirmed =
+      status === "confirmed" &&
+      order.paymentProvider === "cash_on_delivery" &&
+      order.paymentStatus === "pending" &&
+      order.stockReservedAt === null;
+    const stockShortfall = codConfirmed ? await claimStock(tx, order.items) : [];
+
+    // Annulation d'une commande jamais encaissée : le stock prélevé d'avance
+    // revient en rayon, le code promo redevient utilisable, et le paiement
+    // est clos (« échoué ») — sinon la commande resterait comptée « en
+    // attente » d'un argent qui ne viendra plus.
+    const cancelsUnpaid = status === "cancelled" && order.paymentStatus === "pending";
+    if (cancelsUnpaid && order.stockReservedAt !== null) {
       await restoreStock(tx, order.items);
+    }
+    if (cancelsUnpaid && order.promoCode !== null) {
+      await tx.promoCode.updateMany({
+        where: { shopId: order.shopId, code: order.promoCode, usesCount: { gt: 0 } },
+        data: { usesCount: { decrement: 1 } },
+      });
     }
 
     await tx.order.update({
       where: { id: order.id },
-      data: restores ? { status, stockReservedAt: null } : { status },
+      data: cancelsUnpaid
+        ? { status, paymentStatus: "failed", stockReservedAt: null }
+        : codConfirmed
+          ? {
+              status,
+              stockReservedAt: new Date(),
+              stockShortfall: stockShortfall.length
+                ? (stockShortfall as unknown as Prisma.InputJsonValue)
+                : Prisma.DbNull,
+            }
+          : { status },
     });
     await tx.orderStatusEvent.create({
       data: {
         orderId: order.id,
         status,
-        note: emptyToNull(input.note),
+        note:
+          emptyToNull(input.note) ??
+          (stockShortfall.length
+            ? `Stock insuffisant à la confirmation : ${stockShortfall
+                .map((item) => `${item.product_name ?? item.product_id} (${item.taken}/${item.requested})`)
+                .join(", ")}`
+            : null),
         publicMessage: emptyToNull(input.publicMessage),
         createdBy: actorId,
       },
     });
 
-    return { updated: true, status } as const;
+    return codConfirmed
+      ? ({ updated: true, status, codConfirmed: true, stockShortfall } as const)
+      : ({ updated: true, status } as const);
   });
 }
 

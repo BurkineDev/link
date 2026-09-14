@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { checkStockAvailability, releaseStock, reserveStock } from "@/lib/db/stock";
+import { checkStockAvailability } from "@/lib/db/stock";
 import { quoteShipping, shippingAmount as shippingAmountOf } from "@/lib/checkout/shipping";
 import { roundToCurrency } from "@/lib/checkout/money";
 import { redeemPromoCode, releasePromoRedemption } from "@/lib/db/promo";
@@ -313,6 +313,7 @@ export async function POST(request: NextRequest) {
           unit_price: unitPrice,
           currency: (product.currency ?? shop.currency) as Currency,
           image_url: firstImageUrl(product.images),
+          is_digital: product.isDigital,
         },
       });
     }
@@ -601,62 +602,13 @@ export async function POST(request: NextRequest) {
     }
 
     // -- Paiement à la livraison ------------------------------------------------
-    // Pas de passerelle : la commande est ferme dès maintenant, le vendeur la
-    // prépare et encaisse à la remise. Le stock est donc prélevé tout de
-    // suite (il n'y aura pas de « règlement » pour le faire), et rendu si
-    // la commande est annulée.
+    // Pas de passerelle, et personne n'a rien versé : la commande naît « en
+    // attente », comme une commande WhatsApp. Rien n'est prélevé ici — une
+    // requête anonyme qui viderait le stock d'une boutique sans payer serait
+    // un déni de stock. C'est la confirmation du vendeur (tableau de bord)
+    // qui rend la commande ferme, prélève le stock et prévient l'acheteur ;
+    // faute de confirmation sous sept jours, elle expire.
     if (paymentMethod.type === "cash_on_delivery") {
-      let reservation: Awaited<ReturnType<typeof reserveStock>>;
-      try {
-        reservation = await reserveStock(stockPayload);
-      } catch (error) {
-        console.error("[checkout] cod stock reservation error:", error);
-        await rollback();
-        return NextResponse.json(
-          { error: "Impossible de réserver le stock. Veuillez réessayer." },
-          { status: 500 },
-        );
-      }
-      if (!reservation.ok) {
-        await rollback();
-        return NextResponse.json(
-          {
-            error:
-              reservation.reason === "insufficient_stock" && reservation.product_name
-                ? `Stock insuffisant pour « ${reservation.product_name} » (${reservation.available ?? 0} disponible${(reservation.available ?? 0) > 1 ? "s" : ""}).`
-                : "Un article du panier n'est plus disponible.",
-            code: "OUT_OF_STOCK",
-          },
-          { status: 409 },
-        );
-      }
-
-      try {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: "confirmed",
-            stockReservedAt: new Date(),
-            paymentRef: `cod:${order.id}`,
-            statusEvents: {
-              create: {
-                status: "confirmed",
-                publicMessage:
-                  "Commande enregistrée. Tu règles à la livraison ; le vendeur prépare ton colis.",
-              },
-            },
-          },
-        });
-      } catch (error) {
-        console.error("[checkout] cod confirmation error:", error);
-        await releaseStock(stockPayload).catch(() => {});
-        await rollback();
-        return NextResponse.json(
-          { error: "Impossible d'enregistrer la commande." },
-          { status: 500 },
-        );
-      }
-
       scheduleAfterResponse(
         () => notifyCashOnDeliveryOrder(order.id),
         (error) => console.warn("[checkout] cod notification failed", error),

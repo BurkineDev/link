@@ -1,10 +1,11 @@
 /**
  * POST /api/checkout — paiement à la livraison.
  *
- * Une commande COD est ferme dès la caisse : pas de passerelle, stock
- * prélevé tout de suite, statut « confirmée », vendeur et acheteur
- * prévenus. L'option n'est acceptée que si le vendeur l'offre, pour un
- * colis qui part vraiment quelque part.
+ * Une commande COD naît « en attente », comme une commande WhatsApp : pas
+ * de passerelle, rien de payé, donc rien de prélevé (une requête anonyme
+ * ne vide pas le stock d'une boutique). Seul le vendeur est prévenu ; sa
+ * confirmation rendra la commande ferme. L'option n'est acceptée que si
+ * le vendeur l'offre, pour un colis qui part vraiment quelque part.
  */
 
 import { NextRequest } from "next/server";
@@ -16,6 +17,7 @@ const ORDER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 let _shop: Record<string, unknown> | null = null;
 let _zones: Array<{ countries: string[]; rate: number; freeAbove: number | null }> = [];
 let _reserveResult: { ok: boolean; reason?: string; product_name?: string; available?: number } = { ok: true };
+let _checkResult: { ok: boolean; reason?: string; product_name?: string; available?: number } = { ok: true };
 let _updateError: unknown = null;
 
 const mockPrisma = {
@@ -39,7 +41,10 @@ const mockPrisma = {
   productVariant: { findMany: jest.fn(async () => []) },
   shippingZone: { findMany: jest.fn(async () => _zones) },
   order: {
+    // Les paramètres typés servent à relire `mock.calls` sans cast.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     create: jest.fn(async (_args: { data: Record<string, unknown> }) => ({ id: ORDER_ID })),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     update: jest.fn(async (_args: { data: Record<string, unknown> }) => {
       if (_updateError) throw _updateError;
       return {};
@@ -51,7 +56,7 @@ jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 const mockReserve = jest.fn(async () => _reserveResult);
 const mockRelease = jest.fn(async () => undefined);
 jest.mock("@/lib/db/stock", () => ({
-  checkStockAvailability: jest.fn(async () => ({ ok: true })),
+  checkStockAvailability: jest.fn(async () => _checkResult),
   reserveStock: (...args: unknown[]) => mockReserve(...(args as [])),
   releaseStock: (...args: unknown[]) => mockRelease(...(args as [])),
 }));
@@ -97,11 +102,13 @@ function setup(opts: {
   shop?: Partial<typeof BASE_SHOP>;
   zones?: typeof _zones;
   reserveResult?: typeof _reserveResult;
+  checkResult?: typeof _checkResult;
   updateError?: unknown;
 } = {}) {
   _shop = { ...BASE_SHOP, ...opts.shop };
   _zones = opts.zones ?? [{ countries: ["BF"], rate: 1500, freeAbove: null }];
   _reserveResult = opts.reserveResult ?? { ok: true };
+  _checkResult = opts.checkResult ?? { ok: true };
   _updateError = opts.updateError ?? null;
   jest.clearAllMocks();
 }
@@ -138,7 +145,7 @@ async function flush() {
 }
 
 describe("POST /api/checkout — paiement à la livraison", () => {
-  it("enregistre une commande ferme : stock prélevé, statut confirmée, notification", async () => {
+  it("enregistre une commande en attente : rien de prélevé, statut inchangé, vendeur prévenu", async () => {
     setup();
     const res = await post(payload());
     expect(res.status).toBe(200);
@@ -147,19 +154,17 @@ describe("POST /api/checkout — paiement à la livraison", () => {
     expect(body.orderId).toBe(ORDER_ID);
     expect(body.paymentLink).toContain(`/checkout/success?provider=cash_on_delivery&order=${ORDER_ID}`);
 
-    // Créée avec le fournisseur COD, les frais de zone inclus.
+    // Créée avec le fournisseur COD, les frais de zone inclus, l'article marqué physique.
     const created = mockPrisma.order.create.mock.calls[0]![0];
     expect(created.data.paymentProvider).toBe("cash_on_delivery");
     expect(created.data.shippingAmount).toBe(1500);
     expect(created.data.totalAmount).toBe(11_500);
+    const items = created.data.items as Array<{ product_snapshot: { is_digital?: boolean } }>;
+    expect(items[0]!.product_snapshot.is_digital).toBe(false);
 
-    expect(mockReserve).toHaveBeenCalledWith([
-      { product_id: PRODUCT_ID, variant_id: null, quantity: 2 },
-    ]);
-    const updated = mockPrisma.order.update.mock.calls[0]![0];
-    expect(updated.data.status).toBe("confirmed");
-    expect(updated.data.stockReservedAt).toBeInstanceOf(Date);
-    expect(updated.data.paymentRef).toBe(`cod:${ORDER_ID}`);
+    // Ni prélèvement ni confirmation à la caisse : c'est au vendeur de le faire.
+    expect(mockReserve).not.toHaveBeenCalled();
+    expect(mockPrisma.order.update).not.toHaveBeenCalled();
 
     await flush();
     expect(mockNotifyCod).toHaveBeenCalledWith(ORDER_ID);
@@ -172,7 +177,6 @@ describe("POST /api/checkout — paiement à la livraison", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("COD_UNAVAILABLE");
     expect(mockPrisma.order.create).not.toHaveBeenCalled();
-    expect(mockReserve).not.toHaveBeenCalled();
   });
 
   it("refuse quand la boutique ne livre pas (frais non calculables)", async () => {
@@ -209,29 +213,12 @@ describe("POST /api/checkout — paiement à la livraison", () => {
     expect((await res.json()).code).toBe("SHIPPING_UNAVAILABLE");
   });
 
-  it("annule la commande et répond 409 OUT_OF_STOCK si le stock manque", async () => {
-    setup({ reserveResult: { ok: false, reason: "insufficient_stock", product_name: "Tissu wax", available: 1 } });
+  it("vérifie tout de même le stock en lecture (409) : pas de commande pour un article épuisé", async () => {
+    setup({ checkResult: { ok: false, reason: "insufficient_stock", product_name: "Tissu wax", available: 1 } });
     const res = await post(payload());
     expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.code).toBe("OUT_OF_STOCK");
-    expect(body.error).toContain("Tissu wax");
-    expect(mockCancelUnpaid).toHaveBeenCalledWith(ORDER_ID, null, "cash_on_delivery");
-    expect(mockPrisma.order.update).not.toHaveBeenCalled();
-    await flush();
-    expect(mockNotifyCod).not.toHaveBeenCalled();
-  });
-
-  it("rend le stock et annule si la confirmation échoue", async () => {
-    setup({ updateError: new Error("db down") });
-    const res = await post(payload());
-    expect(res.status).toBe(500);
-    expect(mockRelease).toHaveBeenCalledWith([
-      { product_id: PRODUCT_ID, variant_id: null, quantity: 2 },
-    ]);
-    expect(mockCancelUnpaid).toHaveBeenCalledWith(ORDER_ID, null, "cash_on_delivery");
-    await flush();
-    expect(mockNotifyCod).not.toHaveBeenCalled();
+    expect((await res.json()).error).toMatch(/Tissu wax/);
+    expect(mockPrisma.order.create).not.toHaveBeenCalled();
   });
 
   it("ne réserve rien pour un paiement par carte (le stock part au règlement)", async () => {

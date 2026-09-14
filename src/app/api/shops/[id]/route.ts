@@ -188,10 +188,24 @@ export async function PATCH(
       }
     }
 
-    const shop = await prisma.shop.update({
-      where: { id },
-      data: toPrismaData(parsed.data),
-    });
+    const currencyChanges = !!parsed.data.currency && parsed.data.currency !== owned.currency;
+    const shop = currencyChanges
+      ? await prisma.$transaction(async (tx) => {
+          const updated = await tx.shop.update({ where: { id }, data: toPrismaData(parsed.data) });
+          // Les zones de livraison sont tarifées dans l'ancienne devise : un
+          // « 1 500 » qui passerait de FCFA à cédis sans relecture serait
+          // un faux prix. Elles sont désactivées jusqu'à ce que le vendeur
+          // les rouvre (l'enregistrement les remet dans la devise courante).
+          await tx.shippingZone.updateMany({
+            where: { shopId: id, currency: { not: updated.currency } },
+            data: { isActive: false },
+          });
+          return updated;
+        })
+      : await prisma.shop.update({
+          where: { id },
+          data: toPrismaData(parsed.data),
+        });
 
     // Ancien ET nouveau slug : en cas de renommage, l'ancienne adresse doit
     // cesser de servir la page en cache.

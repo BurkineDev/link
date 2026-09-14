@@ -103,6 +103,8 @@ export interface OrderItemSnapshot {
   unit_price: number;
   currency: Currency;
   image_url?: string;
+  /** Fichier à télécharger plutôt que colis à livrer (absent sur les anciennes commandes). */
+  is_digital?: boolean;
 }
 
 export interface OrderItem {

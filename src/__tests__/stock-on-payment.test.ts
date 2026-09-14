@@ -347,49 +347,97 @@ describe("transitionOrderStatus — commande WhatsApp non payée", () => {
   });
 });
 
-describe("paiement à la livraison — stock prélevé à la caisse", () => {
+describe("paiement à la livraison — confirmée par le vendeur", () => {
   const OWNER = "66666666-6666-4666-8666-666666666666";
   const cod = (over: Record<string, unknown> = {}) =>
     order({
       paymentProvider: "cash_on_delivery",
-      status: "confirmed",
-      stockReservedAt: new Date("2026-09-13T10:00:00Z"),
+      status: "pending",
+      stockReservedAt: null,
       shop: { ownerId: OWNER },
       ...over,
     });
 
-  test("« Marquer comme payée » à la remise ne prélève pas le stock une seconde fois, rien au registre", async () => {
-    _order = cod({ status: "shipped" });
-    const res = await settlePaidOrder(ORDER, `cash_on_delivery:${OWNER}:1`, "cash_on_delivery");
-    expect(res).toMatchObject({ settled: true, offline: true, commission: 0, stockShortfall: [] });
-    expect(_products[P1]!.stock).toBe(5);
-    expect(_variants[V1]!.stock).toBe(1);
-    expect(tx.product.update).not.toHaveBeenCalled();
-    expect(tx.transactionLedger.createMany).not.toHaveBeenCalled();
-    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "shipped", paymentProvider: "cash_on_delivery" });
+  test("à la caisse rien n'est prélevé ; la confirmation du vendeur prélève le stock sous verrou et le signale", async () => {
+    _order = cod();
+    const res = await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: OWNER });
+    expect(res).toEqual({ updated: true, status: "confirmed", codConfirmed: true, stockShortfall: [] });
+    expect(_products[P1]!.stock).toBe(3);
+    expect(_variants[V1]!.stock).toBe(0);
+    expect(_updates[0]).toMatchObject({ status: "confirmed" });
+    expect(_updates[0]!.stockReservedAt).toBeInstanceOf(Date);
+    expect(_events[0]).toMatchObject({ status: "confirmed", note: null });
   });
 
-  test("le vendeur peut la faire avancer (préparation, expédition) sans encaissement préalable", async () => {
+  test("confirmation avec stock insuffisant : ce qui reste est pris, le manque noté sur la commande", async () => {
+    _products[P1]!.stock = 1;
     _order = cod();
-    expect(await transitionOrderStatus({ orderId: ORDER, status: "processing", actorId: OWNER })).toEqual({
+    const res = await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: OWNER });
+    expect(res).toMatchObject({
       updated: true,
-      status: "processing",
+      codConfirmed: true,
+      stockShortfall: [{ product_id: P1, product_name: "Tissu wax", requested: 2, taken: 1 }],
+    });
+    expect(_products[P1]!.stock).toBe(0);
+    expect(_updates[0]!.stockShortfall).toEqual([{ product_id: P1, variant_id: null, product_name: "Tissu wax", requested: 2, taken: 1 }]);
+    expect(String(_events[0]!.note)).toMatch(/Stock insuffisant à la confirmation/);
+  });
+
+  test("une commande en ligne confirmée à la main ne prélève rien (le règlement s'en charge)", async () => {
+    _order = order({ paymentProvider: "geniuspay", shop: { ownerId: OWNER } });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "confirmed",
     });
     expect(_products[P1]!.stock).toBe(5);
   });
 
-  test("l'annulation rend le stock en rayon et efface la réservation", async () => {
+  test("« Marquer comme payée » à la remise ne prélève pas une seconde fois, rien au registre, l'événement garde le statut", async () => {
+    _order = cod({ status: "shipped", stockReservedAt: new Date("2026-09-13T10:00:00Z") });
+    const res = await settlePaidOrder(ORDER, `cash_on_delivery:${OWNER}:1`, "cash_on_delivery");
+    expect(res).toMatchObject({ settled: true, offline: true, commission: 0, stockShortfall: [] });
+    expect(_products[P1]!.stock).toBe(5);
+    expect(tx.product.update).not.toHaveBeenCalled();
+    expect(tx.transactionLedger.createMany).not.toHaveBeenCalled();
+    expect(_updates[0]).toMatchObject({ paymentStatus: "paid", status: "shipped", paymentProvider: "cash_on_delivery" });
+    expect(_events[0]).toMatchObject({ status: "shipped", publicMessage: "Paiement reçu à la livraison. Merci !" });
+  });
+
+  test("marquée payée sans passer par la confirmation : le stock est prélevé au règlement", async () => {
     _order = cod();
+    expect(await settlePaidOrder(ORDER, `cash_on_delivery:${OWNER}:2`, "cash_on_delivery")).toMatchObject({ settled: true });
+    expect(_products[P1]!.stock).toBe(3);
+  });
+
+  test("l'annulation d'une commande confirmée rend le stock, clôt le paiement et rend le code promo", async () => {
+    _order = cod({ status: "confirmed", stockReservedAt: new Date("2026-09-13T10:00:00Z"), promoCode: "BIENVENUE" });
     expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
       updated: true,
       status: "cancelled",
     });
     expect(_products[P1]!.stock).toBe(7);
-    expect(_updates[0]).toMatchObject({ status: "cancelled", stockReservedAt: null });
-    expect(_events[0]).toMatchObject({ status: "cancelled" });
+    expect(_updates[0]).toEqual({ status: "cancelled", paymentStatus: "failed", stockReservedAt: null });
+    expect(tx.promoCode.updateMany).toHaveBeenCalledWith({
+      where: { shopId: _order.shopId, code: "BIENVENUE", usesCount: { gt: 0 } },
+      data: { usesCount: { decrement: 1 } },
+    });
   });
 
-  test("une commande en ligne en attente annulée ne rend rien (rien n'avait été prélevé)", async () => {
+  test("un colis expédié puis refusé s'annule (non payé) et rend le stock ; une commande payée, non", async () => {
+    _order = cod({ status: "shipped", stockReservedAt: new Date("2026-09-13T10:00:00Z") });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
+      updated: true,
+      status: "cancelled",
+    });
+    expect(_products[P1]!.stock).toBe(7);
+    _order = cod({ status: "shipped", paymentStatus: "paid", stockReservedAt: new Date("2026-09-13T10:00:00Z") });
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
+      updated: false,
+      reason: "paid_order_requires_refund",
+    });
+  });
+
+  test("une commande en ligne en attente annulée ne rend rien (rien n'avait été prélevé) mais clôt le paiement", async () => {
     _order = order({ paymentProvider: "geniuspay", shop: { ownerId: OWNER } });
     expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: OWNER })).toEqual({
       updated: true,
@@ -397,12 +445,13 @@ describe("paiement à la livraison — stock prélevé à la caisse", () => {
     });
     expect(_products[P1]!.stock).toBe(5);
     expect(tx.product.updateMany).not.toHaveBeenCalled();
-    expect(_updates[0]).toEqual({ status: "cancelled" });
+    expect(tx.promoCode.updateMany).not.toHaveBeenCalled();
+    expect(_updates[0]).toEqual({ status: "cancelled", paymentStatus: "failed", stockReservedAt: null });
   });
 
-  test("un autre vendeur ne peut pas l'annuler", async () => {
+  test("un autre vendeur ne peut ni confirmer ni annuler", async () => {
     _order = cod();
-    expect(await transitionOrderStatus({ orderId: ORDER, status: "cancelled", actorId: "someone-else" })).toEqual({
+    expect(await transitionOrderStatus({ orderId: ORDER, status: "confirmed", actorId: "someone-else" })).toEqual({
       updated: false,
       reason: "forbidden",
     });

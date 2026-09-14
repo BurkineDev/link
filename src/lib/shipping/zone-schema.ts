@@ -12,18 +12,49 @@ import { AFRICAN_COUNTRIES } from "@/lib/constants";
 
 const COUNTRY_CODES = new Set<string>(AFRICAN_COUNTRIES.map((c) => c.code));
 
+/** Tous les messages en français : la première erreur est montrée telle quelle au vendeur. */
+const amount = (label: string) =>
+  z
+    .number({ error: `${label} : indique un nombre` })
+    .min(0, `${label} : pas de montant négatif`)
+    .max(100_000_000, `${label} : montant trop élevé`);
+
+const days = (label: string) =>
+  z
+    .number({ error: `${label} : indique un nombre de jours` })
+    .int(`${label} : un nombre de jours entier`)
+    .min(0, `${label} : pas de délai négatif`)
+    .max(90, `${label} : 90 jours au maximum`);
+
 export const shippingZoneSchema = z
   .object({
-    name: z.string().trim().min(2, "Donne un nom à la zone").max(100),
+    name: z
+      .string({ error: "Donne un nom à la zone" })
+      .trim()
+      .min(2, "Donne un nom à la zone")
+      .max(100, "Nom de la zone : 100 caractères au maximum"),
     countries: z
-      .array(z.string().trim().toUpperCase().refine((code) => COUNTRY_CODES.has(code), "Pays inconnu"))
+      .array(
+        z
+          .string({ error: "Pays inconnu" })
+          .trim()
+          .toUpperCase()
+          .refine((code) => COUNTRY_CODES.has(code), "Pays inconnu"),
+        { error: "Choisis au moins un pays" },
+      )
       .min(1, "Choisis au moins un pays")
-      .max(60)
+      .max(60, "Trop de pays")
       .transform((codes) => [...new Set(codes)]),
-    rate: z.number().min(0, "Le tarif ne peut pas être négatif").max(10_000_000),
-    free_above: z.number().min(0).max(100_000_000).nullable().optional().default(null),
-    estimated_min: z.number().int().min(0).max(90).nullable().optional().default(null),
-    estimated_max: z.number().int().min(0).max(90).nullable().optional().default(null),
+    rate: amount("Frais de livraison").max(10_000_000, "Frais de livraison : montant trop élevé"),
+    // « Offerte à partir de » : 0 voudrait dire « toujours offerte », ce
+    // que personne ne veut dire en tapant 0 — c'est « jamais » (null).
+    free_above: amount("Offerte à partir de")
+      .nullable()
+      .optional()
+      .default(null)
+      .transform((value) => (value === 0 ? null : value)),
+    estimated_min: days("Délai minimum").nullable().optional().default(null),
+    estimated_max: days("Délai maximum").nullable().optional().default(null),
     is_active: z.boolean().optional().default(true),
   })
   .superRefine((zone, ctx) => {
@@ -39,6 +70,23 @@ export const shippingZoneSchema = z
       });
     }
   });
+
+/**
+ * Les montants d'une devise sans décimale (FCFA, NGN…) doivent être entiers :
+ * un « 1.500 » lu comme 1,5 franc ne doit pas finir en base. Vérifié là où
+ * la devise est connue (API et formulaire), le schéma ne la connaissant pas.
+ */
+export function zoneAmountIssue(
+  zone: Pick<ShippingZoneInput, "rate" | "free_above">,
+  currencyDecimals: number,
+): string | null {
+  if (currencyDecimals > 0) return null;
+  if (!Number.isInteger(zone.rate)) return "Frais de livraison : un montant entier, sans décimale";
+  if (zone.free_above !== null && !Number.isInteger(zone.free_above)) {
+    return "Offerte à partir de : un montant entier, sans décimale";
+  }
+  return null;
+}
 
 export type ShippingZoneInput = z.infer<typeof shippingZoneSchema>;
 
@@ -56,12 +104,19 @@ export interface ShippingZoneRow {
   currency: string;
 }
 
-/** « 2 à 4 jours », « dès le lendemain », « le jour même »… ou null. */
+/**
+ * Délai tel que l'acheteur le lit sous « Livraison » : ce que le vendeur a
+ * promis, ni plus ni moins. Un seul délai renseigné n'est pas une durée
+ * ferme : « sous 3 jours » (maximum seul), « à partir de 2 jours »
+ * (minimum seul).
+ */
 export function deliveryDelayLabel(min: number | null, max: number | null): string | null {
+  const day = (n: number) => `${n} jour${n > 1 ? "s" : ""}`;
   if (min === null && max === null) return null;
-  const lo = min ?? max ?? 0;
-  const hi = max ?? min ?? 0;
-  if (lo === 0 && hi === 0) return "le jour même";
-  if (lo === hi) return `${lo} jour${lo > 1 ? "s" : ""}`;
-  return `${lo} à ${hi} jours`;
+  if (min === null) return max === 0 ? "le jour même" : `sous ${day(max as number)}`;
+  if (max === null) return min === 0 ? "dès aujourd'hui" : `à partir de ${day(min)}`;
+  if (min === 0 && max === 0) return "le jour même";
+  if (min === 0) return `sous ${day(max)}`;
+  if (min === max) return day(min);
+  return `${min} à ${max} jours`;
 }

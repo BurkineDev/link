@@ -112,6 +112,9 @@ export default async function OrderTrackingPage({
     created_at: d.createdAt.toISOString(),
   })) as DigitalDownloadRow[];
   const items = (order.items ?? []) as unknown as OrderItem[];
+  const cashOnDelivery = order.payment_provider === "cash_on_delivery";
+  const closed = order.status === "cancelled" || order.status === "refunded";
+  const hasDigital = items.some((item) => item.product_snapshot.is_digital === true);
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10 text-foreground">
@@ -130,11 +133,18 @@ export default async function OrderTrackingPage({
             <span className="text-sm">Statut actuel</span>
             <span className="font-semibold">{LABELS[order.status]}</span>
           </div>
-          {/* Paiement à la livraison : l'acheteur sait ce qu'il aura à sortir. */}
-          {order.payment_provider === "cash_on_delivery" && order.payment_status !== "paid" && (
+          {/* Paiement à la livraison : l'acheteur sait où en est le vendeur et
+              ce qu'il aura à sortir — rien de tout ça sur une commande annulée. */}
+          {cashOnDelivery && order.payment_status !== "paid" && !closed && (
             <p className="mt-3 text-sm text-muted-foreground">
+              {order.status === "pending"
+                ? "Le vendeur doit confirmer ta commande avant de préparer le colis. "
+                : ""}
               À régler à la livraison : <strong>{money(order.total_amount, order.currency)}</strong>, en
               espèces ou en Mobile Money.
+              {hasDigital
+                ? " Tes fichiers seront disponibles ici dès que le vendeur aura encaissé la livraison."
+                : ""}
             </p>
           )}
         </header>
@@ -149,6 +159,22 @@ export default async function OrderTrackingPage({
               </li>
             ))}
           </ul>
+          {(order.shipping_amount > 0 || order.discount_amount > 0) && (
+            <div className="mt-3 space-y-1 border-t pt-3 text-sm text-muted-foreground">
+              {order.shipping_amount > 0 && (
+                <div className="flex justify-between">
+                  <span>Livraison</span>
+                  <span>{money(order.shipping_amount, order.currency)}</span>
+                </div>
+              )}
+              {order.discount_amount > 0 && (
+                <div className="flex justify-between">
+                  <span>Remise</span>
+                  <span>−{money(order.discount_amount, order.currency)}</span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="mt-3 flex justify-between border-t pt-4 font-bold">
             <span>Total</span>
             <span>{money(order.total_amount, order.currency)}</span>

@@ -51,13 +51,29 @@ describe("shippingZoneSchema", () => {
 });
 
 describe("deliveryDelayLabel", () => {
-  it("dit la vérité selon ce que le vendeur a renseigné", () => {
+  it("dit la vérité selon ce que le vendeur a renseigné : un seul délai n'est pas une durée ferme", () => {
     expect(deliveryDelayLabel(null, null)).toBeNull();
     expect(deliveryDelayLabel(0, 0)).toBe("le jour même");
     expect(deliveryDelayLabel(1, 1)).toBe("1 jour");
-    expect(deliveryDelayLabel(3, null)).toBe("3 jours");
-    expect(deliveryDelayLabel(null, 5)).toBe("5 jours");
+    expect(deliveryDelayLabel(3, null)).toBe("à partir de 3 jours");
+    expect(deliveryDelayLabel(null, 5)).toBe("sous 5 jours");
+    expect(deliveryDelayLabel(null, 1)).toBe("sous 1 jour");
+    expect(deliveryDelayLabel(0, 2)).toBe("sous 2 jours");
     expect(deliveryDelayLabel(2, 4)).toBe("2 à 4 jours");
+  });
+
+  it("parle français pour chaque contrainte, et lit « offerte dès 0 » comme jamais", () => {
+    const base = { name: "Ouaga", countries: ["BF"], rate: 1500 };
+    const first = (input: unknown) => {
+      const r = shippingZoneSchema.safeParse(input);
+      return r.success ? null : r.error.issues[0]?.message;
+    };
+    expect(first({ ...base, rate: "1500" })).toBe("Frais de livraison : indique un nombre");
+    expect(first({ ...base, free_above: "abc" })).toBe("Offerte à partir de : indique un nombre");
+    expect(first({ ...base, estimated_min: 1.5 })).toBe("Délai minimum : un nombre de jours entier");
+    expect(first({ ...base, estimated_max: 91 })).toBe("Délai maximum : 90 jours au maximum");
+    expect(first({ ...base, countries: "BF" })).toBe("Choisis au moins un pays");
+    expect(shippingZoneSchema.parse({ ...base, free_above: 0 }).free_above).toBeNull();
   });
 });
 
@@ -196,6 +212,15 @@ describe("POST /api/shipping-zones", () => {
     _user = OTHER;
     expect((await POST(req("POST", "/api/shipping-zones", body))).status).toBe(404);
     expect(mockPrisma.shippingZone.create).not.toHaveBeenCalled();
+  });
+
+  it("refuse un tarif décimal dans une devise sans décimale (422, message français)", async () => {
+    const res = await POST(req("POST", "/api/shipping-zones", { ...body, rate: 1.5 }));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/montant entier/);
+    expect(mockPrisma.shippingZone.create).not.toHaveBeenCalled();
+    _shopCurrency = "GHS";
+    expect((await POST(req("POST", "/api/shipping-zones", { ...body, rate: 1.5 }))).status).toBe(201);
   });
 
   it("plafonne à 20 zones par boutique (409)", async () => {

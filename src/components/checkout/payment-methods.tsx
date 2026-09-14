@@ -57,10 +57,12 @@ export function PaymentMethods({
   const mobileMoneyUnavailable = mobileMoneyDisabled || outOfCoverage || wrongCurrency;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="radiogroup" aria-label="Mode de paiement">
       {/* Carte bancaire (Stripe) */}
       <button
         type="button"
+        role="radio"
+        aria-checked={value.type === "card"}
         onClick={() => onChange({ type: "card" })}
         className={cn(
           "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors duration-150",
@@ -70,6 +72,7 @@ export function PaymentMethods({
         )}
       >
         <span
+          aria-hidden="true"
           className={cn(
             "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
             value.type === "card" ? "border-primary bg-primary" : "border-border",
@@ -91,6 +94,8 @@ export function PaymentMethods({
       {/* Mobile Money (Genius Pay) */}
       <button
         type="button"
+        role="radio"
+        aria-checked={value.type === "mobile_money"}
         onClick={() =>
           !mobileMoneyUnavailable && onChange({ type: "mobile_money" })
         }
@@ -104,6 +109,7 @@ export function PaymentMethods({
         )}
       >
         <span
+          aria-hidden="true"
           className={cn(
             "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
             value.type === "mobile_money"
@@ -142,6 +148,8 @@ export function PaymentMethods({
       {cashOnDelivery && (
         <button
           type="button"
+          role="radio"
+          aria-checked={value.type === "cash_on_delivery"}
           onClick={() => onChange({ type: "cash_on_delivery" })}
           className={cn(
             "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors duration-150",
@@ -151,6 +159,7 @@ export function PaymentMethods({
           )}
         >
           <span
+            aria-hidden="true"
             className={cn(
               "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
               value.type === "cash_on_delivery" ? "border-primary bg-primary" : "border-border",
@@ -177,7 +186,10 @@ export function PaymentMethods({
           <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
             Le Mobile Money règle en francs CFA (XOF). Cette boutique vend en{" "}
-            {shopCurrency} : le paiement par carte bancaire fonctionne normalement.
+            {shopCurrency} :{" "}
+            {cashOnDelivery
+              ? "tu peux payer par carte, ou à la livraison."
+              : "le paiement par carte bancaire fonctionne normalement."}
           </p>
         </div>
       )}
@@ -189,8 +201,10 @@ export function PaymentMethods({
           <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
             Notre partenaire Mobile Money ne couvre pas encore
-            {buyerCountryLabel ? ` le ${buyerCountryLabel}` : " ce pays"}. Le
-            paiement par carte bancaire fonctionne normalement.
+            {buyerCountryLabel ? ` le ${buyerCountryLabel}` : " ce pays"}.{" "}
+            {cashOnDelivery
+              ? "Tu peux payer par carte, ou à la livraison."
+              : "Le paiement par carte bancaire fonctionne normalement."}
           </p>
         </div>
       )}
@@ -233,7 +247,8 @@ export function PaymentMethods({
       {value.type === "cash_on_delivery" ? (
         <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
           <Info className="size-3.5 shrink-0" />
-          Rien à payer maintenant : le vendeur prépare ta commande et encaisse à la livraison.
+          Rien à payer maintenant : le vendeur confirme ta commande, prépare le colis et
+          encaisse à la livraison.
         </div>
       ) : (
         <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
