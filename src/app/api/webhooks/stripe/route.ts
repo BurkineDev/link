@@ -11,6 +11,7 @@ import { fromStripeAmount, getStripe } from "@/lib/stripe";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { ops } from "@/lib/ops/events";
+import { summarizeError } from "@/lib/ops/alert";
 import { BOOSTS } from "@/lib/subscription";
 import type {
   BillingInterval,
@@ -45,14 +46,16 @@ export async function POST(request: NextRequest) {
     console.warn("[stripe-webhook] missing signature or webhook secret");
     // Sans secret, chaque événement Stripe (commandes, abonnements, boosts,
     // remboursements, litiges) est refusé : toute la chaîne carte s'arrête.
-    ops.critical({
+    // Une requête sans en-tête n'est pas Stripe (robot) : une trace, pas
+    // un réveil.
+    ops[webhookSecret ? "warning" : "critical"]({
       kind: "webhook.signature_rejected",
-      title: webhookSecret ? "Webhook Stripe sans signature" : "STRIPE_WEBHOOK_SECRET absent : webhooks Stripe refusés",
+      title: webhookSecret ? "Requête sans signature sur le webhook Stripe" : "STRIPE_WEBHOOK_SECRET absent : webhooks Stripe refusés",
       detail: webhookSecret
-        ? "Une requête est arrivée sans en-tête stripe-signature."
+        ? "Probablement un robot : aucun en-tête stripe-signature. Rien à faire si ça reste isolé."
         : "Aucun événement Stripe ne peut être accepté tant que le secret n'est pas posé sur Vercel.",
       context: { provider: "stripe", hasSignature: Boolean(signature), hasSecret: Boolean(webhookSecret) },
-      dedupeKey: "webhook.signature_rejected:stripe",
+      dedupeKey: webhookSecret ? "webhook.signature_rejected:stripe:unsigned" : "webhook.signature_rejected:stripe",
     });
     return new NextResponse(null, { status: 400 });
   }
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
     ops.critical({
       kind: "webhook.handler_error",
       title: `Webhook Stripe en erreur (${event.type})`,
-      detail: `${errorSummary(err)}. Stripe réessaiera pendant trois jours ; si ça persiste, les paiements carte ne sont plus confirmés.`,
+      detail: `${summarizeError(err)}. Stripe réessaiera pendant trois jours ; si ça persiste, les paiements carte ne sont plus confirmés.`,
       context: { provider: "stripe", eventType: event.type, eventId: event.id },
       dedupeKey: `webhook.handler_error:stripe:${event.type}`,
     });
@@ -128,9 +131,6 @@ export async function POST(request: NextRequest) {
   return new NextResponse(null, { status: 200 });
 }
 
-function errorSummary(error: unknown): string {
-  return error instanceof Error ? error.message.split("\n")[0]!.slice(0, 160) : String(error).slice(0, 160);
-}
 
 // ---------------------------------------------------------------------------
 // Remboursements et litiges : contre-passation du net vendeur
@@ -160,8 +160,8 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   if (!result.recorded && result.reason !== "already_recorded") {
     ops.critical({
       kind: "webhook.refund_not_recorded",
-      title: "Remboursement Stripe non contre-passé au registre",
-      detail: `recordOrderRefund a répondu « ${result.reason} » : le net vendeur de cette commande peut rester disponible au reversement alors que Stripe a remboursé.`,
+      title: `Remboursement Stripe non contre-passé — commande #${orderId.slice(0, 8).toUpperCase()}`,
+      detail: `recordOrderRefund a répondu « ${result.reason} » : le net vendeur de cette commande peut rester disponible au reversement alors que Stripe a remboursé. Vérifie le registre de la boutique avant tout reversement.`,
       context: { provider: "stripe", orderId, chargeId: charge.id, refundedTotal, reason: result.reason },
       dedupeKey: `webhook.refund_not_recorded:${orderId}`,
     });
@@ -200,7 +200,7 @@ async function handleDispute(
     // doit le voir tout de suite, avec ou sans retenue enregistrée.
     ops.critical({
       kind: "webhook.dispute_opened",
-      title: "Litige carte ouvert sur une commande",
+      title: `Litige carte ouvert — commande #${orderId.slice(0, 8).toUpperCase()}`,
       detail: `L'acheteur conteste ${amount} ${dispute.currency.toUpperCase()}. Réponds dans Stripe avant la date limite ; la retenue sur le net vendeur ${result.recorded ? "est enregistrée" : `n'a PAS été enregistrée (${result.reason})`}.`,
       context: { provider: "stripe", orderId, disputeId: dispute.id, amount, currency: dispute.currency, reason: dispute.reason, recorded: result.recorded },
       dedupeKey: `webhook.dispute:${dispute.id}`,
@@ -217,7 +217,7 @@ async function handleDispute(
   if (dispute.status === "lost") {
     ops.critical({
       kind: "webhook.dispute_lost",
-      title: "Litige carte perdu",
+      title: `Litige carte perdu — commande #${orderId.slice(0, 8).toUpperCase()}`,
       detail: "Stripe a tranché en faveur de l'acheteur : montant et frais de litige sont débités du compte Bio-Lien ; la retenue sur le net vendeur reste acquise.",
       context: { provider: "stripe", orderId, disputeId: dispute.id, amount: fromStripeAmount(dispute.amount, dispute.currency), currency: dispute.currency },
       dedupeKey: `webhook.dispute_lost:${dispute.id}`,
@@ -243,8 +243,8 @@ async function handleOrderCheckoutEvent(
       ops.critical({
         kind: "webhook.order_not_found",
         title: "Paiement Stripe encaissé sans identifiant de commande",
-        detail: "La session Stripe est payée mais ne porte pas d'orderId : aucune commande ne sera réglée. Retrouve la session dans Stripe et règle (ou rembourse) à la main.",
-        context: { provider: "stripe", sessionId: session.id, amount: session.amount_total, currency: session.currency },
+        detail: "La session Stripe est payée mais ne porte pas d'orderId : aucune commande ne sera réglée. Retrouve la session dans Stripe et rembourse l'acheteur depuis là.",
+        context: { provider: "stripe", sessionId: session.id, amount: stripeMajor(session), currency: session.currency?.toUpperCase() },
         dedupeKey: `webhook.order_not_found:stripe:${session.id}`,
       });
     }
@@ -262,8 +262,8 @@ async function handleOrderCheckoutEvent(
       ops.critical({
         kind: "webhook.order_not_found",
         title: "Paiement Stripe encaissé pour une commande introuvable",
-        detail: "La session est payée mais la commande n'existe pas en base : à rapprocher (et rembourser) à la main.",
-        context: { provider: "stripe", sessionId: session.id, orderId, amount: session.amount_total, currency: session.currency },
+        detail: "La session est payée mais la commande n'existe pas en base : retrouve la session dans Stripe et rembourse l'acheteur depuis là.",
+        context: { provider: "stripe", sessionId: session.id, orderId, amount: stripeMajor(session), currency: session.currency?.toUpperCase() },
         dedupeKey: `webhook.order_not_found:stripe:${orderId}`,
       });
     }
@@ -276,11 +276,11 @@ async function handleOrderCheckoutEvent(
     // sera livré, le fondateur doit trancher.
     if (completedAndPaid && order.paymentStatus === "failed") {
       ops.critical({
-        kind: "webhook.late_payment",
-        title: "Paiement Stripe reçu sur une commande annulée",
-        detail: "La session a été payée après l'annulation de la commande (expirée ou échouée). Rien n'a été livré ni réservé : rembourse l'acheteur ou règle la commande à la main si le vendeur peut livrer.",
-        context: { provider: "stripe", orderId: order.id, sessionId: session.id, amount: session.amount_total, currency: session.currency },
-        dedupeKey: `webhook.late_payment:${order.id}`,
+        kind: "payment.late_after_cancel",
+        title: `Paiement Stripe reçu sur une commande annulée — #${order.id.slice(0, 8).toUpperCase()}`,
+        detail: "La session a été payée après l'annulation de la commande (expirée ou échouée) : rien n'est réservé, personne ne livrera. Rembourse depuis Stripe, ou préviens le vendeur pour qu'il livre et marque la commande payée depuis ses Commandes.",
+        context: { provider: "stripe", orderId: order.id, sessionId: session.id, amount: stripeMajor(session), currency: session.currency?.toUpperCase() },
+        dedupeKey: `payment.late_after_cancel:${order.id}`,
       });
     }
     return;
@@ -299,11 +299,11 @@ async function handleOrderCheckoutEvent(
       );
       if (session.payment_status === "paid") {
         ops.critical({
-          kind: "webhook.amount_mismatch",
-          title: "Paiement Stripe d'un montant inattendu",
-          detail: `Stripe confirme ${paidAmount ?? "?"} ${session.currency?.toUpperCase() ?? ""} pour une commande de ${Number(order.totalAmount)} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+          kind: "payment.amount_mismatch",
+          title: `Paiement Stripe d'un montant inattendu — commande #${order.id.slice(0, 8).toUpperCase()}`,
+          detail: `Stripe confirme ${paidAmount ?? "?"} ${session.currency?.toUpperCase() ?? ""} pour une commande de ${Number(order.totalAmount)} ${order.currency}. La commande reste en attente : rembourse depuis Stripe, ou demande au vendeur de la marquer payée depuis ses Commandes s'il accepte ce montant.`,
           context: { provider: "stripe", orderId: order.id, sessionId: session.id, received: paidAmount, receivedCurrency: session.currency, expected: Number(order.totalAmount), expectedCurrency: order.currency },
-          dedupeKey: `webhook.amount_mismatch:${order.id}`,
+          dedupeKey: `payment.amount_mismatch:${order.id}`,
         });
       }
       return;
@@ -412,7 +412,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     ops.critical({
       kind: "webhook.payment_failed_unrecorded",
       title: "Impayé d'abonnement Stripe non enregistré",
-      detail: `Le passage en « past_due » a échoué (${errorSummary(error)}) : ce vendeur garde son plan payant sans avoir payé.`,
+      detail: `Le passage en « past_due » a échoué (${summarizeError(error)}) : ce vendeur garde son plan payant sans avoir payé.`,
       context: { provider: "stripe", customerId, invoiceId: invoice.id },
       dedupeKey: `webhook.payment_failed_unrecorded:${customerId}`,
     });
@@ -600,4 +600,10 @@ function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus
     default:
       return "incomplete";
   }
+}
+
+/** Montant d'une session dans l'unité de la devise (Stripe compte en centimes). */
+function stripeMajor(session: Stripe.Checkout.Session): number | null {
+  if (session.amount_total === null || !session.currency) return null;
+  return fromStripeAmount(session.amount_total, session.currency);
 }

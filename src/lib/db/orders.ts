@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { claimStock, type StockShortfall } from "@/lib/db/stock";
-import { ops } from "@/lib/ops/events";
+import { recordOpsEvent } from "@/lib/ops/events";
 import {
   Prisma,
   type PaymentProvider,
@@ -270,9 +270,10 @@ export async function settlePaidOrder(
   // e-mail, qui le renvoie vers l'équipe pour un remboursement — l'équipe
   // doit donc le savoir aussi, au rapport du matin.
   if (result.settled && result.stockShortfall.length > 0) {
-    ops.warning({
+    await recordOpsEvent({
       kind: "order.stock_shortfall",
-      title: "Commande réglée avec un manque de stock",
+      severity: "warning",
+      title: `Commande #${orderId.slice(0, 8).toUpperCase()} réglée avec un manque de stock`,
       detail: "Le stock ne couvrait pas tout au moment du règlement ; le vendeur doit livrer partiellement ou demander un remboursement à l'équipe.",
       context: {
         orderId,

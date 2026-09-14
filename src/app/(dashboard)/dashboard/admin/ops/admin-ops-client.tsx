@@ -86,12 +86,21 @@ function ContextTable({ context }: { context: Record<string, unknown> | null }) 
 export function AdminOpsClient({
   health,
   open,
+  openTotal,
   recent,
+  traces,
+  journalError,
   lastRun,
 }: {
   health: HealthSnapshot;
   open: OpsEventView[];
+  /** Total des alertes ouvertes (la liste est bornée). */
+  openTotal: number;
   recent: OpsEventView[];
+  /** Traces (info) récentes : reversements demandés, etc. */
+  traces: OpsEventView[];
+  /** La base n'a pas répondu : les listes sont vides pour cette raison. */
+  journalError: string | null;
   lastRun: { at: string; context: Record<string, unknown> | null } | null;
 }) {
   const router = useRouter();
@@ -164,30 +173,47 @@ export function AdminOpsClient({
             }
           />
           <HealthLine
-            ok={health.cron.lastRunAt === null ? null : !health.cron.stale}
+            ok={health.cron.stale ? false : health.cron.lastRunAt === null ? null : true}
             icon={Clock}
             label="Cron quotidien"
             value={
               health.cron.lastRunAt
                 ? `Dernier passage le ${formatDateTime(health.cron.lastRunAt)}${health.cron.stale ? " — en retard (plus de 26 h)" : ""}`
-                : "Jamais exécuté depuis l'installation du journal"
+                : health.cron.stale
+                  ? "Jamais exécuté, et le journal existe depuis plus de 26 h : vérifie le cron sur Vercel"
+                  : "Jamais exécuté depuis l'installation du journal (premier passage attendu à 3 h UTC)"
             }
           />
           <HealthLine
-            ok={health.email.configured}
+            ok={health.email.configured && !health.email.dead}
             icon={Mail}
             label="E-mail (Resend)"
-            value={health.email.configured ? "Configuré" : "RESEND_API_KEY ou EMAIL_FROM manquant"}
+            value={
+              !health.email.configured
+                ? "RESEND_API_KEY ou EMAIL_FROM manquant"
+                : health.email.dead
+                  ? "Resend a refusé un envoi dans les dernières 26 h (voir l'alerte)"
+                  : "Configuré"
+            }
           />
         </CardContent>
       </Card>
+
+      {journalError && (
+        <p className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+          Le journal n&apos;a pas pu être lu ({journalError}) : les listes ci-dessous sont vides pour
+          cette raison, pas parce que tout va bien.
+        </p>
+      )}
 
       {/* Alertes ouvertes */}
       <Card>
         <CardHeader>
           <CardTitle>
             Alertes à traiter{" "}
-            <span className="text-muted-foreground">({open.length})</span>
+            <span className="text-muted-foreground">
+              ({openTotal}{openTotal > open.length ? `, ${open.length} affichées` : ""})
+            </span>
           </CardTitle>
           <CardDescription>
             Une alerte marquée traitée ne revient que si le problème se reproduit. Même problème
@@ -255,6 +281,27 @@ export function AdminOpsClient({
           )}
         </CardContent>
       </Card>
+
+      {/* Traces */}
+      {traces.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Traces récentes</CardTitle>
+            <CardDescription>Informations sans action attendue (reversements demandés, etc.).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border text-sm">
+              {traces.map((event) => (
+                <li key={event.id} className="flex flex-wrap items-center gap-2 py-2">
+                  <code className="text-xs text-muted-foreground">{event.kind}</code>
+                  <span className="min-w-0 flex-1 truncate">{event.title}</span>
+                  <span className="text-xs text-muted-foreground">{formatDateTime(event.last_seen_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Historique */}
       {recent.length > 0 && (

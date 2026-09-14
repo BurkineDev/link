@@ -34,16 +34,17 @@ jest.mock("@/lib/ops/events", () => ({
   }),
   ops: { critical: jest.fn(), warning: jest.fn(), info: jest.fn() },
   recordOpsEventAfterResponse: jest.fn(),
+  purgeOpsEvents: jest.fn(async () => 0),
 }));
 const mockDigest = jest.fn(async () => ({ sent: 1, skipped: null }));
 jest.mock("@/lib/ops/digest", () => ({ sendDailyDigest: (...args: unknown[]) => mockDigest(...(args as [])) }));
 
 import { GET } from "@/app/api/cron/reconcile-orders/route";
 
-function call(auth?: string) {
+function call(auth?: string, userAgent?: string) {
   return GET(
     new NextRequest("http://localhost:3000/api/cron/reconcile-orders", {
-      headers: auth ? { authorization: auth } : {},
+      headers: { ...(auth ? { authorization: auth } : {}), ...(userAgent ? { "user-agent": userAgent } : {}) },
     }),
   );
 }
@@ -70,10 +71,12 @@ describe("GET /api/cron/reconcile-orders", () => {
     expect(mockDigest).not.toHaveBeenCalled();
   });
 
-  test("mauvais secret : 401 et trace « à surveiller », sans rien exécuter", async () => {
-    const res = await call("Bearer nope");
-    expect(res.status).toBe(401);
-    expect(_events).toEqual([expect.objectContaining({ kind: "cron.unauthorized", severity: "warning" })]);
+  test("mauvais secret : 401 ; un robot ne laisse rien, Vercel Cron refusé est critique", async () => {
+    expect((await call("Bearer nope")).status).toBe(401);
+    expect((await call(undefined, "Mozilla/5.0 scanner")).status).toBe(401);
+    expect(_events).toEqual([]);
+    expect((await call("Bearer nope", "vercel-cron/1.0")).status).toBe(401);
+    expect(_events).toEqual([expect.objectContaining({ kind: "cron.unauthorized", severity: "critical" })]);
     expect(mockDigest).not.toHaveBeenCalled();
   });
 

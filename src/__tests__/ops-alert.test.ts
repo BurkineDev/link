@@ -6,7 +6,10 @@
 // Les modules de santé et de rapport importent le client Prisma (non
 // chargeable sous Jest) : on ne teste ici que leurs fonctions pures.
 jest.mock("@/lib/prisma", () => ({ prisma: {} }));
-jest.mock("@/lib/email", () => ({ sendTransactionalEmail: jest.fn(), escapeEmailHtml: (v: string) => v }));
+jest.mock("@/lib/email", () => {
+  const actual = jest.requireActual("@/lib/email") as { classifyResendError: unknown };
+  return { sendTransactionalEmail: jest.fn(), escapeEmailHtml: (v: string) => v, classifyResendError: actual.classifyResendError };
+});
 
 import {
   ALERT_REPEAT_MS,
@@ -37,14 +40,14 @@ describe("règles d'envoi", () => {
   test("la famille sert de clé par défaut", () => {
     expect(effectiveDedupeKey({ kind: "email.dead" })).toBe("email.dead");
     expect(effectiveDedupeKey({ kind: "email.dead", dedupeKey: "  " })).toBe("email.dead");
-    expect(effectiveDedupeKey({ kind: "webhook.late_payment", dedupeKey: "webhook.late_payment:o1" })).toBe("webhook.late_payment:o1");
+    expect(effectiveDedupeKey({ kind: "payment.late_after_cancel", dedupeKey: "payment.late_after_cancel:o1" })).toBe("payment.late_after_cancel:o1");
     expect(hourBucket(new Date("2026-09-14T03:59:59Z"))).toBe("2026-09-14T03");
   });
 });
 
 describe("formatAlertEmail", () => {
   const event = {
-    kind: "webhook.late_payment" as const,
+    kind: "payment.late_after_cancel" as const,
     severity: "critical" as const,
     title: "Paiement reçu sur une commande annulée",
     detail: "Rembourse l'acheteur <script>.",
@@ -123,7 +126,7 @@ describe("formatDigestEmail", () => {
       migrations: { ok: true, pending: [], latest: "20260914020000_ops_events", embedded: 6 },
       cron: { lastRunAt: null, stale: false, enforced: true },
       alerts: { openCritical: 0, openWarning: 0 },
-      email: { configured: true },
+      email: { configured: true, dead: false },
     },
     cron: {
       reconcile: { checked: 3, paid: 1, failed: 1, stillPending: 1, errors: 0 },
@@ -141,7 +144,7 @@ describe("formatDigestEmail", () => {
 
   test("tout va bien : le sujet le dit, les chiffres sont là", () => {
     const mail = formatDigestEmail(base);
-    expect(mail.subject).toBe("Bio-Lien — rapport du 2026-09-14 : Tout va bien");
+    expect(mail.subject).toBe("✅ Tout va bien — rapport Bio-Lien du 14 sept.");
     expect(mail.text).toContain("2 ventes réglées : 17");
     expect(mail.text).toContain("4 commandes créées");
     expect(mail.text).toContain("1 reversement à exécuter (le plus ancien : 3 j)");
@@ -156,14 +159,14 @@ describe("formatDigestEmail", () => {
       ...base,
       health: { ...base.health, ok: false, migrations: { ok: false, pending: ["20260914020000_ops_events"], latest: "x", embedded: 6 } },
       openEvents: [
-        { id: "1", kind: "webhook.late_payment", severity: "critical", title: "Paiement tardif", occurrences: 2, lastSeenAt: base.window.to },
+        { id: "1", kind: "payment.late_after_cancel", severity: "critical", title: "Paiement tardif", occurrences: 2, lastSeenAt: base.window.to },
         { id: "2", kind: "notification.failed", severity: "warning", title: "Vendeur non prévenu", occurrences: 1, lastSeenAt: base.window.to },
       ],
       cron: { ...base.cron!, payouts: { stale: -1, reminded: 0 } },
     });
-    expect(mail.subject).toContain("Santé : problème détecté");
+    expect(mail.subject).toMatch(/^⚠️ Santé : problème détecté — rapport/);
     expect(mail.text).toContain("Migrations : EN RETARD — 20260914020000_ops_events");
-    expect(mail.text).toContain("🔴 Paiement tardif (×2) — webhook.late_payment");
+    expect(mail.text).toContain("🔴 Paiement tardif (×2) — payment.late_after_cancel");
     expect(mail.text).toContain("🟠 Vendeur non prévenu — notification.failed");
     expect(mail.text).toContain("Reversements en retard : étape en échec");
 
@@ -172,5 +175,33 @@ describe("formatDigestEmail", () => {
       openEvents: [{ id: "1", kind: "x", severity: "critical", title: "T", occurrences: 1, lastSeenAt: base.window.to }],
     });
     expect(critical.subject).toContain("1 alerte critique à traiter");
+  });
+});
+
+describe("classifyResendError", () => {
+  test("seules les pannes du canal comptent comme « mort » ; adresse refusée, idempotence, débit : non", async () => {
+    const { classifyResendError } = await import("@/lib/email");
+    expect(classifyResendError("validation_error")).toBe("single");
+    expect(classifyResendError("invalid_idempotent_request")).toBe("single");
+    expect(classifyResendError("concurrent_idempotent_requests")).toBe("single");
+    expect(classifyResendError("rate_limit_exceeded")).toBe("rate_limited");
+    expect(classifyResendError("invalid_api_key")).toBe("dead");
+    expect(classifyResendError("daily_quota_exceeded")).toBe("dead");
+    expect(classifyResendError("internal_server_error")).toBe("dead");
+    expect(classifyResendError(undefined)).toBe("dead");
+  });
+});
+
+describe("summarizeError / safeToken", () => {
+  test("première ligne utile, code Prisma en tête, URL de connexion masquée", async () => {
+    const { summarizeError, safeToken } = await import("@/lib/ops/alert");
+    expect(summarizeError(Object.assign(new Error("\nInvalid `prisma.order.findUnique()` invocation\n\ncolumn missing"), { code: "P2022" }))).toBe(
+      "P2022 Invalid `prisma.order.findUnique()` invocation",
+    );
+    expect(summarizeError(new Error("can't reach postgresql://user:pw@ep-x.neon.tech/db"))).toBe("can't reach postgresql://…");
+    expect(summarizeError("x".repeat(500)).length).toBe(160);
+    expect(safeToken("payment.success")).toBe("payment.success");
+    expect(safeToken("<script>alert(1)</script>")).toBe("(valeur inattendue)");
+    expect(safeToken(null)).toBeNull();
   });
 });

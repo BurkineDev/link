@@ -51,14 +51,36 @@ export async function sendTransactionalEmail(message: TransactionalEmail) {
   }
 
   if (outcome.error) {
-    // Un refus d'adresse (validation_error) n'est pas une panne du canal ;
-    // une clé invalide, un quota atteint ou une panne Resend, si.
-    if (outcome.error.name !== "validation_error") {
-      reportDeadChannel(message, `${outcome.error.name} : ${outcome.error.message}`);
-    }
+    const verdict = classifyResendError(outcome.error.name);
+    if (verdict === "dead") reportDeadChannel(message, `${outcome.error.name} : ${outcome.error.message}`);
+    else if (verdict === "rate_limited") reportRateLimited(message, outcome.error.message);
     throw new Error(outcome.error.message);
   }
   return { skipped: false as const, id: outcome.data?.id };
+}
+
+/**
+ * Tous les refus de Resend ne sont pas une panne du canal : une adresse
+ * refusée ou une clé d'idempotence réutilisée ne concernent que cet envoi ;
+ * un dépassement de débit passe ; une clé invalide, un quota atteint, une
+ * panne chez Resend, si.
+ */
+export function classifyResendError(name: string | undefined): "dead" | "rate_limited" | "single" {
+  switch (name) {
+    case "validation_error":
+    case "missing_required_field":
+    case "invalid_parameter":
+    case "not_found":
+    case "method_not_allowed":
+    case "invalid_idempotency_key":
+    case "invalid_idempotent_request":
+    case "concurrent_idempotent_requests":
+      return "single";
+    case "rate_limit_exceeded":
+      return "rate_limited";
+    default:
+      return "dead";
+  }
 }
 
 /**
@@ -69,20 +91,47 @@ export async function sendTransactionalEmail(message: TransactionalEmail) {
  */
 function reportDeadChannel(message: TransactionalEmail, reason: string): void {
   if (message.idempotencyKey?.startsWith("ops-")) return;
-  // Import différé : le module d'alertes envoie des e-mails, un import
-  // statique ferait un cycle.
-  void import("@/lib/ops/events")
-    .then(({ recordOpsEvent }) =>
-      recordOpsEvent({
-        kind: "email.dead",
-        severity: "critical",
-        title: "Envoi d'e-mail en échec (Resend)",
-        detail: `${reason.slice(0, 200)} — commandes, reversements et vérifications de compte n'arrivent plus. Vérifie la clé Resend, le quota du plan et le domaine d'envoi.`,
-        context: { subject: message.subject.slice(0, 120), to: message.to.replace(/^(.).*(@.*)$/, "$1…$2") },
-        dedupeKey: "email.dead",
-      }),
+  reportViaOps({
+    kind: "email.dead",
+    severity: "critical",
+    title: "Envoi d'e-mail en échec (Resend)",
+    detail: `${reason.slice(0, 200)} — commandes, reversements et vérifications de compte n'arrivent plus. Vérifie la clé Resend, le quota du plan et le domaine d'envoi.`,
+    context: { subject: message.subject.slice(0, 120), to: message.to.replace(/^(.).*(@.*)$/, "$1…$2") },
+    dedupeKey: "email.dead",
+  });
+}
+
+function reportRateLimited(message: TransactionalEmail, reason: string): void {
+  if (message.idempotencyKey?.startsWith("ops-")) return;
+  reportViaOps({
+    kind: "email.rate_limited",
+    severity: "warning",
+    title: "Resend limite le débit : un e-mail n'est pas parti",
+    detail: `${reason.slice(0, 200)} — envois trop rapprochés (ou plafond du plan). Si ça se répète, espace les envois ou passe au plan supérieur.`,
+    context: { subject: message.subject.slice(0, 120) },
+    dedupeKey: "email.rate_limited",
+  });
+}
+
+function reportViaOps(input: {
+  kind: string;
+  severity: "critical" | "warning";
+  title: string;
+  detail: string;
+  context: Record<string, unknown>;
+  dedupeKey: string;
+}): void {
+  // Import différé (le module d'alertes envoie des e-mails : un import
+  // statique ferait un cycle) et exécution après la réponse : une promesse
+  // simplement détachée peut être gelée par Vercel dès le 200 renvoyé.
+  Promise.all([import("@/lib/ops/events"), import("@/lib/after-response")])
+    .then(([{ recordOpsEvent }, { scheduleAfterResponse }]) =>
+      scheduleAfterResponse(
+        () => recordOpsEvent(input),
+        (error) => console.error("[email] impossible de signaler le canal", error),
+      ),
     )
-    .catch((error) => console.error("[email] impossible de signaler le canal mort", error));
+    .catch((error) => console.error("[email] impossible de signaler le canal", error));
 }
 
 export function escapeEmailHtml(value: string) {

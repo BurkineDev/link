@@ -238,7 +238,7 @@ describe("POST /api/webhooks/stripe", () => {
     expect(res.status).toBe(200);
     expect(_settleResult).toBeNull();
     expect(mockOps.critical).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "webhook.late_payment", dedupeKey: `webhook.late_payment:${ORDER_ID}` }),
+      expect.objectContaining({ kind: "payment.late_after_cancel", dedupeKey: `payment.late_after_cancel:${ORDER_ID}` }),
     );
   });
 
@@ -249,7 +249,7 @@ describe("POST /api/webhooks/stripe", () => {
     expect(_updateResult).toBeNull();
     expect(mockNotify).not.toHaveBeenCalled();
     expect(mockOps.critical).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "webhook.amount_mismatch", context: expect.objectContaining({ received: 5000, expected: 10000 }) }),
+      expect.objectContaining({ kind: "payment.amount_mismatch", context: expect.objectContaining({ received: 5000, expected: 10000 }) }),
     );
   });
 

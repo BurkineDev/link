@@ -12,7 +12,8 @@ import { getHealth, type HealthSnapshot } from "./health";
  * Le rapport quotidien du fondateur, envoyé à la fin du cron de 03:00.
  *
  * C'est le battement de cœur : s'il n'arrive pas, c'est que le cron n'a
- * pas tourné (ou que Resend est mort — et dans ce cas /api/health le dit).
+ * pas tourné, ou que Resend est mort — dans les deux cas /api/health
+ * répond 503 (cron muet, canal e-mail marqué mort).
  * Il résume ce qui s'est passé en 24 h, ce qui reste à traiter, et ce que
  * le cron vient de faire.
  */
@@ -66,11 +67,13 @@ export async function buildDigest(
         where: { lastSeenAt: { gte: since }, kind: { not: "cron.run" } },
         _count: { _all: true },
       }),
-      prisma.order.groupBy({
+      // Les ventes réglées dans la fenêtre : la ligne « gross » du registre,
+      // écrite au règlement (updated_at bougerait à chaque changement de statut).
+      prisma.transactionLedger.groupBy({
         by: ["currency"],
-        where: { paymentStatus: "paid", updatedAt: { gte: since } },
+        where: { type: "gross", createdAt: { gte: since } },
         _count: { _all: true },
-        _sum: { totalAmount: true },
+        _sum: { amount: true },
       }),
       prisma.order.count({ where: { createdAt: { gte: since } } }),
       prisma.order.count({
@@ -93,12 +96,8 @@ export async function buildDigest(
         count: await prisma.payout.count({ where: { status: { in: [...OPEN_PAYOUT_STATUSES] } } }),
         oldest: oldest[0]?.createdAt ?? null,
       })),
-      // Filtre JSON « non nul » : en SQL, le client Prisma n'exprime pas
-      // `is not null` sur un Json sans importer une valeur du client généré.
-      prisma.$queryRaw<Array<{ count: bigint | number }>>`
-        select count(*)::int as count from public.orders
-        where stock_shortfall is not null and updated_at >= ${since}
-      `.then((rows) => Number(rows[0]?.count ?? 0)),
+      // Manques de stock signalés au règlement dans la fenêtre.
+      prisma.opsEvent.count({ where: { kind: "order.stock_shortfall", firstSeenAt: { gte: since } } }),
     ]);
 
   return {
@@ -119,7 +118,7 @@ export async function buildDigest(
       .sort((a, b) => b.count - a.count),
     sales: {
       paidOrders: paidRows.reduce((sum, row) => sum + row._count._all, 0),
-      byCurrency: paidRows.map((row) => ({ currency: row.currency, total: Number(row._sum.totalAmount ?? 0) })),
+      byCurrency: paidRows.map((row) => ({ currency: row.currency, total: Number(row._sum.amount ?? 0) })),
     },
     ordersCreated,
     offlineAwaiting: { count: offlinePending, expiringSoon: offlineExpiring },
@@ -137,6 +136,12 @@ function appUrl(path: string) {
 }
 
 const MARK: Record<OpsSeverity, string> = { info: "🔵", warning: "🟠", critical: "🔴" };
+
+/** « 14 sept. » plutôt que 2026-09-14 dans un objet lu sur téléphone. */
+function shortDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
+}
 
 /** Sujet et corps du rapport ; pur, testable. */
 export function formatDigestEmail(data: DigestData): { subject: string; text: string; html: string } {
@@ -217,10 +222,10 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
   const section = (title: string, lines: string[]) =>
     `<h2 style="font-size:15px;margin:20px 0 6px">${escapeEmailHtml(title)}</h2><ul style="margin:0;padding-left:18px">${lines.map((l) => `<li>${escapeEmailHtml(l)}</li>`).join("")}</ul>`;
 
-  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><p style="font-size:13px;color:#5c5670">Rapport quotidien · ${escapeEmailHtml(data.date)}</p><h1 style="font-size:20px">${escapeEmailHtml(headline)}</h1>${section("Santé", healthLines)}${section("Dernières 24 h", [salesLine, `${data.ordersCreated} commande(s) créée(s).`, ...newLines])}${section("À faire", todoLines.length ? todoLines : ["Rien en attente."])}${section("Alertes ouvertes", eventLines.length ? eventLines : ["Aucune."])}${section("Passage du cron", cronLines)}<p style="margin-top:24px"><a href="${escapeEmailHtml(adminUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Ouvrir l'écran Santé</a></p><p style="color:#5c5670;font-size:12px">Ce rapport part chaque nuit à la fin du cron. S'il n'arrive pas, c'est que le cron n'a pas tourné : regarde /api/health.</p></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><p style="font-size:13px;color:#5c5670">Rapport quotidien · ${escapeEmailHtml(data.date)}</p><h1 style="font-size:20px">${escapeEmailHtml(headline)}</h1>${section("Santé", healthLines)}${section("Dernières 24 h", [salesLine, `${data.ordersCreated} commande(s) créée(s).`, ...newLines])}${section("À faire", todoLines.length ? todoLines : ["Rien en attente."])}${section("Alertes ouvertes", eventLines.length ? eventLines : ["Aucune."])}${section("Passage du cron", cronLines)}<p style="margin-top:24px"><a href="${escapeEmailHtml(adminUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Ouvrir l'écran Santé</a></p><p style="color:#5c5670;font-size:12px">Ce rapport part chaque nuit à la fin du cron. S'il n'arrive pas, c'est que le cron n'a pas tourné ou que l'e-mail est en panne : /api/health le dit.</p></div>`;
 
   return {
-    subject: `Bio-Lien — rapport du ${data.date} : ${headline.replace(/^[^\w\dÀ-ÿ]+/u, "")}`,
+    subject: `${headline} — rapport Bio-Lien du ${shortDate(data.date)}`,
     text,
     html,
   };
@@ -245,7 +250,7 @@ export async function sendDailyDigest(
   const message = formatDigestEmail(data);
   const results = await Promise.allSettled(
     admins.map((to) =>
-      sendTransactionalEmail({ to, ...message, idempotencyKey: `ops-digest/${data.date}/${to}` }),
+      sendTransactionalEmail({ to, ...message, idempotencyKey: `ops-digest/${data.window.to}/${to}` }),
     ),
   );
   let sent = 0;

@@ -206,11 +206,11 @@ export async function GET(request: NextRequest) {
       if (nextStatus === "paid" && (!amountOk || !currencyOk)) {
         console.warn("[verify] Genius Pay mismatch for order:", order.id);
         ops.critical({
-          kind: "webhook.amount_mismatch",
-          title: "Paiement Genius Pay d'un montant inattendu (page de succès)",
-          detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+          kind: "payment.amount_mismatch",
+          title: `Paiement Genius Pay d'un montant inattendu — commande #${order.id.slice(0, 8).toUpperCase()}`,
+          detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : rembourse la transaction depuis Genius Pay, ou demande au vendeur de la marquer payée depuis ses Commandes s'il accepte ce montant.`,
           context: { provider: "geniuspay", orderId: order.id, reference: payment.reference, received: payment.amount, receivedCurrency: payment.currency, expected: order.total_amount, expectedCurrency: order.currency },
-          dedupeKey: `webhook.amount_mismatch:${order.id}`,
+          dedupeKey: `payment.amount_mismatch:${order.id}`,
         });
         return NextResponse.json(
           { error: "Le montant ou la devise ne correspond pas à la commande.", code: "AMOUNT_MISMATCH" },
@@ -278,11 +278,11 @@ export async function GET(request: NextRequest) {
     if (isPaid && (!amountOk || !currencyOk)) {
       console.warn("[verify] Stripe amount/currency mismatch for order:", order.id);
       ops.critical({
-        kind: "webhook.amount_mismatch",
-        title: "Paiement Stripe d'un montant inattendu (page de succès)",
-        detail: `Stripe confirme ${paidAmount ?? "?"} ${session.currency?.toUpperCase() ?? ""} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : à régler ou rembourser à la main.`,
+        kind: "payment.amount_mismatch",
+        title: `Paiement Stripe d'un montant inattendu — commande #${order.id.slice(0, 8).toUpperCase()}`,
+        detail: `Stripe confirme ${paidAmount ?? "?"} ${session.currency?.toUpperCase() ?? ""} pour une commande de ${order.total_amount} ${order.currency}. La commande reste en attente : rembourse depuis Stripe, ou demande au vendeur de la marquer payée depuis ses Commandes s'il accepte ce montant.`,
         context: { provider: "stripe", orderId: order.id, sessionId: session.id, received: paidAmount, receivedCurrency: session.currency, expected: order.total_amount, expectedCurrency: order.currency },
-        dedupeKey: `webhook.amount_mismatch:${order.id}`,
+        dedupeKey: `payment.amount_mismatch:${order.id}`,
       });
       return NextResponse.json(
         { error: "Le montant ou la devise du paiement ne correspond pas à la commande.", code: "AMOUNT_MISMATCH" },
@@ -337,14 +337,22 @@ async function settledResponse(
     return NextResponse.json({ error: "Commande introuvable." }, { status: 404 });
   }
 
-  // `not_pending` : la commande a été annulée (expirée, échouée) avant que
-  // le paiement soit confirmé. L'acheteur a payé ; rien n'est réservé.
+  // Une commande remboursée (en tout ou partie) reste « payée » chez le
+  // prestataire : l'acheteur qui rouvre la page voit son état réel, sans
+  // fausse alerte.
+  if (order.payment_status === "refunded" || order.payment_status === "partially_refunded") {
+    return NextResponse.json({ order: await withShop(order) });
+  }
+
+  // `not_pending` sur une commande échouée : elle a été annulée (expirée,
+  // échouée) avant que le paiement soit confirmé. L'acheteur a payé ;
+  // rien n'est réservé.
   ops.critical({
     kind: "payment.late_after_cancel",
-    title: `Paiement ${payment.provider === "stripe" ? "Stripe" : "Mobile Money"} reçu sur une commande annulée`,
-    detail: "Le prestataire confirme le paiement mais la commande était déjà annulée (expirée ou échouée) : rien n'a été livré ni réservé. Rembourse l'acheteur ou règle la commande à la main si le vendeur peut livrer.",
+    title: `Paiement ${payment.provider === "stripe" ? "Stripe" : "Mobile Money"} reçu sur une commande annulée — #${order.id.slice(0, 8).toUpperCase()}`,
+    detail: `Le prestataire confirme le paiement mais la commande était déjà annulée (expirée ou échouée) : rien n'est réservé, personne ne livrera. Rembourse depuis ${payment.provider === "stripe" ? "Stripe" : "Genius Pay"}, ou préviens le vendeur pour qu'il livre et marque la commande payée depuis ses Commandes.`,
     context: { provider: payment.provider, orderId: order.id, reference: payment.reference, amount: payment.amount, currency: payment.currency, orderStatus: order.status, paymentStatus: order.payment_status },
-    dedupeKey: `webhook.late_payment:${order.id}`,
+    dedupeKey: `payment.late_after_cancel:${order.id}`,
   });
   return NextResponse.json(
     {

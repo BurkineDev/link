@@ -61,12 +61,14 @@ annulation, réconciliation en panne, e-mail mort, cron muet) est écrit dans
 (`/dashboard/admin/ops`, réservé à `ADMIN_EMAILS`). Une alerte **critique**
 part aussitôt par e-mail à `ADMIN_EMAILS` (au plus une par problème toutes
 les six heures) ; le reste attend le **rapport quotidien**, envoyé à la fin
-du cron de 03:00 UTC — s'il n'arrive pas, c'est que le cron n'a pas tourné.
+du cron de 03:00 UTC — s'il n'arrive pas, c'est que le cron n'a pas tourné
+ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
 
-- `GET /api/health` (public, sans secret) répond **200** ou **503** selon que
-  la base répond, que toutes les migrations du build sont appliquées
-  (l'incident du 13/09/2026 : code déployé avant sa migration) et que le
-  cron a tourné depuis moins de 26 h. Branchez-le sur un moniteur gratuit
+- `GET /api/health` (public, sans secret, 30 appels/min par IP) répond
+  **200** ou **503** selon que la base répond, que toutes les migrations du
+  build sont appliquées (l'incident du 13/09/2026 : code déployé avant sa
+  migration), que le cron a tourné depuis moins de 26 h et que Resend n'a
+  pas refusé d'envoi récemment. Branchez-le sur un moniteur gratuit
   (UptimeRobot, Better Stack…) toutes les cinq minutes : c'est lui qui
   appelle quand la page répond 503.
 - `OPS_ALERT_WEBHOOK_URL` (optionnel) : un webhook sortant (Slack, ntfy…)

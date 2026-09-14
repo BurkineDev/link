@@ -282,15 +282,26 @@ function SuccessContent() {
   if (state.status === "error") {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
-        <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-destructive/10">
-          <XCircle className="size-10 text-destructive" />
+        <div
+          className={cn(
+            "mb-6 flex size-20 items-center justify-center rounded-full",
+            state.code === "LATE_PAYMENT" || state.code === "AMOUNT_MISMATCH" ? "bg-amber-100" : "bg-destructive/10",
+          )}
+        >
+          {state.code === "LATE_PAYMENT" || state.code === "AMOUNT_MISMATCH" ? (
+            <Mail className="size-10 text-amber-700" />
+          ) : (
+            <XCircle className="size-10 text-destructive" />
+          )}
         </div>
         <h1 className="mb-2 text-2xl font-bold">
           {state.code === "LATE_PAYMENT"
             ? "Paiement reçu, commande à régulariser"
-            : provider === "cash_on_delivery"
-              ? "Commande introuvable ou annulée"
-              : "Paiement non confirmé"}
+            : state.code === "AMOUNT_MISMATCH"
+              ? "Paiement reçu, montant à vérifier"
+              : provider === "cash_on_delivery"
+                ? "Commande introuvable ou annulée"
+                : "Paiement non confirmé"}
         </h1>
         <p className="mb-6 text-muted-foreground">{state.message}</p>
         {state.code === "LATE_PAYMENT" && state.reference && (
@@ -300,14 +311,16 @@ function SuccessContent() {
           {/* Renvoie bien tous les paramètres : l'ancien bouton ne réémettait
               que `session_id`, donc il ne pouvait rien vérifier pour un
               acheteur Mobile Money — le seul cas où il servait vraiment. */}
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={retry}
-          >
-            <RefreshCw className="size-4" />
-            Réessayer
-          </Button>
+          {state.code !== "LATE_PAYMENT" && state.code !== "AMOUNT_MISMATCH" && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={retry}
+            >
+              <RefreshCw className="size-4" />
+              Réessayer
+            </Button>
+          )}
           <Button variant="outline" className="gap-2" asChild>
             <a href="mailto:support@bio-lien.com">
               <Mail className="size-4" />
@@ -509,7 +522,9 @@ function SuccessContent() {
               >
                 {order.payment_status === "paid"
                   ? "Payé"
-                  : awaitingSeller
+                  : order.payment_status === "refunded" || order.payment_status === "partially_refunded"
+                    ? "Remboursé"
+                    : awaitingSeller
                     ? "En attente de confirmation du vendeur"
                     : cashOnDelivery
                       ? "À régler à la livraison"

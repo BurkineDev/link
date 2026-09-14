@@ -234,11 +234,13 @@ const BOTTOM_ITEMS: NavItemDef[] = [
   { label: "Plus", href: "/dashboard/more", icon: MoreHorizontalIcon },
 ];
 
-export function BottomNav() {
+export function BottomNav({ attention = 0 }: { attention?: number }) {
   const pathname = usePathname();
 
   // « Plus » regroupe Produits, Paiements, Clients, Marketing et Réglages —
-  // la boutique publique reste accessible depuis « Ma page ».
+  // la boutique publique reste accessible depuis « Ma page ». Sur
+  // téléphone, c'est là que vit l'espace Équipe : le point rouge dit
+  // qu'une alerte ou un reversement attend.
   const items: NavItemDef[] = BOTTOM_ITEMS;
 
   return (
@@ -265,11 +267,20 @@ export function BottomNav() {
               )}
               <span
                 className={cn(
-                  "flex size-8 items-center justify-center rounded-lg transition-colors duration-150",
+                  "relative flex size-8 items-center justify-center rounded-lg transition-colors duration-150",
                   active ? "bg-primary text-primary-foreground" : "",
                 )}
               >
                 <Icon className="size-4 shrink-0" />
+                {item.href === "/dashboard/more" && attention > 0 ? (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white"
+                    style={{ background: "#e11d48" }}
+                    aria-label={`${attention} à traiter`}
+                  >
+                    {attention > 9 ? "9+" : attention}
+                  </span>
+                ) : null}
               </span>
               <span className="truncate">{item.label}</span>
             </Link>

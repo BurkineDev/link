@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getHealth } from "@/lib/ops/health";
+import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,14 @@ export const dynamic = "force-dynamic";
  * minutes) : c'est lui qui appelle le fondateur quand la page répond 503,
  * là où l'incident du 2026-09-13 n'a été vu qu'en lisant les journaux.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Un moniteur appelle toutes les cinq minutes ; au-delà, c'est un robot.
+  // (Le résultat est de toute façon mis en cache 20 s par instance.)
+  const blocked = await enforceLimits([
+    { name: "health", key: getClientIp(request), limit: 30, windowSeconds: 60 },
+  ]);
+  if (blocked) return blocked;
+
   const health = await getHealth();
   return NextResponse.json(health, {
     status: health.ok ? 200 : 503,

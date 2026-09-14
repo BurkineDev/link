@@ -153,6 +153,9 @@ async function request<T>(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
+    // Un prestataire qui pend ne doit pas bloquer une caisse ni le cron
+    // (cinquante appels séquentiels) jusqu'au plafond de la plateforme.
+    signal: AbortSignal.timeout(15_000),
   });
 
   const json = (await res.json().catch(() => ({}))) as {
