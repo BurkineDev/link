@@ -14,20 +14,39 @@ export const dynamic = "force-dynamic";
 export default async function AdminOpsPage() {
   await requireAdmin();
 
-  const [health, open, recent, lastRun] = await Promise.all([
-    getHealth(),
-    prisma.opsEvent.findMany({
-      where: { acknowledgedAt: null, kind: { not: "cron.run" } },
-      orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
-      take: 100,
-    }),
-    prisma.opsEvent.findMany({
-      where: { acknowledgedAt: { not: null } },
-      orderBy: { acknowledgedAt: "desc" },
-      take: 30,
-    }),
-    prisma.opsEvent.findFirst({ where: { kind: "cron.run" }, orderBy: { createdAt: "desc" } }),
-  ]);
+  const OPEN_LIMIT = 100;
+  // La santé se calcule même quand la base ne répond pas ; les listes,
+  // elles, sont vides dans ce cas — la page doit le dire, pas tomber en 500.
+  const health = await getHealth({ fresh: true });
+  let open: Awaited<ReturnType<typeof prisma.opsEvent.findMany>> = [];
+  let openTotal = 0;
+  let recent: typeof open = [];
+  let traces: typeof open = [];
+  let lastRun: (typeof open)[number] | null = null;
+  let journalError: string | null = null;
+  try {
+    [open, openTotal, recent, traces, lastRun] = await Promise.all([
+      prisma.opsEvent.findMany({
+        where: { acknowledgedAt: null, severity: { in: ["critical", "warning"] } },
+        orderBy: [{ severity: "desc" }, { lastSeenAt: "desc" }],
+        take: OPEN_LIMIT,
+      }),
+      prisma.opsEvent.count({ where: { acknowledgedAt: null, severity: { in: ["critical", "warning"] } } }),
+      prisma.opsEvent.findMany({
+        where: { acknowledgedAt: { not: null } },
+        orderBy: { acknowledgedAt: "desc" },
+        take: 30,
+      }),
+      prisma.opsEvent.findMany({
+        where: { severity: "info", kind: { not: "cron.run" } },
+        orderBy: { lastSeenAt: "desc" },
+        take: 20,
+      }),
+      prisma.opsEvent.findFirst({ where: { kind: "cron.run" }, orderBy: { createdAt: "desc" } }),
+    ]);
+  } catch (error) {
+    journalError = error instanceof Error ? error.message.split("\n").find((l) => l.trim())?.slice(0, 160) ?? "erreur" : String(error);
+  }
 
   const view = (row: (typeof open)[number]): OpsEventView => ({
     id: row.id,
@@ -48,7 +67,10 @@ export default async function AdminOpsPage() {
     <AdminOpsClient
       health={health}
       open={open.map(view)}
+      openTotal={openTotal}
       recent={recent.map(view)}
+      traces={traces.map(view)}
+      journalError={journalError}
       lastRun={
         lastRun
           ? { at: lastRun.createdAt.toISOString(), context: (lastRun.context as Record<string, unknown> | null) ?? null }

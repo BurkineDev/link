@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
 import { expireStaleManualOrders } from "@/lib/orders/expire-manual";
 import { remindStalePayouts } from "@/lib/payouts/notifications";
-import { recordOpsEvent } from "@/lib/ops/events";
+import { purgeOpsEvents, recordOpsEvent } from "@/lib/ops/events";
 import { sendDailyDigest } from "@/lib/ops/digest";
 
 export const runtime = "nodejs";
@@ -46,15 +46,19 @@ export async function GET(request: NextRequest) {
   }
 
   if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    // Secret tourné sur Vercel sans redéploiement, ou simple curiosité :
-    // une trace (sans e-mail), visible au rapport du matin.
-    await recordOpsEvent({
-      kind: "cron.unauthorized",
-      severity: "warning",
-      title: "Appel du cron refusé (secret différent)",
-      detail: "Si Vercel Cron lui-même est refusé, le secret a été changé sans redéploiement : le passage quotidien ne tourne plus.",
-      dedupeKey: "cron.unauthorized",
-    });
+    // Vercel Cron s'annonce (user-agent vercel-cron) : s'il est refusé, le
+    // secret a été changé sans redéploiement et le passage quotidien ne
+    // tourne plus — à voir au rapport du matin. Un robot qui tape l'URL au
+    // hasard, lui, n'a rien à faire dans le journal.
+    if ((request.headers.get("user-agent") ?? "").toLowerCase().includes("vercel-cron")) {
+      await recordOpsEvent({
+        kind: "cron.unauthorized",
+        severity: "critical",
+        title: "Vercel Cron refusé : CRON_SECRET différent",
+        detail: "Le secret a changé sur Vercel sans redéploiement (ou l'inverse) : la réconciliation, l'expiration et la relance des reversements ne tournent plus.",
+        dedupeKey: "cron.unauthorized",
+      });
+    }
     return new NextResponse(null, { status: 401 });
   }
 
@@ -108,6 +112,14 @@ export async function GET(request: NextRequest) {
   // Le rapport du matin, dernier acte du passage.
   const digest = await sendDailyDigest({ cron: summary });
   console.info("[cron] rapport quotidien:", digest);
+
+  // Ménage du journal : les lignes traitées et les traces n'ont pas
+  // vocation à durer (une table qui grossit sans borne sur un plan limité).
+  const purged = await purgeOpsEvents().catch((error) => {
+    console.error("[cron] purge du journal:", error);
+    return -1;
+  });
+  console.info("[cron] journal purgé:", purged);
 
   return NextResponse.json(
     { ...result, payouts, manual_orders: expired, digest, ok: stepFailures.length === 0 },

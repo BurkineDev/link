@@ -57,9 +57,11 @@ const mockPrisma = {
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
-// Alertes fondateur : on vérifie ce qui est signalé.
+// Alertes fondateur : la réconciliation enregistre tout de suite (le cron
+// construit son rapport dans la même invocation).
+const mockRecord = jest.fn(async () => ({ id: "ev", persisted: true, occurrences: 1, notified: false }));
 const mockOps = { critical: jest.fn(), warning: jest.fn(), info: jest.fn() };
-jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: jest.fn(), recordOpsEventAfterResponse: jest.fn() }));
+jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: mockRecord, recordOpsEventAfterResponse: jest.fn() }));
 
 jest.mock("@/lib/db/orders", () => ({
   settlePaidOrder: jest.fn(async (orderId: string) => {
@@ -149,6 +151,7 @@ beforeEach(() => {
   _notified = [];
   _selectFilters = {};
   _readError = null;
+  mockRecord.mockClear();
   mockOps.critical.mockClear();
   mockOps.warning.mockClear();
   mockOps.info.mockClear();
@@ -190,8 +193,8 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(_updates).toHaveLength(0);
     expect(_notified).toHaveLength(0);
     // …et le fondateur le sait : cette commande ne bougera jamais seule.
-    expect(mockOps.critical).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "reconcile.amount_mismatch", dedupeKey: `webhook.amount_mismatch:${ORDER_ID}` }),
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "payment.amount_mismatch", severity: "critical", dedupeKey: `payment.amount_mismatch:${ORDER_ID}` }),
     );
   });
 
@@ -263,7 +266,7 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(age).toBeLessThan(2 * 60_000);
   });
 
-  test("une panne Genius Pay ne fait pas échouer le lot entier — mais tout le lot en erreur est critique", async () => {
+  test("une panne Genius Pay ne fait pas échouer le lot entier — une commande = à surveiller, tout un lot = critique", async () => {
     _fetchThrows = true;
 
     const res = await reconcilePendingGeniusPayOrders();
@@ -272,8 +275,17 @@ describe("reconcilePendingGeniusPayOrders", () => {
     expect(res.checked).toBe(1);
     expect(_updates).toHaveLength(0);
     expect(_released).toHaveLength(0);
-    expect(mockOps.critical).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "reconcile.provider_errors", context: expect.objectContaining({ checked: 1, errors: 1 }) }),
+    // Une seule commande (le petit lot d'une page vendeur) : pas de réveil.
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "reconcile.provider_errors", severity: "warning", context: expect.objectContaining({ checked: 1, errors: 1 }) }),
+    );
+
+    mockRecord.mockClear();
+    _orders = [order(), order({ id: "22222222-2222-4222-8222-222222222222" }), order({ id: "33333333-3333-4333-8333-333333333333" })];
+    const batch = await reconcilePendingGeniusPayOrders();
+    expect(batch.errors).toBe(3);
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "reconcile.provider_errors", severity: "critical", context: expect.objectContaining({ checked: 3, errors: 3 }) }),
     );
   });
 
@@ -283,13 +295,12 @@ describe("reconcilePendingGeniusPayOrders", () => {
     const res = await reconcilePendingGeniusPayOrders();
 
     expect(res).toEqual({ checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 0 });
-    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "reconcile.db_error" }));
+    expect(mockRecord).toHaveBeenCalledWith(expect.objectContaining({ kind: "reconcile.db_error", severity: "critical" }));
   });
 
   test("un passage normal ne déclenche aucune alerte", async () => {
     await reconcilePendingGeniusPayOrders();
-    expect(mockOps.critical).not.toHaveBeenCalled();
-    expect(mockOps.warning).not.toHaveBeenCalled();
+    expect(mockRecord).not.toHaveBeenCalled();
   });
 
   test("filtre sur la boutique quand shopId est fourni", async () => {

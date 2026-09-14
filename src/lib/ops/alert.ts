@@ -19,11 +19,9 @@ export type OpsSeverity = "info" | "warning" | "critical";
  * Une chaîne libre reste acceptée (le type documente les cas connus).
  */
 export type OpsKind =
-  // Webhooks Genius Pay / Stripe
+  // Webhooks Genius Pay / Stripe (le canal)
   | "webhook.signature_rejected"
   | "webhook.order_not_found"
-  | "webhook.amount_mismatch"
-  | "webhook.late_payment"
   | "webhook.unknown_reference"
   | "webhook.refund_not_recorded"
   | "webhook.dispute_opened"
@@ -31,10 +29,13 @@ export type OpsKind =
   | "webhook.handler_error"
   | "webhook.subscription_unresolved"
   | "webhook.payment_failed_unrecorded"
+  // Paiements (le problème, quel que soit le canal qui l'a vu : webhook,
+  // réconciliation ou page de succès — même clé, même famille)
+  | "payment.amount_mismatch"
+  | "payment.late_after_cancel"
   // Réconciliation et cron
   | "reconcile.db_error"
   | "reconcile.not_configured"
-  | "reconcile.amount_mismatch"
   | "reconcile.provider_errors"
   | "cron.run"
   | "cron.unauthorized"
@@ -43,12 +44,11 @@ export type OpsKind =
   // Passage en caisse et règlement
   | "checkout.gateway_error"
   | "checkout.rollback_failed"
-  | "payment.late_after_cancel"
   | "order.stock_shortfall"
   // Notifications et canaux
   | "notification.failed"
   | "email.dead"
-  | "email.not_configured"
+  | "email.rate_limited"
   // Reversements
   | "payout.requested"
   | "payout.reminder_failed"
@@ -188,4 +188,27 @@ export function formatAlertWebhook(args: {
     occurrences: args.occurrences ?? 1,
     url: args.adminUrl,
   };
+}
+
+/**
+ * Première ligne utile d'une erreur, bornée. Les erreurs Prisma commencent
+ * par un saut de ligne (« \nInvalid `prisma.x()` invocation ») : la
+ * première ligne non vide, et jamais une URL de connexion.
+ */
+export function summarizeError(error: unknown, max = 160): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = error instanceof Error ? (error as { code?: unknown }).code : undefined;
+  const line =
+    message
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? "erreur";
+  const prefixed = typeof code === "string" && code.length > 0 ? `${code} ${line}` : line;
+  return prefixed.replace(/postgres(ql)?:\/\/\S+/gi, "postgresql://…").slice(0, max);
+}
+
+/** Un identifiant fourni par un tiers ne rentre dans un e-mail que s'il a la forme attendue. */
+export function safeToken(value: string | null | undefined, max = 60): string | null {
+  if (!value) return null;
+  return /^[\w.:-]{1,}$/.test(value) && value.length <= max ? value : "(valeur inattendue)";
 }

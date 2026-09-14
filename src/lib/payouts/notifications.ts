@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { escapeEmailHtml, sendTransactionalEmail } from "@/lib/email";
 import { formatPrice } from "@/lib/utils/format";
 import { adminEmails } from "@/lib/admin-emails";
-import { ops } from "@/lib/ops/events";
+import { recordOpsEvent } from "@/lib/ops/events";
 import { OPEN_PAYOUT_STATUSES, PAYOUT_PROVIDER_LABELS, type PayoutProvider } from "./config";
 import type { PayoutDestination } from "./requests";
 
@@ -91,8 +91,9 @@ export async function notifyPayoutRequested(payoutId: string): Promise<void> {
 
   // Trace au journal : le rapport du matin liste les reversements à faire
   // même si l'e-mail immédiat n'est pas parti.
-  ops.info({
+  await recordOpsEvent({
     kind: "payout.requested",
+    severity: "info",
     title: `Reversement demandé — ${payout.shop.name} — ${amount}`,
     context: { payoutId, shop: payout.shop.slug, amount: payout.amount, currency: payout.currency, adminsNotified: admins.length },
     dedupeKey: `payout.requested:${payoutId}`,
@@ -310,8 +311,9 @@ export async function remindStalePayouts(
     .filter((r): r is PromiseRejectedResult => r.status === "rejected")
     .forEach((r) => console.warn("[payouts] reminder e-mail failed", r.reason));
   if (reminded === 0) {
-    ops.warning({
+    await recordOpsEvent({
       kind: "payout.reminder_failed",
+      severity: "warning",
       title: `${stale.length} reversement(s) en retard, relance non envoyée`,
       detail: "Aucune relance n'a pu partir (e-mail en échec). Les demandes attendent dans Équipe → Reversements.",
       context: { stale: stale.length },

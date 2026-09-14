@@ -571,8 +571,8 @@ export async function POST(request: NextRequest) {
         // hors de portée de la réconciliation et de l'expiration.
         ops.critical({
           kind: "checkout.rollback_failed",
-          title: "Commande fantôme : annulation impossible après échec de la passerelle",
-          detail: "La commande reste « en attente » sans référence de paiement ; ni la réconciliation ni l'expiration ne la verront. À annuler à la main depuis Commandes.",
+          title: `Commande fantôme #${order.id.slice(0, 8).toUpperCase()} : annulation impossible après échec de la passerelle`,
+          detail: "La commande reste « en attente » sans référence de paiement ; ni la réconciliation ni l'expiration ne la verront. Demande au vendeur de l'annuler depuis ses Commandes (elle ne bloque aucun stock).",
           context: { orderId: order.id, provider: paymentProvider, shopId },
           dedupeKey: `checkout.rollback_failed:${order.id}`,
         });
@@ -582,15 +582,25 @@ export async function POST(request: NextRequest) {
     };
 
     // Une passerelle injoignable ou mal configurée refuse chaque acheteur :
-    // si c'est systématique, plus aucune vente n'aboutit.
-    const gatewayDown = (provider: "geniuspay" | "stripe", reason: string) =>
-      ops.critical({
+    // si c'est systématique, plus aucune vente n'aboutit. Un refus 4xx
+    // (numéro invalide, montant hors bornes) vient souvent de la saisie
+    // d'un seul acheteur : à surveiller, pas de quoi réveiller quelqu'un.
+    const gatewayDown = (provider: "geniuspay" | "stripe", error: unknown, fallback: string) => {
+      const status = typeof error === "object" && error !== null ? (error as { status?: unknown }).status : undefined;
+      const clientSide = typeof status === "number" && status >= 400 && status < 500;
+      const reason = error instanceof Error ? error.message : fallback;
+      ops[clientSide ? "warning" : "critical"]({
         kind: "checkout.gateway_error",
-        title: provider === "geniuspay" ? "Genius Pay refuse les paiements" : "Stripe refuse les paiements",
-        detail: `${reason.slice(0, 200)} — l'acheteur a vu une erreur et sa commande a été annulée. Si ça se répète, vérifie les clés et l'état du prestataire.`,
-        context: { provider, orderId: order.id, shopId },
-        dedupeKey: `checkout.gateway_error:${provider}`,
+        title: clientSide
+          ? `${provider === "geniuspay" ? "Genius Pay" : "Stripe"} a refusé un paiement (${status})`
+          : provider === "geniuspay"
+            ? "Genius Pay refuse les paiements"
+            : "Stripe refuse les paiements",
+        detail: `${reason.slice(0, 200)} — l'acheteur a vu une erreur et sa commande a été annulée.${clientSide ? "" : " Si ça se répète, vérifie les clés et l'état du prestataire."}`,
+        context: { provider, orderId: order.id, shopId, status: typeof status === "number" ? status : undefined },
+        dedupeKey: `checkout.gateway_error:${provider}${clientSide ? ":client" : ""}`,
       });
+    };
 
     // A 100% promo is a valid free order. Sending a zero-value payment to a
     // gateway would fail, so settle it locally and use the order UUID as the
@@ -676,7 +686,7 @@ export async function POST(request: NextRequest) {
             "[checkout] Genius Pay returned no payment URL:",
             result.reference,
           );
-          gatewayDown("geniuspay", "Genius Pay n'a renvoyé aucune URL de paiement");
+          gatewayDown("geniuspay", null, "Genius Pay n'a renvoyé aucune URL de paiement");
           await rollback();
           return NextResponse.json(
             { error: "Impossible d'initialiser le paiement Mobile Money." },
@@ -697,7 +707,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (err) {
         console.error("[checkout] Genius Pay create failed:", err);
-        gatewayDown("geniuspay", err instanceof Error ? err.message : "création du paiement en échec");
+        gatewayDown("geniuspay", err, "création du paiement en échec");
         await rollback();
         return NextResponse.json(
           {
@@ -717,7 +727,7 @@ export async function POST(request: NextRequest) {
       stripe = getStripe();
     } catch (err) {
       console.error("[checkout] Stripe is not configured:", err);
-      gatewayDown("stripe", "STRIPE_SECRET_KEY absent : Stripe n'est pas configuré");
+      gatewayDown("stripe", null, "STRIPE_SECRET_KEY absent : Stripe n'est pas configuré");
       await rollback();
       return NextResponse.json(
         { error: "Le service de paiement n'est pas configuré." },
@@ -797,7 +807,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       console.error("[checkout] Stripe session creation failed:", err);
-      gatewayDown("stripe", err instanceof Error ? err.message : "création de session en échec");
+      gatewayDown("stripe", err, "création de session en échec");
       await rollback();
       return NextResponse.json(
         { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },
@@ -807,7 +817,7 @@ export async function POST(request: NextRequest) {
 
     if (!checkoutSession.url) {
       console.error("[checkout] Stripe session missing url:", checkoutSession.id);
-      gatewayDown("stripe", "Stripe a renvoyé une session sans URL");
+      gatewayDown("stripe", null, "Stripe a renvoyé une session sans URL");
       await rollback();
       return NextResponse.json(
         { error: "Impossible d'initialiser le paiement. Veuillez réessayer." },

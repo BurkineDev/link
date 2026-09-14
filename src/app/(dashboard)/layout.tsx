@@ -241,7 +241,7 @@ export default async function DashboardLayout({
 
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <BottomNav />
+        <BottomNav attention={pendingPayouts + openAlerts} />
       </div>
     </div>
   );

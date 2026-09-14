@@ -27,7 +27,8 @@ import {
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
-import { ops } from "@/lib/ops/events";
+import { recordOpsEvent } from "@/lib/ops/events";
+import { summarizeError } from "@/lib/ops/alert";
 
 /**
  * On laisse d'abord sa chance au webhook : inutile d'appeler Genius Pay pour
@@ -82,8 +83,11 @@ export async function reconcilePendingGeniusPayOrders(
     // Une variable GENIUSPAY_* perdue : plus aucun rattrapage, et un
     // résultat vide indiscernable d'une nuit calme — d'où l'alerte.
     if (process.env.NODE_ENV === "production") {
-      ops.critical({
+      // Enregistré tout de suite (pas après la réponse) : le cron construit
+      // son rapport dans la même invocation et doit voir cette ligne.
+      await recordOpsEvent({
         kind: "reconcile.not_configured",
+        severity: "critical",
         title: "Réconciliation Genius Pay désactivée : configuration absente",
         detail: "GENIUSPAY_API_KEY, GENIUSPAY_API_SECRET ou GENIUSPAY_WEBHOOK_SECRET manque : les commandes Mobile Money au webhook perdu ne seront plus rattrapées.",
         dedupeKey: "reconcile.not_configured",
@@ -124,10 +128,11 @@ export async function reconcilePendingGeniusPayOrders(
   } catch (error) {
     console.error("[reconcile] read error:", error);
     // Une panne de base n'est pas « rien à faire » (constat A18).
-    ops.critical({
+    await recordOpsEvent({
       kind: "reconcile.db_error",
+      severity: "critical",
       title: "Réconciliation : lecture des commandes impossible",
-      detail: `La base n'a pas répondu (${error instanceof Error ? error.message.split("\n")[0]!.slice(0, 160) : String(error)}). Aucune commande Mobile Money n'a été rattrapée à ce passage.`,
+      detail: `La base n'a pas répondu (${summarizeError(error)}). Aucune commande Mobile Money n'a été rattrapée à ce passage.`,
       context: { shopId: opts.shopId ?? null, limit },
       dedupeKey: "reconcile.db_error",
     });
@@ -159,17 +164,19 @@ export async function reconcilePendingGeniusPayOrders(
       console.error("[reconcile] order", order.id, err);
       failures.push({
         orderId: order.id,
-        error: err instanceof Error ? err.message.split("\n")[0]!.slice(0, 120) : String(err).slice(0, 120),
+        error: summarizeError(err, 120),
       });
     }
   }
 
   if (failures.length > 0) {
-    // Tout le lot en erreur = Genius Pay injoignable ou clés invalides ;
-    // quelques-unes = à regarder au rapport du matin.
-    const allFailed = failures.length === result.checked;
-    ops[allFailed ? "critical" : "warning"]({
+    // Tout un lot du cron en erreur = Genius Pay injoignable ou clés
+    // invalides ; une ou deux commandes (ou le petit lot d'une page
+    // vendeur) = à regarder au rapport du matin, pas de quoi réveiller.
+    const allFailed = failures.length === result.checked && result.checked >= 3;
+    await recordOpsEvent({
       kind: "reconcile.provider_errors",
+      severity: allFailed ? "critical" : "warning",
       title: allFailed
         ? `Réconciliation : Genius Pay en erreur sur ${failures.length} commande(s) sur ${result.checked}`
         : `Réconciliation : ${failures.length} commande(s) en erreur sur ${result.checked}`,
@@ -200,12 +207,13 @@ async function settleOrder(
 
     if (!amountOk || !currencyOk) {
       console.warn("[reconcile] amount/currency mismatch on order", order.id);
-      ops.critical({
-        kind: "reconcile.amount_mismatch",
-        title: "Paiement Genius Pay d'un montant inattendu (réconciliation)",
-        detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.totalAmount} ${order.currency}. Elle restera en attente à chaque passage tant que personne n'a tranché : régler ou rembourser à la main.`,
+      await recordOpsEvent({
+        kind: "payment.amount_mismatch",
+        severity: "critical",
+        title: `Paiement Genius Pay d'un montant inattendu — commande #${order.id.slice(0, 8).toUpperCase()}`,
+        detail: `Genius Pay confirme ${payment.amount} ${payment.currency} pour une commande de ${order.totalAmount} ${order.currency}. Elle restera en attente à chaque passage tant que personne n'a tranché : rembourse la transaction depuis Genius Pay, ou demande au vendeur de la marquer payée depuis ses Commandes s'il accepte ce montant.`,
         context: { orderId: order.id, reference: order.paymentRef, received: payment.amount, receivedCurrency: payment.currency, expected: order.totalAmount, expectedCurrency: order.currency },
-        dedupeKey: `webhook.amount_mismatch:${order.id}`,
+        dedupeKey: `payment.amount_mismatch:${order.id}`,
       });
       return "stillPending";
     }

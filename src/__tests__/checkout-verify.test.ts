@@ -329,8 +329,21 @@ describe("GET /api/checkout/verify — paiement tardif (A03)", () => {
     expect(json.code).toBe("LATE_PAYMENT");
     expect(json.order).toBeUndefined();
     expect(mockOps.critical).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "payment.late_after_cancel", dedupeKey: "webhook.late_payment:order-001" }),
+      expect.objectContaining({ kind: "payment.late_after_cancel", dedupeKey: "payment.late_after_cancel:order-001" }),
     );
+  });
+
+  test("commande remboursée qui rouvre la page : son état réel, ni 409 ni alerte", async () => {
+    _settleResult = { settled: false, reason: "not_pending" };
+    for (const status of ["refunded", "partially_refunded"]) {
+      mockOps.critical.mockClear();
+      _order = { ...BASE_ORDER_DEFAULT(), status: "confirmed", payment_status: status };
+      mockStripeSession({ payment_status: "paid", status: "complete", amount_total: 5000, currency: "xof" });
+      const res = await GET(makeRequest("cs_test_123"));
+      expect(res.status).toBe(200);
+      expect((await res.json()).order.payment_status).toBe(status);
+      expect(mockOps.critical).not.toHaveBeenCalled();
+    }
   });
 
   test("déjà payée par le webhook (already_paid) : succès idempotent, sans alerte", async () => {
@@ -347,6 +360,6 @@ describe("GET /api/checkout/verify — paiement tardif (A03)", () => {
     const res = await GET(makeRequest("cs_test_123"));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("AMOUNT_MISMATCH");
-    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "webhook.amount_mismatch" }));
+    expect(mockOps.critical).toHaveBeenCalledWith(expect.objectContaining({ kind: "payment.amount_mismatch" }));
   });
 });

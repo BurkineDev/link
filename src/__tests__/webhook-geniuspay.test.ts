@@ -160,12 +160,28 @@ function validPayload(overrides: Record<string, unknown> = {}) {
 describe("POST /api/webhooks/geniuspay", () => {
   test("returns 401 if webhook signature verification fails", async () => {
     _verifyResult = false;
+    process.env.GENIUSPAY_WEBHOOK_SECRET = "whsec";
     const res = await POST(makeRequest(validPayload()));
     expect(res.status).toBe(401);
     // …et le fondateur l'apprend : un secret mal collé arrête toutes les ventes.
     expect(mockOps.critical).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "webhook.signature_rejected", dedupeKey: "webhook.signature_rejected:geniuspay" }),
     );
+    delete process.env.GENIUSPAY_WEBHOOK_SECRET;
+  });
+
+  test("une requête sans aucun en-tête de signature est un robot : trace, pas de réveil", async () => {
+    _verifyResult = false;
+    process.env.GENIUSPAY_WEBHOOK_SECRET = "whsec";
+    const res = await POST(
+      new NextRequest("http://localhost:3000/api/webhooks/geniuspay", { method: "POST", body: "{}" }),
+    );
+    expect(res.status).toBe(401);
+    expect(mockOps.critical).not.toHaveBeenCalled();
+    expect(mockOps.warning).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: "webhook.signature_rejected:geniuspay:unsigned" }),
+    );
+    delete process.env.GENIUSPAY_WEBHOOK_SECRET;
   });
 
   test("returns 200 for webhook.test event even without details", async () => {
@@ -203,8 +219,8 @@ describe("POST /api/webhooks/geniuspay", () => {
     expect(_rpcResult).toBeNull();
     expect(mockOps.critical).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: "webhook.late_payment",
-        dedupeKey: `webhook.late_payment:${ORDER_ID}`,
+        kind: "payment.late_after_cancel",
+        dedupeKey: `payment.late_after_cancel:${ORDER_ID}`,
         context: expect.objectContaining({ orderId: ORDER_ID, amount: 10000 }),
       }),
     );
@@ -248,8 +264,8 @@ describe("POST /api/webhooks/geniuspay", () => {
     // L'acheteur a été débité d'un autre montant : à trancher à la main.
     expect(mockOps.critical).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: "webhook.amount_mismatch",
-        dedupeKey: `webhook.amount_mismatch:${ORDER_ID}`,
+        kind: "payment.amount_mismatch",
+        dedupeKey: `payment.amount_mismatch:${ORDER_ID}`,
         context: expect.objectContaining({ received: 5000, expected: 10000 }),
       }),
     );
