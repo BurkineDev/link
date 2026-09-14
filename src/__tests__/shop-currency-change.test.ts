@@ -27,6 +27,12 @@ const mockUpdate = jest.fn(async ({ data }: { data: Record<string, unknown> }) =
 }));
 let _subscription: { plan: string; status: string; provider: string; currentPeriodEnd: Date | null } | null = null;
 let _badgeInDb = true;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const mockZonesDeactivate = jest.fn(async (_args: unknown) => ({ count: 2 }));
+const txMock = {
+  shop: { update: (args: { data: Record<string, unknown> }) => mockUpdate(args) },
+  shippingZone: { updateMany: (args: unknown) => mockZonesDeactivate(args) },
+};
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     shop: {
@@ -34,6 +40,7 @@ jest.mock("@/lib/prisma", () => ({
       update: (args: { data: Record<string, unknown> }) => mockUpdate(args),
     },
     creatorSubscription: { findUnique: jest.fn(async () => _subscription) },
+    $transaction: (fn: (tx: typeof txMock) => Promise<unknown>) => fn(txMock),
   },
 }));
 jest.mock("@/lib/db/serialize", () => ({ serializeShop: (shop: unknown) => shop }));
@@ -98,8 +105,16 @@ describe("changement de devise", () => {
 
   test("accepté quand tout est versé, et sans contrôle quand la devise ne change pas", async () => {
     expect((await patch({ currency: "GHS" })).status).toBe(200);
+    // Les zones tarifées dans l'ancienne devise sont désactivées : un
+    // « 1 500 » FCFA ne devient pas 1 500 cédis sans relecture.
+    expect(mockZonesDeactivate).toHaveBeenCalledWith({
+      where: { shopId: SHOP_ID, currency: { not: "GHS" } },
+      data: { isActive: false },
+    });
+    mockZonesDeactivate.mockClear();
     _balance = { ..._balance, available: 45_000 };
     expect((await patch({ currency: "XOF" })).status).toBe(200);
+    expect(mockZonesDeactivate).not.toHaveBeenCalled();
     expect((await patch({ name: "Wax & Co" })).status).toBe(200);
     expect(mockUpdate).toHaveBeenCalledTimes(3);
   });

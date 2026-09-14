@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShippingZone } from "@/lib/db/serialize";
-import { shippingZoneSchema } from "@/lib/shipping/zone-schema";
+import { shippingZoneSchema, zoneAmountIssue } from "@/lib/shipping/zone-schema";
+import { CURRENCY_META, type Currency } from "@/lib/constants";
 import { revalidateShop } from "@/lib/shops/revalidate";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -40,6 +41,12 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
   if (!owned) return NextResponse.json({ error: "Zone introuvable" }, { status: 404 });
 
   const zone = parsed.data;
+  const amountIssue = zoneAmountIssue(
+    zone,
+    CURRENCY_META[owned.shop.currency as Currency]?.decimals ?? 2,
+  );
+  if (amountIssue) return NextResponse.json({ error: amountIssue }, { status: 422 });
+
   const updated = await prisma.shippingZone.update({
     where: { id },
     data: {

@@ -125,6 +125,8 @@ export async function GET(request: NextRequest) {
         id: orderObj.id,
         buyer_name: orderObj.buyer_name,
         total_amount: orderObj.total_amount,
+        shipping_amount: orderObj.shipping_amount,
+        discount_amount: orderObj.discount_amount,
         currency: orderObj.currency,
         status: orderObj.status,
         payment_status: orderObj.payment_status,

@@ -14,6 +14,8 @@ let _cloudConfigured = false;
 const _cloud: string[] = [];
 let _stockShortfall: unknown = null;
 let _buyerEmail: string | null = "awa@example.com";
+let _orderStatus = "confirmed";
+let _orderProvider = "geniuspay";
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
@@ -26,11 +28,19 @@ jest.mock("@/lib/prisma", () => ({
         buyerName: "Awa Diop",
         buyerPhone: "+221771234567",
         buyerEmail: _buyerEmail,
+        status: _orderStatus,
+        paymentProvider: _orderProvider,
+        shippingAmount: 1500,
+        discountAmount: 0,
         shippingAddress: { address: "Rue 12", city: "Dakar", country: "SN" },
         items: [
           {
             quantity: 2,
             product_snapshot: { product_name: "Pagne wax", variant_name: "2 m" },
+          },
+          {
+            quantity: 1,
+            product_snapshot: { product_name: "Patron PDF", is_digital: true },
           },
         ],
         trackingToken: "tok-123",
@@ -61,6 +71,7 @@ jest.mock("@/lib/whatsapp", () => ({
 }));
 
 import {
+  notifyBuyerOfCashOnDeliveryOrder,
   notifyCashOnDeliveryOrder,
   notifySellerOfPaidOrder,
   notifyPaidOrder,
@@ -72,6 +83,8 @@ beforeEach(() => {
   _cloudConfigured = false;
   _stockShortfall = null;
   _buyerEmail = "awa@example.com";
+  _orderStatus = "confirmed";
+  _orderProvider = "geniuspay";
   _shop = {
     name: "Boutique Awa",
     whatsappNumber: null,
@@ -182,23 +195,47 @@ describe("notifyPaidOrder", () => {
   });
 });
 
-describe("notifyCashOnDeliveryOrder", () => {
-  test("le vendeur apprend qu'il y a un colis à livrer et un montant à encaisser ; l'acheteur reçoit sa confirmation", async () => {
+describe("paiement à la livraison", () => {
+  test("à la caisse, seul le vendeur est prévenu : une commande à confirmer, rien envoyé à l'adresse saisie", async () => {
     await notifyCashOnDeliveryOrder(ORDER_ID);
-    const seller = _emails.find((m) => m.to === "vendeuse@example.com");
+    expect(_emails.map((m) => m.to)).toEqual(["vendeuse@example.com"]);
+    const seller = _emails[0]!;
+    expect(seller.subject).toMatch(/à confirmer/i);
+    expect(seller.subject).toMatch(/à encaisser à la livraison/);
+    expect(seller.text).toMatch(/confirme la commande/i);
+    expect(seller.text).toMatch(/Dakar/);
+  });
+
+  test("le WhatsApp vendeur passe par le template Meta (hors fenêtre de 24 h), la mention COD dans le montant", async () => {
+    _shop = { ..._shop!, whatsappNumber: "+221770000000" };
+    _cloudConfigured = true;
+    await notifyCashOnDeliveryOrder(ORDER_ID);
+    expect(_cloud).toEqual(["template:+221770000000"]);
+  });
+
+  test("à la confirmation du vendeur, l'acheteur reçoit sa confirmation, le suivi, la livraison et la note fichiers", async () => {
+    _orderStatus = "confirmed";
+    _orderProvider = "cash_on_delivery";
+    await notifyBuyerOfCashOnDeliveryOrder(ORDER_ID);
     const buyer = _emails.find((m) => m.to === "awa@example.com");
-    expect(seller?.subject).toMatch(/commande à livrer/i);
-    expect(seller?.subject).toMatch(/à encaisser/);
-    expect(seller?.text).toMatch(/à encaisser à la livraison/);
-    expect(seller?.text).toMatch(/Dakar/);
+    expect(buyer?.subject).toMatch(/Commande confirmée/);
     expect(buyer?.subject).toMatch(/à régler à la livraison/);
     expect(buyer?.text).toMatch(/tok-123/);
+    expect(buyer?.text).toMatch(/Livraison : 1.500 FCFA/);
+    expect(buyer?.text).toMatch(/fichiers seront disponibles/);
     expect(buyer?.text).not.toMatch(/Paiement confirmé/);
   });
 
-  test("sans e-mail acheteur, seul le vendeur est prévenu", async () => {
+  test("pas d'e-mail acheteur pour une commande annulée, en ligne, ou sans e-mail", async () => {
+    _orderStatus = "cancelled";
+    _orderProvider = "cash_on_delivery";
+    await notifyBuyerOfCashOnDeliveryOrder(ORDER_ID);
+    _orderStatus = "confirmed";
+    _orderProvider = "geniuspay";
+    await notifyBuyerOfCashOnDeliveryOrder(ORDER_ID);
+    _orderProvider = "cash_on_delivery";
     _buyerEmail = null;
-    await notifyCashOnDeliveryOrder(ORDER_ID);
-    expect(_emails.map((m) => m.to)).toEqual(["vendeuse@example.com"]);
+    await notifyBuyerOfCashOnDeliveryOrder(ORDER_ID);
+    expect(_emails).toHaveLength(0);
   });
 });

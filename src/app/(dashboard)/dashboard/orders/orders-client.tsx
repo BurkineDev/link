@@ -69,9 +69,18 @@ function awaitsManualPayment(order: OrderRow): boolean {
   return order.payment_provider === "manual" && order.payment_status === "pending";
 }
 
-/** Commande à régler à la livraison : ferme, à préparer, et à encaisser à la remise. */
+/** Commande à régler à la livraison, pas encore encaissée. */
 function awaitsCashOnDelivery(order: OrderRow): boolean {
   return order.payment_provider === "cash_on_delivery" && order.payment_status === "pending";
+}
+
+/**
+ * Commande à régler à la livraison que le vendeur n'a pas encore prise en
+ * charge : rien n'est réservé, l'acheteur attend sa confirmation. Sept
+ * jours sans confirmation, et elle expire.
+ */
+function awaitsCodConfirmation(order: OrderRow): boolean {
+  return awaitsCashOnDelivery(order) && order.status === "pending";
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -113,7 +122,9 @@ const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
   processing: ["shipped", "delivered", "cancelled"],
-  shipped: ["delivered"],
+  // Colis refusé ou jamais réclamé : annulable tant qu'il n'est pas payé
+  // (le serveur refuse l'annulation d'une commande payée).
+  shipped: ["delivered", "cancelled"],
   delivered: [],
   cancelled: [],
   refunded: [],
@@ -157,8 +168,12 @@ function OrderDetailSheet({
       toast.success(
         data.stock_shortfall && data.stock_shortfall.length > 0
           ? "Commande payée, mais le stock ne couvrait pas tout : vérifie le bandeau."
-          : "Commande marquée payée : le stock est prélevé.",
+          : order.payment_provider === "cash_on_delivery"
+            ? "Paiement encaissé : la commande compte dans tes ventes."
+            : "Commande marquée payée : le stock est prélevé.",
       );
+    } catch {
+      toast.error("Connexion perdue. Réessaie.");
     } finally {
       setMarkingPaid(false);
     }
@@ -178,13 +193,22 @@ function OrderDetailSheet({
       const data = (await response.json().catch(() => ({}))) as {
         order?: OrderRow;
         error?: string;
+        stock_shortfall?: unknown[];
       };
       if (!response.ok || !data.order) {
         toast.error(data.error ?? "Impossible de changer le statut.");
         return;
       }
       onStatusUpdated(data.order);
-      toast.success("Statut de la commande mis à jour.");
+      toast.success(
+        data.stock_shortfall && data.stock_shortfall.length > 0
+          ? "Commande confirmée, mais le stock ne couvrait pas tout : vérifie le bandeau."
+          : newStatus === "confirmed" && order.payment_provider === "cash_on_delivery"
+            ? "Commande confirmée : stock réservé, le client est prévenu."
+            : "Statut de la commande mis à jour.",
+      );
+    } catch {
+      toast.error("Connexion perdue. Réessaie.");
     } finally {
       setUpdatingStatus(false);
     }
@@ -399,7 +423,25 @@ function OrderDetailSheet({
                   {formatCurrency(order.total_amount, order.currency)}
                 </span>
               </div>
-              {(awaitsManualPayment(order) || awaitsCashOnDelivery(order)) && order.status !== "cancelled" && (
+              {awaitsCodConfirmation(order) && (
+                <div className="border-t border-border pt-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Le client attend ta confirmation. Joins-le (adresse, disponibilité), puis
+                    confirme : le stock est réservé et il reçoit sa confirmation. Sans réponse
+                    sous 7 jours, la commande expire.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={updatingStatus}
+                    onClick={() => handleStatusChange("confirmed")}
+                  >
+                    {updatingStatus ? "Enregistrement…" : "Confirmer la commande"}
+                  </Button>
+                </div>
+              )}
+              {(awaitsManualPayment(order) || (awaitsCashOnDelivery(order) && !awaitsCodConfirmation(order))) &&
+                order.status !== "cancelled" && (
                 <div className="border-t border-border pt-3">
                   <p className="mb-2 text-xs text-muted-foreground">
                     {awaitsCashOnDelivery(order)
@@ -593,7 +635,14 @@ export function OrdersClient({
                                 Non payée
                               </span>
                             ) : null}
-                            {awaitsCashOnDelivery(order) && order.status !== "cancelled" ? (
+                            {awaitsCodConfirmation(order) ? (
+                              <span
+                                className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300"
+                                title="Paiement à la livraison : le client attend ta confirmation"
+                              >
+                                À confirmer
+                              </span>
+                            ) : awaitsCashOnDelivery(order) && order.status !== "cancelled" ? (
                               <span
                                 className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300"
                                 title="Paiement à la livraison : à encaisser à la remise du colis"

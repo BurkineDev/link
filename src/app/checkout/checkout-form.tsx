@@ -10,6 +10,7 @@ import { Loader2, ChevronLeft, ChevronDown, Check, X, Tag } from "lucide-react";
 
 import { useCart, useCartReady, type CartItem } from "@/hooks/use-cart";
 import { AFRICAN_COUNTRIES, type Currency } from "@/lib/constants";
+import { COUNTRY_OPTIONS_FR, countryLabel as countryNameFr } from "@/lib/countries";
 import { isMobileMoneyCovered, isMobileMoneyCurrency } from "@/lib/payments/mobile-money-coverage";
 import { dialCodeEntry, dialCodeFor, nsnHint, toE164 } from "@/lib/phone/dial-codes";
 import { cartNeedsShipping, quoteShipping } from "@/lib/checkout/shipping";
@@ -97,12 +98,12 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 // laissaient tout pays absent retomber sur +225.
 // ---------------------------------------------------------------------------
 
-/** Pays proposés dans le sélecteur d'indicatif : ceux de la livraison, dans le même ordre. */
-const PHONE_CODE_OPTIONS = AFRICAN_COUNTRIES.map((c) => ({
+/** Pays proposés dans le sélecteur d'indicatif : ceux de la livraison, dans le même ordre (français). */
+const PHONE_CODE_OPTIONS = COUNTRY_OPTIONS_FR.map((c) => ({
   iso2: c.code,
   dialCode: dialCodeFor(c.code) ?? "",
   flag: dialCodeEntry(c.code)?.flag ?? "",
-  name: c.name,
+  name: c.label,
 })).filter((c) => c.dialCode);
 
 // ---------------------------------------------------------------------------
@@ -291,8 +292,7 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
   // livraison quand il y en a une, sinon celui de son numéro (un panier
   // tout numérique n'a pas d'adresse).
   const buyerCountry = requiresShipping ? shippingCountry : phoneCountry;
-  const countryLabel =
-    AFRICAN_COUNTRIES.find((c) => c.code === buyerCountry)?.name ?? null;
+  const countryLabel = buyerCountry ? countryNameFr(buyerCountry) : null;
 
   // Genius Pay ne couvre pas tous les pays en Mobile Money : hors couverture,
   // il accepte le paiement mais n'envoie jamais le push. On bascule sur la
@@ -462,7 +462,7 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
     payment.type === "mobile_money"
       ? "Paiement Mobile Money sécurisé via Genius Pay"
       : payment.type === "cash_on_delivery"
-        ? "Rien à payer maintenant : tu règles à la livraison"
+        ? `Rien à payer maintenant : tu règles ${formatPrice(total, currency)} à la livraison, une fois la commande confirmée par le vendeur`
         : "Paiement sécurisé via Stripe";
 
   const payButton = (
@@ -483,7 +483,7 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
         "Livraison indisponible pour ce pays"
       ) : (
         payment.type === "cash_on_delivery"
-          ? `Commander — ${formatPrice(total, currency)} à la livraison`
+          ? `Commander — ${formatPrice(total, currency)}`
           : `Payer ${formatPrice(total, currency)}`
       )}
     </Button>
@@ -667,14 +667,13 @@ function CheckoutFormBody({ items, shop, mobileMoneyEnabled }: CheckoutFormBodyP
                         <Select value={field.value} onValueChange={field.onChange}>
                           <SelectTrigger id="country" className="w-full" aria-invalid={!!errors.country}>
                             <SelectValue placeholder="Sélectionner un pays">
-                              {AFRICAN_COUNTRIES.find((c) => c.code === field.value)?.name ??
-                                "Sélectionner un pays"}
+                              {field.value ? countryNameFr(field.value) : "Sélectionner un pays"}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            {AFRICAN_COUNTRIES.map((c) => (
+                            {COUNTRY_OPTIONS_FR.map((c) => (
                               <SelectItem key={c.code} value={c.code}>
-                                {c.name}
+                                {c.label}
                               </SelectItem>
                             ))}
                           </SelectContent>

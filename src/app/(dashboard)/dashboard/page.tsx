@@ -179,10 +179,14 @@ export default async function DashboardPage() {
       ]);
 
     ordersCount = ordersStats.length;
-    // Commandes WhatsApp que le vendeur n'a pas encore marquées payées :
-    // certaines ne sont qu'un tap sans message, le compteur le dit.
+    // Commandes hors ligne que le vendeur n'a pas encore prises en charge
+    // (WhatsApp à marquer payée, paiement à la livraison à confirmer) :
+    // certaines ne sont qu'un tap sans suite, le compteur le dit.
     ordersAwaitingPayment = ordersStats.filter(
-      (o) => o.paymentProvider === "manual" && o.paymentStatus === "pending" && o.status === "pending",
+      (o) =>
+        (o.paymentProvider === "manual" || o.paymentProvider === "cash_on_delivery") &&
+        o.paymentStatus === "pending" &&
+        o.status === "pending",
     ).length;
     totalRevenue = ordersStats
       .filter((o) => o.paymentStatus === "paid")

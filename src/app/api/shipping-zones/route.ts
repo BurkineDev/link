@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShippingZone } from "@/lib/db/serialize";
-import { shippingZoneSchema } from "@/lib/shipping/zone-schema";
+import { shippingZoneSchema, zoneAmountIssue } from "@/lib/shipping/zone-schema";
+import { CURRENCY_META, type Currency } from "@/lib/constants";
 import { revalidateShop } from "@/lib/shops/revalidate";
 
 /**
@@ -65,6 +66,9 @@ export async function POST(request: NextRequest) {
 
   const shop = await ownedShop(shopId, user.id);
   if (!shop) return NextResponse.json({ error: "Boutique introuvable" }, { status: 404 });
+
+  const amountIssue = zoneAmountIssue(zone, CURRENCY_META[shop.currency as Currency]?.decimals ?? 2);
+  if (amountIssue) return NextResponse.json({ error: amountIssue }, { status: 422 });
 
   const count = await prisma.shippingZone.count({ where: { shopId } });
   if (count >= MAX_ZONES) {

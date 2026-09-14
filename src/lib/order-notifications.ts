@@ -227,14 +227,15 @@ export async function notifySellerOfOrder(
           buyerName: order.buyer_name,
           buyerPhone: order.buyer_phone,
           itemCount,
-          totalLabel,
-          detailUrl,
-          stockWarning:
+          // Le montant est un paramètre du template Meta : c'est là que
+          // passe la mention « à confirmer », pour que l'alerte parte même
+          // hors de la fenêtre de 24 h (voir sendSellerWhatsApp).
+          totalLabel:
             mode === "cash_on_delivery"
-              ? [`Paiement à la livraison : ${totalLabel} à encaisser à la remise du colis.`, stockWarning]
-                  .filter(Boolean)
-                  .join(" ")
-              : stockWarning,
+              ? `${totalLabel} à encaisser à la livraison — commande à confirmer`
+              : totalLabel,
+          detailUrl,
+          stockWarning,
         })
       : Promise.resolve(),
   ]);
@@ -291,18 +292,18 @@ async function sendSellerEmail(args: {
   ].join("");
 
   const cod = args.mode === "cash_on_delivery";
-  const title = cod ? "Nouvelle commande à livrer" : "Nouvelle commande payée";
+  const title = cod ? "Nouvelle commande à livrer — à confirmer" : "Nouvelle commande payée";
   const lead = cod
-    ? `Un client a commandé <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>, à régler à la livraison.`
+    ? `Un client a commandé <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>, à régler à la livraison. Rien n'est encore réservé : confirme la commande depuis ton tableau de bord une fois le client joint.`
     : `Un client vient de payer <strong>${escapeEmailHtml(args.totalLabel)}</strong> sur <strong>${escapeEmailHtml(args.shopName)}</strong>.`;
   const footer = cod
-    ? "Prépare la commande, livre-la et encaisse à la remise. Une fois l'argent reçu, marque-la payée depuis ton tableau de bord."
+    ? "Joins le client, puis confirme la commande : le stock est réservé et le client reçoit sa confirmation. Livre, encaisse à la remise, et marque-la payée. Sans confirmation sous 7 jours, elle expire."
     : "Prépare la commande et mets-la à jour depuis ton tableau de bord : le client suit son avancement.";
 
   await sendTransactionalEmail({
     to: args.to,
     subject: cod
-      ? `Nouvelle commande à livrer — ${args.totalLabel} à encaisser (${shortId})`
+      ? `Commande à confirmer — ${args.totalLabel} à encaisser à la livraison (${shortId})`
       : `Nouvelle commande payée — ${args.totalLabel} (${shortId})`,
     text: `${title} sur ${args.shopName} !\n\n${itemText}\n\nTotal : ${args.totalLabel}${cod ? " — à encaisser à la livraison" : ""}\n\n${contactText}${warningText}\n\n${footer}\n\nVoir la commande : ${args.detailUrl}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>${title}</h1><p>${lead}</p><ul>${args.items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><ul>${contactHtml}</ul>${warningHtml}<p><a href="${escapeEmailHtml(args.detailUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Voir la commande ${escapeEmailHtml(shortId)}</a></p><p style="color:#5c5670;font-size:13px">${escapeEmailHtml(footer)}</p></div>`,
@@ -371,9 +372,13 @@ function formatShippingAddress(value: unknown): string | null {
 }
 
 /**
- * Commande à régler à la livraison : l'acheteur reçoit sa confirmation et
- * son lien de suivi (s'il a laissé un e-mail), le vendeur ce qu'il doit
- * préparer et encaisser.
+ * Commande à régler à la livraison, confirmée par le vendeur : l'acheteur
+ * reçoit sa confirmation et son lien de suivi (s'il a laissé un e-mail).
+ *
+ * Pas avant : à la caisse, personne n'a vérifié l'adresse ni versé un
+ * franc — envoyer alors un e-mail « Bio-Lien » à n'importe quelle adresse
+ * saisie ferait de la caisse un relais de courrier anonyme. La page de
+ * succès donne déjà le suivi à l'acheteur.
  */
 export async function notifyBuyerOfCashOnDeliveryOrder(orderId: string): Promise<void> {
   const orderRow = await prisma.order.findUnique({
@@ -381,22 +386,30 @@ export async function notifyBuyerOfCashOnDeliveryOrder(orderId: string): Promise
     select: {
       id: true,
       shopId: true,
+      status: true,
+      paymentProvider: true,
       buyerName: true,
       buyerEmail: true,
       totalAmount: true,
+      shippingAmount: true,
+      discountAmount: true,
       currency: true,
       items: true,
       trackingToken: true,
     },
   });
   if (!orderRow?.buyerEmail) return;
+  if (orderRow.paymentProvider !== "cash_on_delivery" || orderRow.status === "cancelled") return;
 
   const shop = await prisma.shop.findUnique({
     where: { id: orderRow.shopId },
     select: { name: true },
   });
+  const currency = orderRow.currency as Currency;
   const items = (orderRow.items as unknown as OrderItem[]) ?? [];
-  const totalLabel = formatTotal(Number(orderRow.totalAmount), orderRow.currency as Currency);
+  const totalLabel = formatTotal(Number(orderRow.totalAmount), currency);
+  const shipping = Number(orderRow.shippingAmount ?? 0);
+  const discount = Number(orderRow.discountAmount ?? 0);
   const trackingUrl = publicOrderUrl(orderRow.trackingToken);
   const itemText = items
     .map(
@@ -404,26 +417,34 @@ export async function notifyBuyerOfCashOnDeliveryOrder(orderId: string): Promise
         `• ${item.product_snapshot.product_name}${item.product_snapshot.variant_name ? ` — ${item.product_snapshot.variant_name}` : ""} × ${item.quantity}`,
     )
     .join("\n");
+  const hasDigital = items.some((item) => item.product_snapshot.is_digital === true);
   const shopName = shop?.name ?? "Bio-Lien";
+  const amountLines = [
+    shipping > 0 ? `Livraison : ${formatTotal(shipping, currency)}` : null,
+    discount > 0 ? `Remise : −${formatTotal(discount, currency)}` : null,
+    `Total à régler à la livraison : ${totalLabel}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const digitalText = hasDigital
+    ? "\n\nTes fichiers seront disponibles sur ta page de suivi dès que le vendeur aura encaissé la livraison."
+    : "";
 
   await sendTransactionalEmail({
     to: orderRow.buyerEmail,
-    subject: `Commande enregistrée chez ${shopName} — à régler à la livraison`,
-    text: `Bonjour ${orderRow.buyerName},\n\nTa commande est enregistrée. Tu règles ${totalLabel} à la livraison, en espèces ou en Mobile Money.\n\n${itemText}\n\nSuivre la commande : ${trackingUrl}`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Commande enregistrée</h1><p>Bonjour ${escapeEmailHtml(orderRow.buyerName)}, ta commande chez <strong>${escapeEmailHtml(shopName)}</strong> est enregistrée. Tu règles <strong>${escapeEmailHtml(totalLabel)}</strong> à la livraison, en espèces ou en Mobile Money.</p><ul>${items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><p><a href="${escapeEmailHtml(trackingUrl)}">Suivre ma commande</a></p></div>`,
+    subject: `Commande confirmée chez ${shopName} — ${totalLabel} à régler à la livraison`,
+    text: `Bonjour ${orderRow.buyerName},\n\nLe vendeur a confirmé ta commande et prépare ton colis. Tu règles ${totalLabel} à la livraison, en espèces ou en Mobile Money.\n\n${itemText}\n\n${amountLines}${digitalText}\n\nSuivre la commande : ${trackingUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><h1>Commande confirmée</h1><p>Bonjour ${escapeEmailHtml(orderRow.buyerName)}, <strong>${escapeEmailHtml(shopName)}</strong> a confirmé ta commande et prépare ton colis. Tu règles <strong>${escapeEmailHtml(totalLabel)}</strong> à la livraison, en espèces ou en Mobile Money.</p><ul>${items.map((item) => `<li>${escapeEmailHtml(item.product_snapshot.product_name)}${item.product_snapshot.variant_name ? ` — ${escapeEmailHtml(item.product_snapshot.variant_name)}` : ""} × ${item.quantity}</li>`).join("")}</ul><p>${escapeEmailHtml(amountLines).replace(/\n/g, "<br>")}</p>${hasDigital ? `<p>${escapeEmailHtml(digitalText.trim())}</p>` : ""}<p><a href="${escapeEmailHtml(trackingUrl)}">Suivre ma commande</a></p></div>`,
     idempotencyKey: `order-cod-buyer/${orderRow.id}`,
   });
 }
 
+/** À la caisse : seul le vendeur est prévenu — il a une commande à confirmer. */
 export async function notifyCashOnDeliveryOrder(orderId: string): Promise<void> {
-  const results = await Promise.allSettled([
-    notifyBuyerOfCashOnDeliveryOrder(orderId),
-    notifySellerOfOrder(orderId, "cash_on_delivery"),
-  ]);
-  for (const result of results) {
-    if (result.status === "rejected") {
-      console.warn("[order-notifications] cod channel failed", result.reason);
-    }
+  try {
+    await notifySellerOfOrder(orderId, "cash_on_delivery");
+  } catch (error) {
+    console.warn("[order-notifications] cod seller channel failed", error);
   }
 }
 

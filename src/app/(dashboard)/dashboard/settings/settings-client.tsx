@@ -1214,6 +1214,7 @@ export function SettingsClient({
           <ShippingSection
             shopId={shop.id}
             currency={shop.currency}
+            checkoutMode={shop.checkout_mode}
             shippingEnabled={shop.shipping_enabled}
             cashOnDelivery={shop.cash_on_delivery}
             initialZones={shippingZones}
