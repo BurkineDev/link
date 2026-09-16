@@ -11,7 +11,7 @@ import {
   Showcase,
 } from "@/components/home/sections";
 import { MOBILE_MONEY_PROVIDERS } from "@/lib/constants";
-import { PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
+import { PLAN_LIMITS, PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
 import { commissionNote, planFeatures, planLabel } from "@/lib/plans/catalog";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import {
@@ -633,7 +633,7 @@ function buildFaq() {
     },
     {
       q: "Que se passe-t-il si j'arrête de payer ?",
-      a: "Ta page reste en ligne, entière, sur le plan Découverte : tes liens, cinq produits, tes statistiques. Tu repasses au plan payant quand tu veux.",
+      a: `Ta page reste en ligne, entière, sur le plan Découverte : tes liens, ${PLAN_LIMITS.free.maxProducts} produits, tes statistiques. Tu repasses au plan payant quand tu veux.`,
     },
     {
       q: "Puis-je changer l'apparence de ma page ?",
