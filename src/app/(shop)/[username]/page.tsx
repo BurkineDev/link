@@ -23,6 +23,7 @@ import type { PageBlockRow } from "@/lib/types/database";
 import { ShopPage } from "./shop-page";
 import { getEffectivePlanForUser } from "@/lib/db/plans";
 import { showBioLienBadge } from "@/lib/plans/badge";
+import { effectiveCheckoutMode } from "@/lib/payments/online-checkout";
 import { AndroidGoScript } from "@/components/shop/android-go-script";
 
 interface Props {
@@ -156,7 +157,15 @@ export default async function Page({ params }: Props) {
 
   // Les composants d'affichage attendent encore la forme Supabase
   // (snake_case) ; les sérialiseurs la reproduisent à l'identique.
-  const shop = serializeShop(shopRow) as unknown as ShopRow;
+  //
+  // Le mode de commande est celui qui s'applique vraiment, pas celui en
+  // base : une boutique « online » s'affiche en WhatsApp tant que la caisse
+  // Bio-Lien est masquée (décision du 14 septembre 2026). La valeur en base
+  // n'est pas touchée — la page en reçoit une copie.
+  const shop: ShopRow = {
+    ...(serializeShop(shopRow) as unknown as ShopRow),
+    checkout_mode: effectiveCheckoutMode(shopRow.checkoutMode),
+  };
   const products = productRows.map(serializeProduct) as unknown as ProductRow[];
   const categories = categoryRows.map(serializeCategory) as CategoryRow[];
   const links = linkRows.map(serializeShopLink) as LegacyLink[];

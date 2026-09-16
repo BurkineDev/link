@@ -3,11 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { safeNextPath } from "@/lib/validations/next-path";
 import { RegisterForm } from "./register-form";
 import type { RegisterInvite } from "@/components/auth/starter-offer";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata: Metadata = {
   title: "Créer ma page",
-  description:
-    "Crée ta page Bio-Lien gratuitement : ton lien @pseudo, tes produits, et le paiement Mobile Money ou carte bancaire.",
+  // Figée au build : caisse masquée, la commande arrive sur WhatsApp.
+  description: isOnlineCheckoutEnabled()
+    ? "Crée ta page Bio-Lien gratuitement : ton lien @pseudo, tes produits, et le paiement Mobile Money ou carte bancaire."
+    : "Crée ta page Bio-Lien gratuitement : ton lien @pseudo, tes produits, et tes commandes sur WhatsApp.",
 };
 
 interface Props {

@@ -28,6 +28,14 @@ interface BioProductCardProps {
   /** Set when the shop sells through WhatsApp — the CTA becomes a wa.me link. */
   whatsappNumber: string | null;
   pageUrl: string;
+  /**
+   * Le panier n'est montré que si la page le permet : vente en ligne, ou
+   * repli sans numéro WhatsApp quand la caisse Bio-Lien est rallumée. À
+   * `false` sans numéro WhatsApp valide, la carte ne montre aucun bouton
+   * d'achat : mieux vaut rien qu'un « + » qui mène à une caisse fermée.
+   * `true` par défaut pour ne rien changer aux appelants existants.
+   */
+  cartEnabled?: boolean;
 }
 
 export function BioProductCard({
@@ -40,6 +48,7 @@ export function BioProductCard({
   radiusClass,
   whatsappNumber,
   pageUrl,
+  cartEnabled = true,
 }: BioProductCardProps) {
   const addItem = useCart((s) => s.addItem);
 
@@ -197,7 +206,7 @@ export function BioProductCard({
                 <MessageCircle className="size-5" />
               )}
             </button>
-          ) : (
+          ) : cartEnabled ? (
             <button
               type="button"
               onClick={handleAddToCart}
@@ -210,7 +219,7 @@ export function BioProductCard({
             >
               <Plus className="size-5" strokeWidth={2.5} />
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </Link>

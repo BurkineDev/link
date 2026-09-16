@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { checkStockAvailability } from "@/lib/db/stock";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
 import { isValidWhatsAppNumber, normalizeWhatsAppNumber } from "@/lib/utils/whatsapp";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { formatPrice } from "@/lib/utils/format";
 import {
   formatWhatsAppOrderMessage,
@@ -20,12 +21,14 @@ import type { Currency } from "@/lib/constants";
  * puis renvoie le lien wa.me à ouvrir (voir src/lib/orders/whatsapp-order.ts).
  *
  * Public et anonyme comme le checkout : les prix sont relus en base, la
- * boutique doit être publiée et en mode WhatsApp avec un numéro valide, le
- * stock réel est vérifié (sans réservation : une commande WhatsApp n'engage
- * rien tant qu'elle n'est pas payée), et une même IP ne crée pas plus de
- * 40 commandes par 10 minutes — plus large que le checkout, parce que les
- * opérateurs mobiles partagent une adresse entre des centaines d'abonnés
- * et qu'au-delà le bouton retombe sur WhatsApp sans enregistrement.
+ * boutique doit être publiée avec un numéro WhatsApp valide (et en mode
+ * WhatsApp si la caisse Bio-Lien est rallumée — caisse masquée, toute
+ * boutique publiée est réputée WhatsApp), le stock réel est vérifié (sans
+ * réservation : une commande WhatsApp n'engage rien tant qu'elle n'est pas
+ * payée), et une même IP ne crée pas plus de 40 commandes par 10 minutes —
+ * plus large que le checkout, parce que les opérateurs mobiles partagent
+ * une adresse entre des centaines d'abonnés et qu'au-delà le bouton retombe
+ * sur WhatsApp sans enregistrement.
  */
 
 const schema = z.object({
@@ -84,9 +87,22 @@ export async function POST(request: NextRequest) {
   if (!shop || !shop.isPublished) {
     return NextResponse.json({ error: "Boutique introuvable." }, { status: 404 });
   }
-  if (shop.checkoutMode !== "whatsapp" || !isValidWhatsAppNumber(shop.whatsappNumber)) {
+  if (isOnlineCheckoutEnabled()) {
+    // Caisse rallumée : le vendeur a pu choisir la vente en ligne, et le
+    // client sait qu'un NOT_WHATSAPP_MODE n'est pas un refus (il ouvre
+    // WhatsApp avec le message d'origine).
+    if (shop.checkoutMode !== "whatsapp" || !isValidWhatsAppNumber(shop.whatsappNumber)) {
+      return NextResponse.json(
+        { error: "Cette boutique ne prend pas les commandes sur WhatsApp.", code: "NOT_WHATSAPP_MODE" },
+        { status: 409 },
+      );
+    }
+  } else if (!isValidWhatsAppNumber(shop.whatsappNumber)) {
+    // Caisse masquée : le mode en base ne compte plus, seul le numéro
+    // compte. Sans numéro, il n'y a rien à ouvrir — code distinct, que le
+    // client traite comme un refus (voir src/lib/orders/whatsapp-client.ts).
     return NextResponse.json(
-      { error: "Cette boutique ne prend pas les commandes sur WhatsApp.", code: "NOT_WHATSAPP_MODE" },
+      { error: "Le vendeur n'a pas indiqué de numéro WhatsApp.", code: "NO_WHATSAPP_NUMBER" },
       { status: 409 },
     );
   }

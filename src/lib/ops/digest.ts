@@ -5,6 +5,7 @@ import { escapeEmailHtml, sendTransactionalEmail } from "@/lib/email";
 import { adminEmails } from "@/lib/admin-emails";
 import { formatPrice } from "@/lib/utils/format";
 import { OPEN_PAYOUT_STATUSES } from "@/lib/payouts/config";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import type { OpsSeverity } from "./alert";
 import { getHealth, type HealthSnapshot } from "./health";
 
@@ -16,6 +17,12 @@ import { getHealth, type HealthSnapshot } from "./health";
  * répond 503 (cron muet, canal e-mail marqué mort).
  * Il résume ce qui s'est passé en 24 h, ce qui reste à traiter, et ce que
  * le cron vient de faire.
+ *
+ * Deux rendus, tranchés par `onlineCheckout` (le drapeau du mode « En
+ * ligne », recopié dans les données par `buildDigest` pour que
+ * `formatDigestEmail` reste pure) : drapeau éteint, les ventes sont les
+ * commandes WhatsApp que le vendeur a marquées payées et le grand livre ne
+ * s'affiche que s'il a bougé ; drapeau allumé, le rendu historique.
  */
 
 export interface CronSummary {
@@ -38,7 +45,12 @@ export interface DigestData {
     lastSeenAt: string;
   }>;
   newEventsByKind: Array<{ kind: string; severity: OpsSeverity; count: number }>;
+  /** Le mode « En ligne » (caisse Bio-Lien) est-il allumé ? Décide du rendu. */
+  onlineCheckout: boolean;
+  /** Ventes passées par la caisse Bio-Lien : la ligne « gross » du grand livre. */
   sales: { paidOrders: number; byCurrency: Array<{ currency: string; total: number }> };
+  /** Commandes WhatsApp (ou à la livraison) que le vendeur a marquées payées dans la fenêtre. */
+  whatsappPaid: number;
   ordersCreated: number;
   offlineAwaiting: { count: number; expiringSoon: number };
   payoutsOpen: { count: number; oldestDays: number | null };
@@ -53,7 +65,7 @@ export async function buildDigest(
   const now = options.now ?? new Date();
   const since = new Date(now.getTime() - DAY_MS);
 
-  const [health, openRows, newRows, paidRows, ordersCreated, offlinePending, offlineExpiring, payoutRows, shortfalls] =
+  const [health, openRows, newRows, paidRows, whatsappPaid, ordersCreated, offlinePending, offlineExpiring, payoutRows, shortfalls] =
     await Promise.all([
       getHealth({ now }),
       prisma.opsEvent.findMany({
@@ -74,6 +86,28 @@ export async function buildDigest(
         where: { type: "gross", createdAt: { gte: since } },
         _count: { _all: true },
         _sum: { amount: true },
+      }),
+      // Les ventes WhatsApp marquées payées par le vendeur : rien au grand
+      // livre (Bio-Lien n'a touché aucun argent) et pas de colonne paidAt,
+      // donc on lit l'événement de statut que `settlePaidOrder` écrit au
+      // règlement (statut « confirmée » ou au-delà, message public
+      // « Paiement … », sans acteur : un changement de statut tapé par le
+      // vendeur porte son identifiant, même s'il commence par « Paiement »).
+      // Compté par commande, pas par événement : une commande marquée payée
+      // = une vente, même si elle a bougé depuis.
+      prisma.order.count({
+        where: {
+          paymentProvider: { in: ["manual", "cash_on_delivery"] },
+          paymentStatus: "paid",
+          statusEvents: {
+            some: {
+              createdAt: { gte: since },
+              createdBy: null,
+              status: { in: ["confirmed", "processing", "shipped", "delivered"] },
+              publicMessage: { startsWith: "Paiement" },
+            },
+          },
+        },
       }),
       prisma.order.count({ where: { createdAt: { gte: since } } }),
       prisma.order.count({
@@ -116,10 +150,13 @@ export async function buildDigest(
     newEventsByKind: newRows
       .map((row) => ({ kind: row.kind, severity: row.severity as OpsSeverity, count: row._count._all }))
       .sort((a, b) => b.count - a.count),
+    // Lu ici, à chaque rapport, jamais dans la mise en forme.
+    onlineCheckout: isOnlineCheckoutEnabled(),
     sales: {
       paidOrders: paidRows.reduce((sum, row) => sum + row._count._all, 0),
       byCurrency: paidRows.map((row) => ({ currency: row.currency, total: Number(row._sum.amount ?? 0) })),
     },
+    whatsappPaid,
     ordersCreated,
     offlineAwaiting: { count: offlinePending, expiringSoon: offlineExpiring },
     payoutsOpen: {
@@ -157,10 +194,20 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
         ? `🟠 ${warning} point${warning > 1 ? "s" : ""} à surveiller`
         : "✅ Tout va bien";
 
-  const salesLine =
+  const ledgerLine =
     data.sales.paidOrders === 0
       ? "Aucune vente réglée."
       : `${data.sales.paidOrders} vente${data.sales.paidOrders > 1 ? "s" : ""} réglée${data.sales.paidOrders > 1 ? "s" : ""} : ${data.sales.byCurrency.map((c) => formatPrice(c.total, c.currency)).join(", ")}.`;
+  const whatsappPaidLine =
+    data.whatsappPaid === 0
+      ? "Aucune commande WhatsApp marquée payée."
+      : `${data.whatsappPaid} commande${data.whatsappPaid > 1 ? "s" : ""} WhatsApp marquée${data.whatsappPaid > 1 ? "s" : ""} payée${data.whatsappPaid > 1 ? "s" : ""}.`;
+  // Mode « En ligne » masqué : la vente, c'est la commande WhatsApp que le
+  // vendeur a marquée payée ; le grand livre ne bouge plus que pour les
+  // commandes historiques, on ne le montre que s'il a bougé.
+  const salesLines = data.onlineCheckout
+    ? [ledgerLine]
+    : [whatsappPaidLine, ...(data.sales.paidOrders > 0 ? [ledgerLine] : [])];
 
   const healthLines = [
     `Base : ${data.health.database.ok ? `ok (${data.health.database.latencyMs} ms)` : `KO — ${data.health.database.error ?? "?"}`}`,
@@ -169,23 +216,36 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
     data.health.version ? `Version : ${data.health.version}` : null,
   ].filter(Boolean) as string[];
 
-  const cronLines = data.cron
-    ? [
-        `Réconciliation Mobile Money : ${data.cron.reconcile.checked} vérifiée(s), ${data.cron.reconcile.paid} réglée(s), ${data.cron.reconcile.failed} annulée(s), ${data.cron.reconcile.stillPending} encore en attente${data.cron.reconcile.errors ? `, ${data.cron.reconcile.errors} en erreur` : ""}.`,
-        `Commandes hors ligne expirées : ${data.cron.manualOrders.expired < 0 ? "étape en échec" : data.cron.manualOrders.expired}${data.cron.manualOrders.errors ? ` (${data.cron.manualOrders.errors} erreur(s))` : ""}.`,
-        `Reversements en retard : ${data.cron.payouts.stale < 0 ? "étape en échec" : `${data.cron.payouts.stale} (${data.cron.payouts.reminded} relance(s) envoyée(s))`}.`,
-      ]
-    : ["Résultat du cron indisponible."];
+  let cronLines: string[];
+  if (!data.cron) {
+    cronLines = ["Résultat du cron indisponible."];
+  } else {
+    const { reconcile, manualOrders, payouts } = data.cron;
+    const reconcileLine = `Réconciliation Mobile Money : ${reconcile.checked} vérifiée(s), ${reconcile.paid} réglée(s), ${reconcile.failed} annulée(s), ${reconcile.stillPending} encore en attente${reconcile.errors ? `, ${reconcile.errors} en erreur` : ""}.`;
+    const expiredCount = `${manualOrders.expired < 0 ? "étape en échec" : manualOrders.expired}${manualOrders.errors ? ` (${manualOrders.errors} erreur(s))` : ""}.`;
+    const payoutsLine = `Reversements en retard : ${payouts.stale < 0 ? "étape en échec" : `${payouts.stale} (${payouts.reminded} relance(s) envoyée(s))`}.`;
+    cronLines = data.onlineCheckout
+      ? [reconcileLine, `Commandes hors ligne expirées : ${expiredCount}`, payoutsLine]
+      : [
+          // Sans caisse Bio-Lien, l'expiration des commandes WhatsApp est
+          // l'étape qui compte ; la réconciliation ne s'affiche que si elle
+          // a eu quelque chose à faire (commandes Mobile Money en vol) ou
+          // si elle a échoué.
+          `Commandes WhatsApp expirées : ${expiredCount}`,
+          ...(reconcile.checked > 0 || reconcile.errors > 0 ? [reconcileLine] : []),
+          payoutsLine,
+        ];
+  }
 
   const todoLines = [
     data.payoutsOpen.count > 0
       ? `${data.payoutsOpen.count} reversement${data.payoutsOpen.count > 1 ? "s" : ""} à exécuter${data.payoutsOpen.oldestDays !== null ? ` (le plus ancien : ${data.payoutsOpen.oldestDays} j)` : ""}.`
       : null,
     data.offlineAwaiting.count > 0
-      ? `${data.offlineAwaiting.count} commande${data.offlineAwaiting.count > 1 ? "s" : ""} WhatsApp / à la livraison en attente chez les vendeurs${data.offlineAwaiting.expiringSoon ? `, dont ${data.offlineAwaiting.expiringSoon} qui expire${data.offlineAwaiting.expiringSoon > 1 ? "nt" : ""} sous 48 h` : ""}.`
+      ? `${data.offlineAwaiting.count} commande${data.offlineAwaiting.count > 1 ? "s" : ""} ${data.onlineCheckout ? "WhatsApp / à la livraison" : "WhatsApp"} en attente chez les vendeurs${data.offlineAwaiting.expiringSoon ? `, dont ${data.offlineAwaiting.expiringSoon} qui expire${data.offlineAwaiting.expiringSoon > 1 ? "nt" : ""} sous 48 h` : ""}.`
       : null,
     data.stockShortfalls > 0
-      ? `${data.stockShortfalls} commande${data.stockShortfalls > 1 ? "s" : ""} réglée${data.stockShortfalls > 1 ? "s" : ""} avec un manque de stock : remboursement possible à prévoir.`
+      ? `${data.stockShortfalls} commande${data.stockShortfalls > 1 ? "s" : ""} réglée${data.stockShortfalls > 1 ? "s" : ""} avec un manque de stock : ${data.onlineCheckout ? "remboursement possible à prévoir" : "à voir avec le vendeur"}.`
       : null,
   ].filter(Boolean) as string[];
 
@@ -203,7 +263,7 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
     ...healthLines.map((l) => `- ${l}`),
     "",
     "Dernières 24 h",
-    `- ${salesLine}`,
+    ...salesLines.map((l) => `- ${l}`),
     `- ${data.ordersCreated} commande${data.ordersCreated > 1 ? "s" : ""} créée${data.ordersCreated > 1 ? "s" : ""}.`,
     ...newLines.map((l) => `- ${l}`),
     "",
@@ -222,7 +282,7 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
   const section = (title: string, lines: string[]) =>
     `<h2 style="font-size:15px;margin:20px 0 6px">${escapeEmailHtml(title)}</h2><ul style="margin:0;padding-left:18px">${lines.map((l) => `<li>${escapeEmailHtml(l)}</li>`).join("")}</ul>`;
 
-  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><p style="font-size:13px;color:#5c5670">Rapport quotidien · ${escapeEmailHtml(data.date)}</p><h1 style="font-size:20px">${escapeEmailHtml(headline)}</h1>${section("Santé", healthLines)}${section("Dernières 24 h", [salesLine, `${data.ordersCreated} commande(s) créée(s).`, ...newLines])}${section("À faire", todoLines.length ? todoLines : ["Rien en attente."])}${section("Alertes ouvertes", eventLines.length ? eventLines : ["Aucune."])}${section("Passage du cron", cronLines)}<p style="margin-top:24px"><a href="${escapeEmailHtml(adminUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Ouvrir l'écran Santé</a></p><p style="color:#5c5670;font-size:12px">Ce rapport part chaque nuit à la fin du cron. S'il n'arrive pas, c'est que le cron n'a pas tourné ou que l'e-mail est en panne : /api/health le dit.</p></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#171717"><p style="font-size:13px;color:#5c5670">Rapport quotidien · ${escapeEmailHtml(data.date)}</p><h1 style="font-size:20px">${escapeEmailHtml(headline)}</h1>${section("Santé", healthLines)}${section("Dernières 24 h", [...salesLines, `${data.ordersCreated} commande(s) créée(s).`, ...newLines])}${section("À faire", todoLines.length ? todoLines : ["Rien en attente."])}${section("Alertes ouvertes", eventLines.length ? eventLines : ["Aucune."])}${section("Passage du cron", cronLines)}<p style="margin-top:24px"><a href="${escapeEmailHtml(adminUrl)}" style="display:inline-block;background:#D9F55C;color:#151020;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">Ouvrir l'écran Santé</a></p><p style="color:#5c5670;font-size:12px">Ce rapport part chaque nuit à la fin du cron. S'il n'arrive pas, c'est que le cron n'a pas tourné ou que l'e-mail est en panne : /api/health le dit.</p></div>`;
 
   return {
     subject: `${headline} — rapport Bio-Lien du ${shortDate(data.date)}`,

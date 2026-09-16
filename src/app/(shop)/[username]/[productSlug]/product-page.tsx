@@ -30,6 +30,7 @@ import {
   withAlpha,
 } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { WhatsAppOrderButton } from "@/components/shop/whatsapp-order-button";
 import type {
   ShopRow,
@@ -140,22 +141,29 @@ export function ProductPage({
     setCartOpen(true);
   }
 
-  // WhatsApp mode only when a usable number exists; otherwise fall back to
-  // the cart so the product is never a dead end (mirrors the bio page).
-  const whatsAppUrl =
-    shop.checkout_mode === "whatsapp"
-      ? buildWhatsAppOrderUrl({
-          whatsappNumber: shop.whatsapp_number,
-          shopName: shop.name,
-          productName: product.name,
-          price: effectivePrice,
-          currency: product.currency,
-          variantLabel,
-          quantity,
-          shopUrl: pageUrl,
-        })
-      : null;
-  const isWhatsAppMode = whatsAppUrl !== null;
+  // Trois notions distinctes (mêmes règles que la page boutique) :
+  //   • sellsOnline — caisse Bio-Lien, drapeau déjà appliqué par le serveur.
+  //   • hasWhatsApp — numéro exploitable. Pilote « Commander sur WhatsApp ».
+  //   • cartEnabled — panier montré (Ajouter / Acheter, FAB et tiroir) :
+  //     vente en ligne, ou repli d'une boutique WhatsApp sans numéro valide,
+  //     réservé à la caisse rallumée (comportement d'origine, inchangé).
+  // Caisse masquée, sans l'un ni l'autre, plus de repli sur un panier qui
+  // mène à une caisse fermée : la fiche le dit simplement, sans bouton.
+  const sellsOnline = shop.checkout_mode === "online";
+  const whatsAppUrl = !sellsOnline
+    ? buildWhatsAppOrderUrl({
+        whatsappNumber: shop.whatsapp_number,
+        shopName: shop.name,
+        productName: product.name,
+        price: effectivePrice,
+        currency: product.currency,
+        variantLabel,
+        quantity,
+        shopUrl: pageUrl,
+      })
+    : null;
+  const hasWhatsApp = whatsAppUrl !== null;
+  const cartEnabled = sellsOnline || (!hasWhatsApp && isOnlineCheckoutEnabled());
 
   return (
     <div
@@ -346,7 +354,7 @@ export function ProductPage({
             </div>
 
             {/* CTAs */}
-            {isWhatsAppMode ? (
+            {hasWhatsApp ? (
               <WhatsAppOrderButton
                 order={{
                   shopId: shop.id,
@@ -379,7 +387,7 @@ export function ProductPage({
                 <MessageCircle className="size-5" />
                 {isOutOfStock ? "Épuisé" : "Commander sur WhatsApp"}
               </WhatsAppOrderButton>
-            ) : (
+            ) : cartEnabled ? (
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
@@ -413,6 +421,10 @@ export function ProductPage({
                   </button>
                 )}
               </div>
+            ) : (
+              <p className="text-sm opacity-70">
+                Le vendeur n&apos;a pas encore indiqué son numéro WhatsApp.
+              </p>
             )}
 
             {/* Description */}
@@ -444,8 +456,9 @@ export function ProductPage({
                   currency={shop.currency}
                   palette={palette}
                   radiusClass={radiusClass}
-                  whatsappNumber={isWhatsAppMode ? shop.whatsapp_number : null}
+                  whatsappNumber={hasWhatsApp ? shop.whatsapp_number : null}
                   pageUrl={shopUrl}
+                  cartEnabled={cartEnabled}
                 />
               ))}
             </div>
@@ -480,7 +493,7 @@ export function ProductPage({
       </main>
 
       {/* ── Cart FAB + drawer: online checkout mode only ── */}
-      {!isWhatsAppMode && (
+      {cartEnabled && (
         <>
           <button
             type="button"

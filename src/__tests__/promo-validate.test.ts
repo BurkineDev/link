@@ -49,6 +49,13 @@ beforeEach(() => {
   mockFindUnique.mockClear();
   mockEnforce.mockReset();
   mockEnforce.mockResolvedValue(null);
+  // Les codes promo n'existent qu'à la caisse Bio-Lien, masquée par défaut
+  // (décision du 14 septembre 2026) : ces cas la supposent rallumée.
+  process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
 });
 
 describe("POST /api/promo-codes/validate", () => {
@@ -97,6 +104,22 @@ describe("POST /api/promo-codes/validate", () => {
     const res = await POST(makeRequest({ shopId: SHOP_ID, code: "INCONNU", orderTotal: 10_000 }));
     expect(res.status).toBe(404);
   });
+
+  test("drapeau éteint : 404 après la règle IP, sans lire le corps ni la base", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+
+    const res = await POST(makeRequest({ shopId: SHOP_ID, code: "BIENVENUE", orderTotal: 10_000 }));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Introuvable" });
+    // Seule la règle IP a tourné : ni la règle par boutique, ni la base.
+    expect(mockEnforce).toHaveBeenCalledTimes(1);
+    expect(mockFindUnique).not.toHaveBeenCalled();
+
+    // Un client bloqué reste bloqué : le 429 passe avant le 404.
+    mockEnforce.mockResolvedValueOnce(blocked());
+    expect((await POST(makeRequest({ shopId: SHOP_ID, code: "BIENVENUE", orderTotal: 10_000 }))).status).toBe(429);
+  });
 });
 
 describe("arrondi de la remise", () => {
@@ -108,5 +131,37 @@ describe("arrondi de la remise", () => {
     _promo = { ..._promo!, shop: { currency: "EUR" } };
     res = await POST(makeRequest({ shopId: SHOP_ID, code: "BIENVENUE", orderTotal: 15.6 }));
     expect(await res.json()).toMatchObject({ ok: true, discount: 1.56 });
+  });
+});
+
+/**
+ * Caisse masquée : on ne modifie plus de code promo (aucun acheteur ne peut
+ * en saisir) ; la lecture et la suppression restent. La route de création
+ * importe le client Prisma généré (non chargeable sous Jest) : couverte par
+ * la même garde, testée ici sur PATCH.
+ */
+jest.mock("@/lib/auth", () => ({
+  getCurrentUser: jest.fn(async () => {
+    throw new Error("getCurrentUser ne doit pas être appelé : 404 avant l'authentification");
+  }),
+}));
+
+describe("codes promo (vendeur) — caisse masquée", () => {
+  beforeEach(() => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+  });
+
+  test("PATCH /api/promo-codes/[id] répond 404 avant toute authentification ou lecture", async () => {
+    const { NextRequest } = await import("next/server");
+    const { PATCH } = await import("@/app/api/promo-codes/[id]/route");
+    const patched = await PATCH(
+      new NextRequest("http://localhost:3000/api/promo-codes/p1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ is_active: false }),
+      }),
+      { params: Promise.resolve({ id: "p1" }) },
+    );
+    expect(patched.status).toBe(404);
   });
 });

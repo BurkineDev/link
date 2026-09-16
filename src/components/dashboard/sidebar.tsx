@@ -32,6 +32,11 @@ type NavItemDef = {
 // Navigation alignée sur la boucle produit : la BioPage d'abord (c'est le
 // produit), puis ce qu'elle génère (ventes), puis qui elle attire (clients),
 // puis comment la développer. Voir docs/social-commerce-os.md §8.
+// « Paiements » n'a de sens que caisse allumée (voir
+// src/lib/payments/online-checkout.ts) : masquée, l'entrée est retirée.
+const PAYMENTS_HREF = "/dashboard/payments";
+const PAYOUTS_ADMIN_HREF = "/dashboard/admin/payouts";
+
 const NAV_GROUPS: { label: string; items: NavItemDef[] }[] = [
   {
     label: "Général",
@@ -45,7 +50,7 @@ const NAV_GROUPS: { label: string; items: NavItemDef[] }[] = [
     items: [
       { label: "Produits", href: "/dashboard/products", icon: PackageIcon },
       { label: "Commandes", href: "/dashboard/orders", icon: ShoppingBagIcon },
-      { label: "Paiements", href: "/dashboard/payments", icon: CreditCardIcon },
+      { label: "Paiements", href: PAYMENTS_HREF, icon: CreditCardIcon },
     ],
   },
   {
@@ -103,17 +108,45 @@ interface SidebarProps {
   pendingPayouts?: number;
   /** Alertes critiques non traitées (écran Santé). */
   openAlerts?: number;
+  /**
+   * Caisse Bio-Lien allumée (lu côté serveur, passé en prop). Éteinte : pas
+   * d'entrée Paiements, et Reversements seulement s'il reste des demandes
+   * à solder.
+   */
+  onlineCheckout: boolean;
 }
 
 const ADMIN_GROUP: { label: string; items: NavItemDef[] } = {
   label: "Équipe",
   items: [
-    { label: "Reversements", href: "/dashboard/admin/payouts", icon: BanknoteIcon },
+    { label: "Reversements", href: PAYOUTS_ADMIN_HREF, icon: BanknoteIcon },
     { label: "Santé", href: "/dashboard/admin/ops", icon: Activity },
   ],
 };
 
-export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 0, openAlerts = 0 }: SidebarProps) {
+/** Les groupes du menu selon le mode en vigueur et ce qu'il reste à traiter. */
+function navGroups(onlineCheckout: boolean, isAdmin: boolean, pendingPayouts: number) {
+  const hidden = new Set<string>();
+  if (!onlineCheckout) {
+    hidden.add(PAYMENTS_HREF);
+    // Les routes de reversement restent actives pour solder l'existant :
+    // l'entrée ne s'affiche que tant qu'il y a quelque chose à solder.
+    if (pendingPayouts <= 0) hidden.add(PAYOUTS_ADMIN_HREF);
+  }
+  return (isAdmin ? [...NAV_GROUPS, ADMIN_GROUP] : NAV_GROUPS).map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !hidden.has(item.href)),
+  }));
+}
+
+export function Sidebar({
+  shopSlug,
+  shopName,
+  isAdmin = false,
+  pendingPayouts = 0,
+  openAlerts = 0,
+  onlineCheckout,
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -137,7 +170,7 @@ export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 
       </div>
 
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3.5 py-4">
-        {(isAdmin ? [...NAV_GROUPS, ADMIN_GROUP] : NAV_GROUPS).map((group) => (
+        {navGroups(onlineCheckout, isAdmin, pendingPayouts).map((group) => (
           <div key={group.label} className="space-y-1">
             <p
               className="mb-2 select-none px-3 text-[9px] font-bold uppercase tracking-[0.14em]"
@@ -167,7 +200,7 @@ export function Sidebar({ shopSlug, shopName, isAdmin = false, pendingPayouts = 
                 >
                   <NavIcon icon={Icon} active={active} />
                   <span>{item.label}</span>
-                  {item.href === "/dashboard/admin/payouts" && pendingPayouts > 0 ? (
+                  {item.href === PAYOUTS_ADMIN_HREF && pendingPayouts > 0 ? (
                     <span
                       className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums"
                       style={{ background: "var(--b-lime)", color: "#111" }}
@@ -237,10 +270,10 @@ const BOTTOM_ITEMS: NavItemDef[] = [
 export function BottomNav({ attention = 0 }: { attention?: number }) {
   const pathname = usePathname();
 
-  // « Plus » regroupe Produits, Paiements, Clients, Marketing et Réglages —
-  // la boutique publique reste accessible depuis « Ma page ». Sur
-  // téléphone, c'est là que vit l'espace Équipe : le point rouge dit
-  // qu'une alerte ou un reversement attend.
+  // « Plus » regroupe Produits, Clients, Marketing et Réglages (et
+  // Paiements, caisse allumée) — la boutique publique reste accessible
+  // depuis « Ma page ». Sur téléphone, c'est là que vit l'espace Équipe :
+  // le point rouge dit qu'une alerte ou un reversement attend.
   const items: NavItemDef[] = BOTTOM_ITEMS;
 
   return (

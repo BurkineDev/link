@@ -1,5 +1,6 @@
 import { PLAN_LIMITS } from "@/lib/subscription";
 import { featureSentence, planLabel, planPriceSummary } from "@/lib/plans/catalog";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata = {
   alternates: { canonical: "/legal/terms" },
@@ -8,22 +9,43 @@ export const metadata = {
     "Conditions générales d'utilisation de la plateforme Bio-Lien pour les créateurs et acheteurs.",
 };
 
-const LAST_UPDATED = "13 septembre 2026";
+// Deux modèles, un par mode (src/lib/payments/online-checkout.ts). Par défaut
+// depuis le 14 septembre 2026 (décision fondateur), la commande part sur
+// WhatsApp, le paiement se règle entre le Vendeur et l'Acheteur, Bio-Lien ne
+// touche pas l'argent des ventes : c'est le contrat « WhatsApp ». Drapeau
+// allumé, la caisse Bio-Lien encaisse, prélève la commission et reverse : le
+// contrat « En ligne » d'origine revient mot pour mot, avec sa date. Un
+// contrat qui dirait « aucune commission » pendant qu'on en prélève une
+// serait pire qu'un contrat en deux versions. Ces textes méritent une
+// relecture juridique.
+const LAST_UPDATED = {
+  online: "13 septembre 2026",
+  whatsapp: "15 septembre 2026",
+} as const;
 
 export default function TermsPage() {
+  // Lu au rendu, jamais en constante de module.
+  const online = isOnlineCheckoutEnabled();
   return (
     <>
       <h1>Conditions Générales d&apos;Utilisation</h1>
       <p className="text-sm text-muted-foreground mb-8">
-        Dernière mise à jour : {LAST_UPDATED}
+        Dernière mise à jour : {online ? LAST_UPDATED.online : LAST_UPDATED.whatsapp}
       </p>
 
       <h2>1. Objet</h2>
       <p>
         Les présentes Conditions Générales d&apos;Utilisation (« CGU ») régissent l&apos;accès et
         l&apos;utilisation de la plateforme Bio-Lien (« la Plateforme »), un service en
-        ligne permettant aux créateurs et entrepreneurs (« Vendeurs ») de créer une
-        boutique en ligne et d&apos;y vendre leurs produits à leurs clients (« Acheteurs »).
+        ligne permettant aux créateurs et entrepreneurs (« Vendeurs ») de créer une{" "}
+        {online ? (
+          <>boutique en ligne et d&apos;y vendre leurs produits à leurs clients (« Acheteurs »).</>
+        ) : (
+          <>
+            page et une boutique en ligne, d&apos;y présenter leurs produits et de recevoir
+            les commandes de leurs clients (« Acheteurs »), notamment par WhatsApp.
+          </>
+        )}
       </p>
 
       <h2>2. Acceptation des CGU</h2>
@@ -53,9 +75,15 @@ export default function TermsPage() {
             Tarifs affiche et que Mobile Money et Stripe facturent. */}
         <li>
           <strong>{planLabel("free")} (gratuit)</strong> : limité à{" "}
-          {PLAN_LIMITS.free.maxProducts} produits par boutique. Une commission de{" "}
-          {Math.round(PLAN_LIMITS.free.commissionRate * 100)} % est prélevée sur chaque
-          vente pour couvrir les frais de la plateforme.
+          {PLAN_LIMITS.free.maxProducts} produits par boutique
+          {online ? (
+            <>
+              . Une commission de {Math.round(PLAN_LIMITS.free.commissionRate * 100)} % est
+              prélevée sur chaque vente pour couvrir les frais de la plateforme.
+            </>
+          ) : (
+            <> ; le badge Bio-Lien reste affiché sur la page.</>
+          )}
         </li>
         <li>
           <strong>
@@ -81,7 +109,15 @@ export default function TermsPage() {
 
       <h2>5. Rôle de Bio-Lien</h2>
       <p>
-        Bio-Lien agit en tant que prestataire technique et intermédiaire de paiement.
+        {online ? (
+          <>Bio-Lien agit en tant que prestataire technique et intermédiaire de paiement.</>
+        ) : (
+          <>
+            Bio-Lien agit en tant que prestataire technique uniquement. Bio-Lien
+            n&apos;encaisse, ne détient ni ne reverse aucune somme au titre des ventes : le
+            paiement est convenu directement entre le Vendeur et l&apos;Acheteur.
+          </>
+        )}{" "}
         Le contrat de vente est conclu directement entre le Vendeur et l&apos;Acheteur.
         Bio-Lien n&apos;est pas partie à ce contrat de vente et n&apos;est pas responsable des
         produits vendus, de leur conformité, de leur livraison ou de leur après-vente.
@@ -92,18 +128,49 @@ export default function TermsPage() {
       <ul>
         <li>Respecter la législation applicable, notamment en matière de vente à distance, de fiscalité et de protection des consommateurs.</li>
         <li>Décrire ses produits de manière exacte et complète (prix, disponibilité, frais de livraison).</li>
-        <li>Honorer les commandes payées dans des délais raisonnables.</li>
+        <li>
+          {online
+            ? "Honorer les commandes payées dans des délais raisonnables."
+            : "Honorer les commandes confirmées avec l'Acheteur dans des délais raisonnables."}
+        </li>
         <li>Ne pas vendre de produits illicites, dangereux, contrefaits ou contraires aux bonnes mœurs.</li>
         <li>Gérer le service après-vente, les retours et les remboursements avec ses Acheteurs.</li>
       </ul>
 
-      <h2>7. Paiements et reversements</h2>
-      <p>
-        Les paiements sont traités par Stripe. Bio-Lien collecte les paiements pour le
-        compte du Vendeur puis lui reverse les sommes dues, déduction faite de la
-        commission applicable et des frais de paiement Stripe. Les conditions de
-        reversement sont communiquées au Vendeur lors de la configuration de sa boutique.
-      </p>
+      {online ? (
+        <>
+          <h2>7. Paiements et reversements</h2>
+          <p>
+            Les paiements sont traités par Stripe. Bio-Lien collecte les paiements pour le
+            compte du Vendeur puis lui reverse les sommes dues, déduction faite de la
+            commission applicable et des frais de paiement Stripe. Les conditions de
+            reversement sont communiquées au Vendeur lors de la configuration de sa boutique.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2>7. Paiement des ventes et de l&apos;abonnement</h2>
+          <p>
+            Le paiement des ventes se règle en dehors de la Plateforme, directement entre
+            le Vendeur et l&apos;Acheteur, selon le moyen qu&apos;ils conviennent (Mobile Money,
+            espèces, virement ou autre). Bio-Lien ne prélève aucune commission sur les
+            ventes. Le Vendeur enregistre lui-même, dans son tableau de bord, le paiement
+            reçu pour chaque commande.
+          </p>
+          <p>
+            L&apos;abonnement du Vendeur est réglé par carte bancaire via Stripe ou par
+            Mobile Money, en période prépayée, via Genius Pay. Ces prestataires ne
+            traitent que l&apos;abonnement, jamais les ventes du Vendeur.
+          </p>
+          <p>
+            Lorsque le paiement en ligne des ventes est proposé sur la Plateforme, ses
+            conditions particulières (moyens de paiement, commission éventuelle,
+            reversement) sont indiquées au Vendeur avant activation, sur la page Tarifs et
+            dans son tableau de bord ; à défaut, seules les dispositions ci-dessus
+            s&apos;appliquent.
+          </p>
+        </>
+      )}
 
       <h2>8. Propriété intellectuelle</h2>
       <p>

@@ -46,12 +46,18 @@ import {
 import { QrCode } from "@/components/shared/qr-code";
 import { LinksSection } from "@/components/dashboard/links-section";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 interface MarketingClientProps {
   shop: ShopRow;
   links: ShopLinkRow[];
   codes: PromoCodeRow[];
   publicShopUrl: string;
+  /**
+   * Caisse Bio-Lien visible. Masquée (décision du 14 septembre 2026), les
+   * codes promo n'ont plus aucun point d'entrée acheteur : l'onglet disparaît.
+   */
+  onlineCheckout: boolean;
 }
 
 export function MarketingClient({
@@ -59,6 +65,7 @@ export function MarketingClient({
   links: initialLinks,
   codes: initialCodes,
   publicShopUrl,
+  onlineCheckout,
 }: MarketingClientProps) {
   const router = useRouter();
 
@@ -77,10 +84,12 @@ export function MarketingClient({
             <Link2 className="size-3.5" />
             Liens CTA
           </TabsTrigger>
-          <TabsTrigger value="promos" className="gap-1.5">
-            <Tag className="size-3.5" />
-            Codes promo
-          </TabsTrigger>
+          {onlineCheckout && (
+            <TabsTrigger value="promos" className="gap-1.5">
+              <Tag className="size-3.5" />
+              Codes promo
+            </TabsTrigger>
+          )}
           <TabsTrigger value="tracking" className="gap-1.5">
             <Activity className="size-3.5" />
             Pixels & WhatsApp
@@ -99,14 +108,16 @@ export function MarketingClient({
           />
         </TabsContent>
 
-        <TabsContent value="promos" className="pt-6 space-y-6">
-          <PromoCodesSection
-            shopId={shop.id}
-            initialCodes={initialCodes}
-            currency={shop.currency}
-            onChanged={() => router.refresh()}
-          />
-        </TabsContent>
+        {onlineCheckout && (
+          <TabsContent value="promos" className="pt-6 space-y-6">
+            <PromoCodesSection
+              shopId={shop.id}
+              initialCodes={initialCodes}
+              currency={shop.currency}
+              onChanged={() => router.refresh()}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="tracking" className="pt-6 space-y-6">
           <TrackingSection shop={shop} onSaved={() => router.refresh()} />
@@ -211,7 +222,7 @@ function PromoCodesSection({
           <div>
             <h2 className="text-base font-semibold">Codes promo</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Crée un code que tes clients pourront utiliser au checkout.
+              Crée un code que tes clients pourront utiliser à la caisse.
             </p>
           </div>
 
@@ -347,6 +358,8 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
   const [meta, setMeta] = useState(shop.meta_pixel_id ?? "");
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp_number ?? "");
   const [saving, setSaving] = useState(false);
+  // Figé dans le bundle au build : même valeur que côté serveur.
+  const onlineCheckout = isOnlineCheckoutEnabled();
 
   const save = async () => {
     setSaving(true);
@@ -357,15 +370,22 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
         tiktok_pixel_id: tiktok.trim() || null,
         meta_pixel_id: meta.trim() || null,
         // Le champ ne renvoie qu'un numéro composé valide ou "" (jamais un
-        // numéro sans indicatif, qui donnait un lien wa.me mort).
-        whatsapp_number: whatsapp.trim() || null,
+        // numéro sans indicatif, qui donnait un lien wa.me mort). Envoyé
+        // seulement s'il change : caisse masquée, un `null` sur un numéro
+        // déjà absent serait refusé (WHATSAPP_NUMBER_REQUIRED) et bloquerait
+        // l'enregistrement des pixels.
+        ...(whatsapp.trim() !== (shop.whatsapp_number ?? "")
+          ? { whatsapp_number: whatsapp.trim() || null }
+          : {}),
       }),
     });
     setSaving(false);
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      // 422 sans `code` = échec de schéma ; avec `code` (numéro requis…), le
+      // serveur a déjà rédigé la phrase.
       toast.error(
-        res.status === 422
+        res.status === 422 && !body.code
           ? "Format invalide. Vérifie les champs."
           : body.error ?? "Impossible d'enregistrer.",
       );
@@ -415,11 +435,12 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
         <div>
           <h2 className="text-base font-semibold flex items-center gap-2 pt-2">
             <Smartphone className="size-4" />
-            Notifications WhatsApp
+            {onlineCheckout ? "Notifications WhatsApp" : "Ton numéro WhatsApp"}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Reçois un message à chaque nouvelle commande payée. Ton numéro
-            n&apos;est jamais visible par les acheteurs.
+            {onlineCheckout
+              ? "Reçois un message à chaque nouvelle commande payée. Ton numéro n'est jamais visible par les acheteurs."
+              : "C'est le numéro du bouton « Commander sur WhatsApp » : tes clients t'écrivent dessus. Le même que dans Paramètres → WhatsApp."}
           </p>
         </div>
 
@@ -428,7 +449,11 @@ function TrackingSection({ shop, onSaved }: { shop: ShopRow; onSaved: () => void
           value={whatsapp}
           onChange={setWhatsapp}
           currency={shop.currency}
-          help="Ton numéro n'est jamais visible par les acheteurs."
+          help={
+            onlineCheckout
+              ? "Ton numéro n'est jamais visible par les acheteurs."
+              : "Visible par tes clients quand ils commandent."
+          }
         />
 
         <div className="pt-2">

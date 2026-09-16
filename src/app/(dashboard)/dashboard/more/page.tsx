@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
+import { OPEN_PAYOUT_STATUSES } from "@/lib/payouts/config";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { prisma } from "@/lib/prisma";
 import {
   Activity,
@@ -25,83 +27,102 @@ export const metadata = { title: "Plus" };
  * passent sous 44 px sur un écran de 320 px. Tout ce qui n'y rentre pas
  * atterrit ici — jamais derrière un menu à tiroirs : un vendeur doit pouvoir
  * tout faire depuis son téléphone (mission §27).
+ *
+ * Caisse masquée (voir src/lib/payments/online-checkout.ts) : plus d'entrée
+ * Paiements, et « Reversements à traiter » seulement s'il en reste.
  */
 
-const SECTIONS: Array<{
+type MoreItem = {
   label: string;
-  items: Array<{
-    label: string;
-    href: string;
-    icon: React.ElementType;
-    description: string;
-  }>;
-}> = [
-  {
-    label: "Ventes",
-    items: [
-      {
-        label: "Produits",
-        href: "/dashboard/products",
-        icon: PackageIcon,
-        description: "Ajouter, modifier, publier",
-      },
-      {
-        label: "Paiements",
-        href: "/dashboard/payments",
-        icon: CreditCardIcon,
-        description: "Ce que tu as encaissé",
-      },
-    ],
-  },
-  {
-    label: "Croissance",
-    items: [
-      {
-        label: "Clients",
-        href: "/dashboard/customers",
-        icon: UsersIcon,
-        description: "Ton répertoire d'acheteurs",
-      },
-      {
-        label: "Marketing",
-        href: "/dashboard/marketing",
-        icon: MegaphoneIcon,
-        description: "Liens, promos, QR, stories",
-      },
-      {
-        label: "Analytics",
-        href: "/dashboard/analytics",
-        icon: BarChart3Icon,
-        description: "Vues, clics, conversion",
-      },
-    ],
-  },
-  {
-    label: "Compte",
-    items: [
-      {
-        label: "Paramètres",
-        href: "/dashboard/settings",
-        icon: SettingsIcon,
-        description: "Boutique, apparence, paiements",
-      },
-      {
-        label: "Profil",
-        href: "/dashboard/profile",
-        icon: UserIcon,
-        description: "Ton compte et ton abonnement",
-      },
-    ],
-  },
-];
+  href: string;
+  icon: React.ElementType;
+  description: string;
+};
+type MoreSection = { label: string; items: MoreItem[] };
+
+const PAYMENTS_ITEM: MoreItem = {
+  label: "Paiements",
+  href: "/dashboard/payments",
+  icon: CreditCardIcon,
+  description: "Ce que tu as encaissé",
+};
+
+function sellerSections(onlineCheckout: boolean): MoreSection[] {
+  return [
+    {
+      label: "Ventes",
+      items: [
+        {
+          label: "Produits",
+          href: "/dashboard/products",
+          icon: PackageIcon,
+          description: "Ajouter, modifier, publier",
+        },
+        ...(onlineCheckout ? [PAYMENTS_ITEM] : []),
+      ],
+    },
+    {
+      label: "Croissance",
+      items: [
+        {
+          label: "Clients",
+          href: "/dashboard/customers",
+          icon: UsersIcon,
+          description: "Ton répertoire d'acheteurs",
+        },
+        {
+          label: "Marketing",
+          href: "/dashboard/marketing",
+          icon: MegaphoneIcon,
+          description: onlineCheckout ? "Liens, promos, QR, stories" : "Liens, pixels, QR, stories",
+        },
+        {
+          label: "Analytics",
+          href: "/dashboard/analytics",
+          icon: BarChart3Icon,
+          description: "Vues, clics, conversion",
+        },
+      ],
+    },
+    {
+      label: "Compte",
+      items: [
+        {
+          label: "Paramètres",
+          href: "/dashboard/settings",
+          icon: SettingsIcon,
+          description: onlineCheckout
+            ? "Boutique, apparence, paiements"
+            : "Boutique, apparence, WhatsApp",
+        },
+        {
+          label: "Profil",
+          href: "/dashboard/profile",
+          icon: UserIcon,
+          description: "Ton compte et ton abonnement",
+        },
+      ],
+    },
+  ];
+}
 
 export default async function MorePage() {
   const user = await requireUser();
+  const isAdmin = isAdminEmail(user.email);
+  const onlineCheckout = isOnlineCheckoutEnabled();
 
-  const shop = await prisma.shop.findFirst({
-    where: { ownerId: user.id },
-    select: { slug: true, isPublished: true },
-  });
+  const [shop, pendingPayouts] = await Promise.all([
+    prisma.shop.findFirst({
+      where: { ownerId: user.id },
+      select: { slug: true, isPublished: true },
+    }),
+    // Même compte que le layout : caisse masquée, l'entrée Reversements ne
+    // s'affiche que tant qu'il reste des demandes ouvertes à solder.
+    isAdmin && !onlineCheckout
+      ? prisma.payout.count({ where: { status: { in: [...OPEN_PAYOUT_STATUSES] } } })
+      : 0,
+  ]);
+  const showPayouts = onlineCheckout || pendingPayouts > 0;
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -131,17 +152,21 @@ export default async function MorePage() {
         </a>
       )}
 
-      {(isAdminEmail(user.email)
+      {(isAdmin
         ? [
             {
               label: "Équipe",
               items: [
-                {
-                  label: "Reversements à traiter",
-                  href: "/dashboard/admin/payouts",
-                  icon: BanknoteIcon,
-                  description: "Demandes de versement des vendeurs",
-                },
+                ...(showPayouts
+                  ? [
+                      {
+                        label: "Reversements à traiter",
+                        href: "/dashboard/admin/payouts",
+                        icon: BanknoteIcon,
+                        description: "Demandes de versement des vendeurs",
+                      },
+                    ]
+                  : []),
                 {
                   label: "Santé de la plateforme",
                   href: "/dashboard/admin/ops",
@@ -150,9 +175,9 @@ export default async function MorePage() {
                 },
               ],
             },
-            ...SECTIONS,
+            ...sellerSections(onlineCheckout),
           ]
-        : SECTIONS
+        : sellerSections(onlineCheckout)
       ).map((section) => (
         <section key={section.label} className="space-y-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

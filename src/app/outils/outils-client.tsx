@@ -523,7 +523,7 @@ export function OutilsClient() {
                 style={{ color: "var(--b-muted)" }}
               >
                 Ces outils t&apos;aident à préparer la vente. Bio-Lien t&apos;aide
-                à encaisser et suivre les commandes.
+                à recevoir et suivre les commandes.
               </p>
               <Link
                 href="/register"

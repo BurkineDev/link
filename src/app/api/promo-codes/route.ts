@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializePromoCode } from "@/lib/db/serialize";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { Prisma } from "../../../../prisma/generated/client/client";
 
 const createSchema = z.object({
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/promo-codes
 export async function POST(request: NextRequest) {
+  // Caisse masquée : aucun acheteur ne peut saisir un code, on n'en crée plus
+  // (la lecture et la suppression restent possibles).
+  if (!isOnlineCheckoutEnabled()) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 

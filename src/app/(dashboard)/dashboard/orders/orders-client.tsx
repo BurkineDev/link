@@ -216,6 +216,10 @@ function OrderDetailSheet({
 
   const addr = order.shipping_address;
   const itemsCount = order.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
+  // Payée entre le vendeur et le client (WhatsApp, à la livraison) : Bio-Lien
+  // n'a pas touché l'argent, un remboursement se règle entre eux.
+  const paidOffPlatform =
+    order.payment_provider === "manual" || order.payment_provider === "cash_on_delivery";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -238,8 +242,10 @@ function OrderDetailSheet({
               <p className="font-semibold">Stock insuffisant au moment du paiement</p>
               <p className="mt-1">
                 Le client a payé, mais deux commandes visaient le même stock. Contacte-le pour
-                livrer plus tard ou remplacer. Pour un remboursement, écris à l&apos;équipe
-                Bio-Lien avec le numéro de commande.
+                livrer plus tard ou remplacer.{" "}
+                {paidOffPlatform
+                  ? "Pour un remboursement, règle-le directement avec lui : le paiement s'est fait entre vous."
+                  : "Pour un remboursement, écris à l'équipe Bio-Lien avec le numéro de commande."}
               </p>
               <ul className="mt-2 list-disc pl-5">
                 {order.stock_shortfall.map((item) => (

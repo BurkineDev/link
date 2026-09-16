@@ -266,7 +266,7 @@ export function AdminOpsClient({
         <CardHeader>
           <CardTitle>Dernier passage du cron</CardTitle>
           <CardDescription>
-            Réconciliation Mobile Money, expiration des commandes hors ligne, relance des reversements,
+            Expiration des commandes WhatsApp, réconciliation Mobile Money, relance des reversements,
             puis rapport quotidien.
           </CardDescription>
         </CardHeader>

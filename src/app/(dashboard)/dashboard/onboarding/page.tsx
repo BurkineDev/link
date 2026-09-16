@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { usernameSchema } from "@/lib/validations/auth";
 import { safeNextPath } from "@/lib/validations/next-path";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import OnboardingClient from "./onboarding-client";
 
 /**
@@ -12,6 +13,10 @@ import OnboardingClient from "./onboarding-client";
  *
  * `?next=` (plan choisi avant l'inscription) est re-validé ici : il a
  * transité par une URL.
+ *
+ * Le drapeau de la caisse (voir src/lib/payments/online-checkout.ts) est lu
+ * ici et passé en prop : masquée, l'assistant ne propose pas le paiement en
+ * ligne et exige le numéro WhatsApp.
  */
 export default async function OnboardingPage({
   searchParams,
@@ -33,6 +38,7 @@ export default async function OnboardingPage({
         username: username && usernameSchema.safeParse(username).success ? username : null,
       }}
       nextPath={safeNextPath(Array.isArray(next) ? next[0] : next)}
+      onlineCheckout={isOnlineCheckoutEnabled()}
     />
   );
 }

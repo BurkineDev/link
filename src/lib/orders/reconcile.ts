@@ -14,12 +14,21 @@
  * n'immobilise rien : la réconciliation ne « libère » plus de stock, elle
  * met de l'ordre.
  *
+ * Depuis le 14 septembre 2026, le mode « En ligne » est masqué derrière
+ * `NEXT_PUBLIC_ONLINE_CHECKOUT` (voir @/lib/payments/online-checkout). La
+ * réconciliation tourne quand même dès que Genius Pay est configuré : elle
+ * solde les commandes Mobile Money encore en vol et ne coûte rien à lot
+ * vide. L'alerte « configuration absente » part dans les deux modes — Genius
+ * Pay porte aussi les abonnements prépayés et les boosts, une clé perdue
+ * reste une panne — seul son libellé change avec le drapeau.
+ *
  * Server-only — ne jamais importer depuis un Client Component.
  */
 
 
 import { prisma } from "@/lib/prisma";
 import { cancelUnpaidOrder, settlePaidOrder } from "@/lib/db/orders";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import {
   fetchPayment,
   isGeniusPayConfigured,
@@ -81,15 +90,24 @@ export async function reconcilePendingGeniusPayOrders(
 ): Promise<ReconcileResult> {
   if (!isGeniusPayConfigured()) {
     // Une variable GENIUSPAY_* perdue : plus aucun rattrapage, et un
-    // résultat vide indiscernable d'une nuit calme — d'où l'alerte.
+    // résultat vide indiscernable d'une nuit calme — d'où l'alerte. Le cron
+    // est le seul endroit qui la lève : les routes d'abonnement et de boost
+    // répondent 503 sans réveiller personne.
     if (process.env.NODE_ENV === "production") {
       // Enregistré tout de suite (pas après la réponse) : le cron construit
       // son rapport dans la même invocation et doit voir cette ligne.
+      // Mode « En ligne » masqué : aucune vente Mobile Money à rattraper,
+      // mais les abonnements prépayés et les boosts passent toujours par
+      // Genius Pay — c'est ce que dit l'alerte.
       await recordOpsEvent({
         kind: "reconcile.not_configured",
         severity: "critical",
-        title: "Réconciliation Genius Pay désactivée : configuration absente",
-        detail: "GENIUSPAY_API_KEY, GENIUSPAY_API_SECRET ou GENIUSPAY_WEBHOOK_SECRET manque : les commandes Mobile Money au webhook perdu ne seront plus rattrapées.",
+        title: isOnlineCheckoutEnabled()
+          ? "Réconciliation Genius Pay désactivée : configuration absente"
+          : "Genius Pay non configuré : abonnements et boosts Mobile Money bloqués",
+        detail: isOnlineCheckoutEnabled()
+          ? "GENIUSPAY_API_KEY, GENIUSPAY_API_SECRET ou GENIUSPAY_WEBHOOK_SECRET manque : les commandes Mobile Money au webhook perdu ne seront plus rattrapées."
+          : "GENIUSPAY_API_KEY, GENIUSPAY_API_SECRET ou GENIUSPAY_WEBHOOK_SECRET manque : les vendeurs ne peuvent plus payer un abonnement ni un boost en Mobile Money, et les commandes Mobile Money encore en vol ne seront pas rattrapées.",
         dedupeKey: "reconcile.not_configured",
       });
     }

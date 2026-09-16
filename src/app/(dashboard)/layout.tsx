@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { OPEN_PAYOUT_STATUSES } from "@/lib/payouts/config";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, BottomNav } from "@/components/dashboard/sidebar";
 import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
@@ -116,6 +117,9 @@ export default async function DashboardLayout({
           isAdmin={isAdmin}
           pendingPayouts={pendingPayouts}
           openAlerts={openAlerts}
+          // Lu ici, côté serveur, et passé au menu (voir
+          // src/lib/payments/online-checkout.ts).
+          onlineCheckout={isOnlineCheckoutEnabled()}
         />
       </div>
 

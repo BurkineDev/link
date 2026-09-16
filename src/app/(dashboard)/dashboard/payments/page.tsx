@@ -18,6 +18,7 @@ import { PayoutsSection } from "@/components/dashboard/payouts-section";
 import { loadBalance } from "@/lib/payouts/balance-db";
 import { minimumPayout } from "@/lib/payouts/config";
 import { serializePayout } from "@/lib/payouts/serialize";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata = { title: "Paiements" };
 
@@ -30,6 +31,10 @@ export const metadata = { title: "Paiements" };
  * déjà le prestataire, la référence et le statut de paiement. Une table
  * PaymentTransaction n'aura de sens qu'avec les remboursements partiels et les
  * paiements multiples (voir docs/social-commerce-os.md, phase 5).
+ *
+ * Caisse masquée (voir src/lib/payments/online-checkout.ts) : la page n'est
+ * plus dans le menu. Elle reste servie à qui a encore un solde ou un
+ * reversement à solder ; sans rien à montrer, elle renvoie vers Commandes.
  */
 
 const PROVIDER_META: Record<
@@ -81,6 +86,14 @@ export default async function PaymentsPage() {
       take: 20,
     }),
   ]);
+
+  if (
+    !isOnlineCheckoutEnabled() &&
+    balance.available + balance.maturing + balance.reserved <= 0 &&
+    payoutRows.length === 0
+  ) {
+    redirect("/dashboard/orders");
+  }
 
   const rows = await prisma.order.findMany({
     where: { shopId: shop.id },

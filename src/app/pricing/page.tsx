@@ -3,13 +3,17 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectivePlan } from "@/lib/subscription";
 import type { SubscriptionPlan } from "@/lib/types/database";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { PricingClient } from "./pricing-client";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/pricing" },
   title: "Tarifs",
-  description:
-    "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés.",
+  // Figée au build. Sans caisse, il n'y a pas de commission à réduire : on
+  // vend ce que les plans payants apportent vraiment.
+  description: isOnlineCheckoutEnabled()
+    ? "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, des commissions réduites et des outils avancés."
+    : "Commence gratuitement avec Bio-Lien. Passe en Starter ou Pro pour plus de produits, la rédaction assistée par IA et le badge masquable.",
 };
 
 export default async function PricingPage() {

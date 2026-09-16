@@ -91,8 +91,10 @@ jest.mock("@/lib/db/orders", () => ({
   }),
 }));
 
+// Clés GENIUSPAY_* présentes ou non (voir « Genius Pay non configuré »).
+let _configured = true;
 jest.mock("@/lib/geniuspay", () => ({
-  isGeniusPayConfigured: () => true,
+  isGeniusPayConfigured: () => _configured,
   fetchPayment: jest.fn(() => {
     if (_fetchThrows) return Promise.reject(new Error("Genius Pay down"));
     return Promise.resolve(_payment);
@@ -146,15 +148,24 @@ beforeEach(() => {
   _orders = [order()];
   _payment = payment();
   _fetchThrows = false;
+  _configured = true;
   _updates = [];
   _released = [];
   _notified = [];
   _selectFilters = {};
   _readError = null;
+  mockPrisma.order.findMany.mockClear();
   mockRecord.mockClear();
   mockOps.critical.mockClear();
   mockOps.warning.mockClear();
   mockOps.info.mockClear();
+  // Mode « En ligne » allumé : le comportement historique, que les cas
+  // ci-dessous fixent. Les cas « drapeau éteint » le retirent eux-mêmes.
+  process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
 });
 
 // ---------------------------------------------------------------------------
@@ -315,5 +326,106 @@ describe("reconcilePendingGeniusPayOrders", () => {
 
     expect(res.checked).toBe(0);
     expect(_updates).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Genius Pay non configuré × drapeau du mode « En ligne »
+//
+// Une clé GENIUSPAY_* absente en production est une panne dans les deux
+// modes : drapeau allumé, plus aucun rattrapage des ventes Mobile Money ;
+// drapeau éteint, les abonnements prépayés et les boosts (le revenu de
+// Bio-Lien) ne se paient plus en Mobile Money. Seul le libellé change.
+// Configuré, la réconciliation tourne dans les deux cas.
+// ---------------------------------------------------------------------------
+
+describe("Genius Pay non configuré × drapeau du mode « En ligne »", () => {
+  const EMPTY = { checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 0 };
+  const NODE_ENV = process.env.NODE_ENV;
+  // `NODE_ENV` est déclaré en lecture seule par les types de Next : on passe
+  // par Object.assign / Reflect pour le poser et le rendre.
+  const setNodeEnv = (value: string) => Object.assign(process.env, { NODE_ENV: value });
+
+  afterEach(() => {
+    if (NODE_ENV === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+    else setNodeEnv(NODE_ENV);
+  });
+
+  test("drapeau allumé, en production : résultat vide et alerte critique reconcile.not_configured", async () => {
+    _configured = false;
+    setNodeEnv("production");
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res).toEqual(EMPTY);
+    expect(mockPrisma.order.findMany).not.toHaveBeenCalled();
+    expect(mockRecord).toHaveBeenCalledTimes(1);
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "reconcile.not_configured",
+        severity: "critical",
+        dedupeKey: "reconcile.not_configured",
+        // Le libellé historique, mot pour mot.
+        title: "Réconciliation Genius Pay désactivée : configuration absente",
+        detail: expect.stringContaining("les commandes Mobile Money au webhook perdu ne seront plus rattrapées"),
+      }),
+    );
+  });
+
+  test("drapeau allumé, hors production : résultat vide, silence (comportement historique)", async () => {
+    _configured = false;
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res).toEqual(EMPTY);
+    expect(mockRecord).not.toHaveBeenCalled();
+  });
+
+  test("drapeau éteint, en production : résultat vide, aucun appel, mais l'alerte part (abonnements et boosts)", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    _configured = false;
+    setNodeEnv("production");
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res).toEqual(EMPTY);
+    expect(mockPrisma.order.findMany).not.toHaveBeenCalled();
+    expect(_updates).toHaveLength(0);
+    expect(_released).toHaveLength(0);
+    expect(_notified).toHaveLength(0);
+    // Même clé de dédoublonnage (une seule ligne au journal quel que soit
+    // le mode), libellé tourné vers ce que Genius Pay porte encore.
+    expect(mockRecord).toHaveBeenCalledTimes(1);
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "reconcile.not_configured",
+        severity: "critical",
+        dedupeKey: "reconcile.not_configured",
+        title: "Genius Pay non configuré : abonnements et boosts Mobile Money bloqués",
+        detail: expect.stringContaining("abonnement ni un boost"),
+      }),
+    );
+  });
+
+  test("drapeau éteint, hors production : résultat vide, silence", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    _configured = false;
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res).toEqual(EMPTY);
+    expect(mockRecord).not.toHaveBeenCalled();
+  });
+
+  test("drapeau éteint mais Genius Pay configuré : la réconciliation tourne quand même", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+
+    const res = await reconcilePendingGeniusPayOrders();
+
+    expect(res.checked).toBe(1);
+    expect(res.paid).toBe(1);
+    expect(_updates[0].values).toEqual({ payment_status: "paid", status: "confirmed" });
+    expect(_notified).toEqual([ORDER_ID]);
+    expect(mockRecord).not.toHaveBeenCalled();
   });
 });

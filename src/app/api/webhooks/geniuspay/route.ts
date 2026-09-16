@@ -50,9 +50,10 @@ export async function POST(request: NextRequest) {
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
     // Secret absent ou tourné, horloge en dérive : le fondateur doit le
-    // savoir — un secret mal collé arrête toutes les ventes Mobile Money
-    // sans autre symptôme. Une requête sans en-têtes du tout n'est pas
-    // Genius Pay (robot, scanner) : une trace, pas un réveil.
+    // savoir — un secret mal collé arrête les abonnements et boosts Mobile
+    // Money, et les ventes si le mode En ligne est actif, sans autre
+    // symptôme. Une requête sans en-têtes du tout n'est pas Genius Pay
+    // (robot, scanner) : une trace, pas un réveil.
     const signed = Boolean(signature && timestamp);
     const secretMissing = !process.env.GENIUSPAY_WEBHOOK_SECRET;
     ops[signed || secretMissing ? "critical" : "warning"]({

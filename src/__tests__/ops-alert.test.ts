@@ -135,7 +135,10 @@ describe("formatDigestEmail", () => {
     },
     openEvents: [],
     newEventsByKind: [],
+    // Mode « En ligne » allumé : le rendu historique (voir plus bas pour le drapeau éteint).
+    onlineCheckout: true,
     sales: { paidOrders: 2, byCurrency: [{ currency: "XOF", total: 17_500 }] },
+    whatsappPaid: 0,
     ordersCreated: 4,
     offlineAwaiting: { count: 3, expiringSoon: 1 },
     payoutsOpen: { count: 1, oldestDays: 3 },
@@ -150,8 +153,73 @@ describe("formatDigestEmail", () => {
     expect(mail.text).toContain("1 reversement à exécuter (le plus ancien : 3 j)");
     expect(mail.text).toContain("3 commandes WhatsApp / à la livraison en attente chez les vendeurs, dont 1 qui expire sous 48 h");
     expect(mail.text).toContain("Réconciliation Mobile Money : 3 vérifiée(s), 1 réglée(s), 1 annulée(s), 1 encore en attente.");
+    expect(mail.text).toContain("Commandes hors ligne expirées : 2.");
     expect(mail.text).toContain("Migrations : à jour");
     expect(mail.text).toContain("Version : 31cd26f");
+    // Drapeau allumé : les ventes WhatsApp marquées payées ne s'affichent pas à part.
+    expect(mail.text).not.toContain("marquée");
+    expect(formatDigestEmail({ ...base, stockShortfalls: 1 }).text).toContain(
+      "1 commande réglée avec un manque de stock : remboursement possible à prévoir.",
+    );
+  });
+
+  describe("mode « En ligne » masqué (drapeau éteint)", () => {
+    const offline: DigestData = {
+      ...base,
+      onlineCheckout: false,
+      whatsappPaid: 3,
+      sales: { paidOrders: 0, byCurrency: [] },
+      cron: { ...base.cron!, reconcile: { checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 0 } },
+      stockShortfalls: 1,
+    };
+
+    test("les commandes WhatsApp marquées payées remplacent les ventes ; le grand livre ne s'affiche que s'il a bougé", () => {
+      const mail = formatDigestEmail(offline);
+      expect(mail.text).toContain("- 3 commandes WhatsApp marquées payées.");
+      expect(mail.text).not.toContain("vente");
+      expect(mail.html).toContain("3 commandes WhatsApp marquées payées.");
+      expect(formatDigestEmail({ ...offline, whatsappPaid: 1 }).text).toContain("- 1 commande WhatsApp marquée payée.");
+      expect(formatDigestEmail({ ...offline, whatsappPaid: 0 }).text).toContain("- Aucune commande WhatsApp marquée payée.");
+
+      // Une commande historique réglée par la caisse : la ligne du grand livre réapparaît, après.
+      const withLedger = formatDigestEmail({ ...offline, sales: base.sales }).text;
+      expect(withLedger).toContain("- 3 commandes WhatsApp marquées payées.");
+      expect(withLedger).toContain("2 ventes réglées : 17");
+      expect(withLedger.indexOf("marquées payées")).toBeLessThan(withLedger.indexOf("ventes réglées"));
+    });
+
+    test("passage du cron : les commandes WhatsApp expirées d'abord, la réconciliation seulement si elle a travaillé ou échoué", () => {
+      const mail = formatDigestEmail(offline);
+      expect(mail.text).toContain("- Commandes WhatsApp expirées : 2.");
+      expect(mail.text).not.toContain("hors ligne");
+      expect(mail.text).not.toContain("Réconciliation Mobile Money");
+      expect(mail.text).toContain("Reversements en retard : 0 (0 relance(s) envoyée(s)).");
+      expect(mail.text.indexOf("Commandes WhatsApp expirées")).toBeLessThan(mail.text.indexOf("Reversements en retard"));
+
+      const worked = formatDigestEmail({
+        ...offline,
+        cron: { ...offline.cron!, reconcile: { checked: 2, paid: 1, failed: 0, stillPending: 1, errors: 0 } },
+      }).text;
+      expect(worked).toContain("Réconciliation Mobile Money : 2 vérifiée(s), 1 réglée(s), 0 annulée(s), 1 encore en attente.");
+      expect(worked.indexOf("Commandes WhatsApp expirées")).toBeLessThan(worked.indexOf("Réconciliation Mobile Money"));
+
+      const failed = formatDigestEmail({
+        ...offline,
+        cron: { ...offline.cron!, reconcile: { checked: 0, paid: 0, failed: 0, stillPending: 0, errors: 1 } },
+      }).text;
+      expect(failed).toContain("Réconciliation Mobile Money : 0 vérifiée(s), 0 réglée(s), 0 annulée(s), 0 encore en attente, 1 en erreur.");
+
+      const stepFailed = formatDigestEmail({ ...offline, cron: { ...offline.cron!, manualOrders: { expired: -1, errors: 1 } } }).text;
+      expect(stepFailed).toContain("Commandes WhatsApp expirées : étape en échec (1 erreur(s)).");
+    });
+
+    test("à faire : commandes WhatsApp en attente (sans « à la livraison »), manque de stock à voir avec le vendeur", () => {
+      const mail = formatDigestEmail(offline);
+      expect(mail.text).toContain("3 commandes WhatsApp en attente chez les vendeurs, dont 1 qui expire sous 48 h.");
+      expect(mail.text).not.toContain("à la livraison");
+      expect(mail.text).toContain("1 commande réglée avec un manque de stock : à voir avec le vendeur.");
+      expect(mail.text).not.toContain("remboursement");
+    });
   });
 
   test("alertes ouvertes et santé dégradée passent en tête", () => {

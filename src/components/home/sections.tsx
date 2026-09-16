@@ -9,10 +9,17 @@
  * Tout ce qui ressemble à une preuve sociale est vrai ou clairement présenté
  * comme un exemple : la base démarre à zéro, on ne prête pas de clients à la
  * plateforme.
+ *
+ * Deux modes (src/lib/payments/online-checkout.ts). Par défaut la caisse
+ * Bio-Lien est masquée : on promet des commandes sur WhatsApp, pas des
+ * paiements Mobile Money. Les textes « En ligne » restent en place, rendus
+ * seulement drapeau allumé. NEXT_PUBLIC_ est figé au build : le lire ici,
+ * côté client, est correct — au rendu, jamais en constante de module.
  */
 
 import Image from "next/image";
 import Link from "next/link";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import {
   ArrowRight,
   CalendarDays,
@@ -109,6 +116,7 @@ const HERO_LINKS: { label: string; Icon: IconLike; color: string; bg: string }[]
 ];
 
 export function Hero({ nav }: { nav: React.ReactNode }) {
+  const online = isOnlineCheckoutEnabled();
   return (
     <section className="relative isolate overflow-hidden" style={{ background: "#F7F5FD" }}>
       {/* La photo couvre tout le héros ; le voile clair ne couvre que la zone du texte. */}
@@ -150,9 +158,10 @@ export function Hero({ nav }: { nav: React.ReactNode }) {
               toutes vos <span style={{ color: "var(--b-violet)" }}>possibilités.</span>
             </h1>
             <p className="mx-auto max-w-[470px] text-[17px] leading-[1.6] lg:mx-0" style={{ color: "var(--b-muted)" }}>
-              Regroupez vos liens, vendez vos produits, recevez vos paiements
-              Mobile Money et développez votre audience — le tout sur une seule
-              page, à votre image.
+              Regroupez vos liens, vendez vos produits, recevez vos{" "}
+              {online ? "paiements Mobile Money" : "commandes sur WhatsApp"} et
+              développez votre audience — le tout sur une seule page, à votre
+              image.
             </p>
             <div className="flex justify-center lg:justify-start">
               <CtaButton href="/register">Créer ma page gratuitement</CtaButton>
@@ -209,16 +218,62 @@ export function Hero({ nav }: { nav: React.ReactNode }) {
 // Bandeau des six fonctions
 // ---------------------------------------------------------------------------
 
-const STRIP: { title: string; sub: string; icon: string }[] = [
-  { title: "Un seul lien", sub: "Tous vos contenus", icon: "01-un-seul-lien" },
-  { title: "Mobile Money", sub: "Paiements intégrés", icon: "02-mobile-money" },
-  { title: "Boutique en ligne", sub: "Vendez facilement", icon: "03-boutique" },
-  { title: "Pages personnalisées", sub: "À votre image", icon: "04-personnalisation" },
-  { title: "Statistiques", sub: "Suivez vos performances", icon: "05-statistiques" },
-  { title: "Sans carte bancaire", sub: "100 % accessible", icon: "06-carte-bancaire" },
-];
+/**
+ * Le pack d'icônes (public/brand/icons) n'a pas de bulle WhatsApp. En
+ * attendant un `07-whatsapp.svg` du designer, cette bulle est dessinée ici
+ * dans le même cadre que les six autres : carré lavande arrondi, forme au
+ * dégradé violet, contour #8b32ff. À remplacer par le fichier le jour où il
+ * existe.
+ */
+function WhatsAppStripIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 120 120" className={className} aria-hidden>
+      <defs>
+        <linearGradient id="strip-wa-p" x2="1" y2="1">
+          <stop stopColor="#b48aff" />
+          <stop offset="1" stopColor="#7d20ff" />
+        </linearGradient>
+        <linearGradient id="strip-wa-b" x2="1" y2="1">
+          <stop stopColor="#eee5ff" />
+          <stop offset="1" stopColor="#ccb4ff" />
+        </linearGradient>
+      </defs>
+      <rect x="5" y="5" width="110" height="110" rx="31" fill="url(#strip-wa-b)" />
+      <path
+        d="M60 30c-18.2 0-33 12.3-33 27.5 0 7.2 3.3 13.7 8.7 18.6L32 90l15.4-6.4c3.9 1.2 8.1 1.9 12.6 1.9 18.2 0 33-12.3 33-27.5S78.2 30 60 30Z"
+        fill="url(#strip-wa-p)"
+        stroke="#8b32ff"
+        strokeWidth="5"
+        strokeLinejoin="round"
+      />
+      <circle cx="47" cy="58" r="4" fill="#eee5ff" />
+      <circle cx="60" cy="58" r="4" fill="#eee5ff" />
+      <circle cx="73" cy="58" r="4" fill="#eee5ff" />
+    </svg>
+  );
+}
+
+type StripItem = { title: string; sub: string } & (
+  | { icon: string; Icon?: undefined }
+  | { icon?: undefined; Icon: (props: { className?: string }) => React.ReactElement }
+);
+
+/** Caisse allumée : « Mobile Money — Paiements intégrés ». Masquée : la commande arrive sur WhatsApp. */
+function stripItems(): StripItem[] {
+  return [
+    { title: "Un seul lien", sub: "Tous vos contenus", icon: "01-un-seul-lien" },
+    isOnlineCheckoutEnabled()
+      ? { title: "Mobile Money", sub: "Paiements intégrés", icon: "02-mobile-money" }
+      : { title: "WhatsApp", sub: "Commandes directes", Icon: WhatsAppStripIcon },
+    { title: "Boutique en ligne", sub: "Vendez facilement", icon: "03-boutique" },
+    { title: "Pages personnalisées", sub: "À votre image", icon: "04-personnalisation" },
+    { title: "Statistiques", sub: "Suivez vos performances", icon: "05-statistiques" },
+    { title: "Sans carte bancaire", sub: "100 % accessible", icon: "06-carte-bancaire" },
+  ];
+}
 
 export function FeatureStrip() {
+  const strip = stripItems();
   return (
     <section
       aria-label="Ce que Bio-Lien réunit"
@@ -226,21 +281,25 @@ export function FeatureStrip() {
       style={{ background: "var(--b-paper)", borderColor: "var(--b-line-soft)" }}
     >
       <ul className="mx-auto grid max-w-[1200px] grid-cols-2 gap-y-8 px-5 py-9 sm:grid-cols-3 sm:px-8 lg:grid-cols-6 lg:px-14">
-        {STRIP.map(({ title, sub, icon }) => (
-          <li key={title} className="flex flex-col items-center text-center">
-            <Image
-              src={`/brand/icons/${icon}.svg`}
-              alt=""
-              width={64}
-              height={64}
-              unoptimized
-              className="size-16"
-            />
+        {strip.map((item) => (
+          <li key={item.title} className="flex flex-col items-center text-center">
+            {item.Icon ? (
+              <item.Icon className="size-16" />
+            ) : (
+              <Image
+                src={`/brand/icons/${item.icon}.svg`}
+                alt=""
+                width={64}
+                height={64}
+                unoptimized
+                className="size-16"
+              />
+            )}
             <p className="mt-3 text-[14.5px] font-bold" style={{ color: "var(--b-ink)" }}>
-              {title}
+              {item.title}
             </p>
             <p className="text-[13px]" style={{ color: "var(--b-muted)" }}>
-              {sub}
+              {item.sub}
             </p>
           </li>
         ))}
@@ -254,6 +313,7 @@ export function FeatureStrip() {
 // ---------------------------------------------------------------------------
 
 export function Showcase() {
+  const online = isOnlineCheckoutEnabled();
   return (
     <section id="vitrine" className="mx-auto max-w-[1200px] px-5 py-20 sm:px-8 lg:px-14 lg:py-28">
       <div className="grid items-center gap-14 lg:grid-cols-[1fr_1.1fr]">
@@ -270,8 +330,10 @@ export function Showcase() {
           </h2>
           <p className="mx-auto mt-5 max-w-[46ch] text-[17px] leading-[1.6] lg:mx-0" style={{ color: "var(--b-muted)" }}>
             Bio-Lien vous aide à centraliser vos liens, mettre en avant vos
-            contenus, vendre vos produits et recevoir des paiements partout en
-            Afrique.
+            contenus, vendre vos produits et{" "}
+            {online
+              ? "recevoir des paiements partout en Afrique."
+              : "recevoir vos commandes sur WhatsApp, partout en Afrique."}
           </p>
           <div className="mt-8 flex justify-center lg:justify-start">
             <CtaButton href="#fonctions">Découvrir toutes les fonctionnalités</CtaButton>
@@ -299,23 +361,27 @@ export function Showcase() {
             </p>
           </div>
 
-          {/* Carte Mobile Money : visuel du pack, titre et opérateurs en HTML */}
-          <div className="absolute -bottom-2 right-0 w-[240px] sm:right-2 sm:w-[270px]">
-            <Image src="/brand/cards/momo.png" alt="" width={720} height={333} className="h-auto w-full drop-shadow-[0_18px_30px_rgba(21,16,32,0.22)]" />
-            <p className="absolute left-[27%] top-[15%] text-[13px] font-bold leading-tight sm:text-[14px]" style={{ color: "var(--b-ink)" }}>
-              Reçois tes paiements
-              <span className="block text-[11.5px] font-medium sm:text-[12px]" style={{ color: "var(--b-muted)" }}>
-                partout en Afrique
-              </span>
-            </p>
-            <ul className="absolute inset-x-[7%] bottom-[14%] grid grid-cols-4 gap-[4%] text-center text-[9.5px] font-bold leading-none text-white sm:text-[10.5px]">
-              {["Orange", "Wave", "MTN", "M-Pesa"].map((o) => (
-                <li key={o} className="flex h-[26px] items-center justify-center sm:h-[30px]">
-                  {o}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Carte Mobile Money : visuel du pack, titre et opérateurs en HTML.
+              Caisse masquée, elle n'est pas rendue : on ne promet pas des
+              paiements qu'on n'encaisse plus. */}
+          {online && (
+            <div className="absolute -bottom-2 right-0 w-[240px] sm:right-2 sm:w-[270px]">
+              <Image src="/brand/cards/momo.png" alt="" width={720} height={333} className="h-auto w-full drop-shadow-[0_18px_30px_rgba(21,16,32,0.22)]" />
+              <p className="absolute left-[27%] top-[15%] text-[13px] font-bold leading-tight sm:text-[14px]" style={{ color: "var(--b-ink)" }}>
+                Reçois tes paiements
+                <span className="block text-[11.5px] font-medium sm:text-[12px]" style={{ color: "var(--b-muted)" }}>
+                  partout en Afrique
+                </span>
+              </p>
+              <ul className="absolute inset-x-[7%] bottom-[14%] grid grid-cols-4 gap-[4%] text-center text-[9.5px] font-bold leading-none text-white sm:text-[10.5px]">
+                {["Orange", "Wave", "MTN", "M-Pesa"].map((o) => (
+                  <li key={o} className="flex h-[26px] items-center justify-center sm:h-[30px]">
+                    {o}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -1,6 +1,8 @@
 /**
  * PATCH /api/shops/[id] : on ne change pas de devise tant qu'il reste du net
  * vendeur à reverser dans l'ancienne — sinon cet argent disparaît de l'écran.
+ * Et, caisse masquée (drapeau NEXT_PUBLIC_ONLINE_CHECKOUT absent), le mode
+ * « online », la livraison et le retrait du numéro WhatsApp sont refusés.
  */
 
 import { NextRequest } from "next/server";
@@ -67,6 +69,12 @@ beforeEach(() => {
   _badgeInDb = true;
 });
 
+// Sous Jest la variable est absente : caisse masquée par défaut. Les cas
+// « En ligne » l'allument explicitement et la retirent ensuite.
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+});
+
 describe("badge Bio-Lien", () => {
   test("le masquer est refusé (402) sur le plan gratuit, accepté sur un plan payant en cours", async () => {
     const res = await patch({ show_biolien_badge: false });
@@ -117,5 +125,71 @@ describe("changement de devise", () => {
     expect(mockZonesDeactivate).not.toHaveBeenCalled();
     expect((await patch({ name: "Wax & Co" })).status).toBe(200);
     expect(mockUpdate).toHaveBeenCalledTimes(3);
+  });
+
+  test("le message du solde restant renvoie vers l'équipe caisse masquée, vers Reversements caisse allumée", async () => {
+    _balance = { ..._balance, available: 45_000 };
+    let json = await (await patch({ currency: "GHS" })).json();
+    expect(json.code).toBe("OUTSTANDING_BALANCE");
+    expect(json.error).toMatch(/Écris à l'équipe Bio-Lien/);
+    expect(json.error).not.toMatch(/Reversements/);
+
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+    json = await (await patch({ currency: "GHS" })).json();
+    expect(json.code).toBe("OUTSTANDING_BALANCE");
+    expect(json.error).toMatch(/Paiements → Reversements/);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("mode de commande (drapeau NEXT_PUBLIC_ONLINE_CHECKOUT)", () => {
+  test("caisse masquée : « online » refusé (422), accepté caisse allumée ; valeur inconnue toujours refusée", async () => {
+    let res = await patch({ checkout_mode: "online" });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "ONLINE_CHECKOUT_DISABLED" });
+    // WhatsApp reste enregistrable : c'est le seul mode qui s'applique.
+    expect((await patch({ checkout_mode: "whatsapp" })).status).toBe(200);
+    expect(mockUpdate.mock.calls[0]![0].data).toMatchObject({ checkoutMode: "whatsapp" });
+    mockUpdate.mockClear();
+
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+    res = await patch({ checkout_mode: "online" });
+    expect(res.status).toBe(200);
+    expect(mockUpdate.mock.calls[0]![0].data).toMatchObject({ checkoutMode: "online" });
+
+    // Le schéma est strict dans les deux modes : plus de chaîne libre.
+    expect((await patch({ checkout_mode: "foo" })).status).toBe(422);
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    expect((await patch({ checkout_mode: "foo" })).status).toBe(422);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  test("caisse masquée : retirer le numéro WhatsApp est refusé (422), le changer reste possible", async () => {
+    const res = await patch({ whatsapp_number: null });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "WHATSAPP_NUMBER_REQUIRED" });
+    expect((await patch({ whatsapp_number: "" })).status).toBe(422);
+    expect(mockUpdate).not.toHaveBeenCalled();
+
+    expect((await patch({ whatsapp_number: "22670123456" })).status).toBe(200);
+    expect(mockUpdate.mock.calls[0]![0].data).toMatchObject({ whatsappNumber: "22670123456" });
+    // Un numéro sans indicatif reste refusé, drapeau ou pas.
+    expect((await patch({ whatsapp_number: "70123456" })).status).toBe(422);
+
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+    expect((await patch({ whatsapp_number: null })).status).toBe(200);
+  });
+
+  test("caisse masquée : livraison facturée et paiement à la livraison refusés (422), acceptés caisse allumée", async () => {
+    for (const body of [{ shipping_enabled: true }, { shipping_enabled: false }, { cash_on_delivery: true }]) {
+      const res = await patch(body);
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({ code: "ONLINE_CHECKOUT_DISABLED" });
+    }
+    expect(mockUpdate).not.toHaveBeenCalled();
+
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+    expect((await patch({ shipping_enabled: true, cash_on_delivery: true })).status).toBe(200);
+    expect(mockUpdate.mock.calls[0]![0].data).toMatchObject({ shippingEnabled: true, cashOnDelivery: true });
   });
 });

@@ -267,14 +267,18 @@ export async function settlePaidOrder(
   });
 
   // Deux acheteurs ont payé la dernière pièce : le vendeur le sait par son
-  // e-mail, qui le renvoie vers l'équipe pour un remboursement — l'équipe
-  // doit donc le savoir aussi, au rapport du matin.
+  // e-mail (caisse Bio-Lien) ou par le bandeau de la commande (WhatsApp, à
+  // la livraison) — l'équipe doit le savoir aussi, au rapport du matin.
+  // Réglée hors plateforme, Bio-Lien n'a rien encaissé : rien à rembourser
+  // côté équipe.
   if (result.settled && result.stockShortfall.length > 0) {
     await recordOpsEvent({
       kind: "order.stock_shortfall",
       severity: "warning",
       title: `Commande #${orderId.slice(0, 8).toUpperCase()} réglée avec un manque de stock`,
-      detail: "Le stock ne couvrait pas tout au moment du règlement ; le vendeur doit livrer partiellement ou demander un remboursement à l'équipe.",
+      detail: result.offline
+        ? "Le stock ne couvrait pas tout au moment du règlement. Réglée entre le vendeur et l'acheteur : à voir avec le vendeur (livraison partielle ou remboursement direct)."
+        : "Le stock ne couvrait pas tout au moment du règlement ; le vendeur doit livrer partiellement ou demander un remboursement à l'équipe.",
       context: {
         orderId,
         provider: paymentProvider,

@@ -12,7 +12,8 @@ import {
 } from "@/components/home/sections";
 import { MOBILE_MONEY_PROVIDERS } from "@/lib/constants";
 import { PREPAID_PRICES, prepaidSavingsPercent } from "@/lib/subscription";
-import { PLAN_FEATURES, commissionNote, planLabel } from "@/lib/plans/catalog";
+import { commissionNote, planFeatures, planLabel } from "@/lib/plans/catalog";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import {
   BrandBackdrop,
   Wordmark,
@@ -46,11 +47,19 @@ import {
 //      écrits en dur : ils sont lus depuis le code qui les applique
 //      réellement. Une grille tarifaire qui ment sur la page d'accueil est
 //      une plainte au support par semaine.
+//
+// Deux modes (src/lib/payments/online-checkout.ts). Par défaut, la caisse
+// Bio-Lien est masquée : la commande part sur WhatsApp et le vendeur la marque
+// payée lui-même. Tout ce qui parle d'opérateurs, de paiement en ligne ou de
+// commission ne s'affiche que drapeau allumé — les textes « En ligne » restent
+// là, à l'identique, pour le jour où on le rallume. NEXT_PUBLIC_ est figé au
+// build : lire le drapeau ici, côté client, est correct.
 
 const SITE_URL = "https://www.bio-lien.com";
 
 /** Neuf palettes prêtes, plus `brand` qui dérive des couleurs du vendeur. */
 const READY_THEMES = BIO_THEME_IDS.filter((id) => id !== "brand").length;
+/** N'entre dans un texte que caisse allumée : sans caisse, aucune promesse ne dérive du nombre d'opérateurs. */
 const OPERATOR_COUNT = MOBILE_MONEY_PROVIDERS.length;
 
 const NUMBER_WORDS: Record<number, string> = {
@@ -153,6 +162,7 @@ function Nav({ dark = false, hero = false }: { dark?: boolean; hero?: boolean })
 // ---------------------------------------------------------------------------
 
 function Features() {
+  const online = isOnlineCheckoutEnabled();
   return (
     <section id="fonctions" className="pb-18 pt-8">
       <h2
@@ -206,15 +216,19 @@ function Features() {
           >
             02 — Vendre
           </span>
+          {/* Caisse masquée : la commande arrive « à confirmer », le vendeur la
+              marque payée quand l'argent est là. Caisse allumée : le texte
+              d'origine, avec les opérateurs et la carte. */}
           <h3 className="text-[24px] font-bold tracking-[-0.02em]">
-            Encaisse en Mobile Money
+            {online ? "Encaisse en Mobile Money" : "Vends sur WhatsApp"}
           </h3>
           <p
             className="text-[15.5px] leading-[1.6]"
             style={{ color: "var(--b-on-dark-muted)" }}
           >
-            {spell(OPERATOR_COUNT)} opérateurs plus la carte. Chaque commande
-            payée arrive sur ton WhatsApp avec la référence et le total.
+            {online
+              ? `${spell(OPERATOR_COUNT)} opérateurs plus la carte. Chaque commande payée arrive sur ton WhatsApp avec la référence et le total.`
+              : "Chaque commande arrive sur ton WhatsApp avec le détail et le total. Tu la marques payée quand l'argent est là."}
           </p>
           <div
             className="mt-1.5 rounded-[var(--r-sm)] px-4 py-3.5"
@@ -233,7 +247,7 @@ function Features() {
               className="mt-0.5 text-[12.5px]"
               style={{ color: "var(--b-on-dark-faint)" }}
             >
-              Pagne wax · Réf. BL-1042 · payée en Wave
+              Pagne wax · Réf. BL-1042 · {online ? "payée en Wave" : "à confirmer"}
             </div>
           </div>
         </article>
@@ -277,7 +291,9 @@ function Features() {
             <div className="flex flex-col gap-2 text-[14px]">
               {[
                 ["Visites", "1 248", false],
-                ["Commandes payées", "27", false],
+                // Sans caisse, « payée » est une case que le vendeur coche :
+                // le compteur dit « commandes », pas « commandes payées ».
+                [online ? "Commandes payées" : "Commandes", "27", false],
                 ["Revenu", "241 500 F", true],
               ].map(([label, value, green]) => (
                 <div key={label as string} className="flex justify-between gap-3">
@@ -444,41 +460,52 @@ function QrGlyph() {
 //
 // Les montants viennent de PREPAID_PRICES — la table que le paiement Mobile
 // Money applique vraiment — et les fonctionnalités du catalogue des plans
-// (src/lib/plans/catalog.ts), le même que la page Tarifs et les CGU.
+// (src/lib/plans/catalog.ts), le même que la page Tarifs et les CGU. Le
+// catalogue suit le mode en vigueur (planFeatures, commissionNote) : on le
+// lit au rendu, pas à l'import.
 
-const PLANS = [
-  {
-    name: planLabel("free"),
-    price: "0 F",
-    unit: " / pour toujours",
-    features: [...PLAN_FEATURES.free, commissionNote("free").replace(/\.$/, "")],
-    cta: "Commencer",
-    href: "/register",
-    featured: false,
-  },
-  {
-    name: planLabel("pro"),
-    price: fcfa(PREPAID_PRICES.pro[1]),
-    unit: " / mois",
-    year: `${fcfa(PREPAID_PRICES.pro[12])} l'année — économise ${prepaidSavingsPercent("pro", 12)} %`,
-    features: PLAN_FEATURES.pro,
-    cta: "Passer Pro",
-    href: "/pricing",
-    featured: true,
-  },
-  {
-    name: planLabel("starter"),
-    price: fcfa(PREPAID_PRICES.starter[1]),
-    unit: " / mois",
-    year: `${fcfa(PREPAID_PRICES.starter[12])} l'année — économise ${prepaidSavingsPercent("starter", 12)} %`,
-    features: PLAN_FEATURES.starter,
-    cta: "Choisir Starter",
-    href: "/pricing",
-    featured: false,
-  },
-];
+/** La note de commission du plan gratuit, sans son point final — ou rien, caisse masquée. */
+function commissionLine(plan: "free" | "starter" | "pro"): string[] {
+  const note = commissionNote(plan).replace(/\.$/, "");
+  return note ? [note] : [];
+}
+
+function buildPlans() {
+  return [
+    {
+      name: planLabel("free"),
+      price: "0 F",
+      unit: " / pour toujours",
+      features: [...planFeatures("free"), ...commissionLine("free")],
+      cta: "Commencer",
+      href: "/register",
+      featured: false,
+    },
+    {
+      name: planLabel("pro"),
+      price: fcfa(PREPAID_PRICES.pro[1]),
+      unit: " / mois",
+      year: `${fcfa(PREPAID_PRICES.pro[12])} l'année — économise ${prepaidSavingsPercent("pro", 12)} %`,
+      features: planFeatures("pro"),
+      cta: "Passer Pro",
+      href: "/pricing",
+      featured: true,
+    },
+    {
+      name: planLabel("starter"),
+      price: fcfa(PREPAID_PRICES.starter[1]),
+      unit: " / mois",
+      year: `${fcfa(PREPAID_PRICES.starter[12])} l'année — économise ${prepaidSavingsPercent("starter", 12)} %`,
+      features: planFeatures("starter"),
+      cta: "Choisir Starter",
+      href: "/pricing",
+      featured: false,
+    },
+  ];
+}
 
 function Pricing() {
+  const PLANS = buildPlans();
   return (
     <section id="tarifs" className="pb-18">
       <h2
@@ -585,30 +612,42 @@ function Pricing() {
 // Questions fréquentes
 // ---------------------------------------------------------------------------
 
-const FAQ = [
-  {
-    q: "Comment mes clients paient-ils ?",
-    a: `En Mobile Money — Orange Money, Wave, MTN MoMo, Moov, M-Pesa et ${OPERATOR_COUNT - 5} autres — ou par carte bancaire. Le client choisit, paie, et tu reçois la confirmation sur WhatsApp.`,
-  },
-  {
-    q: "Dois-je donner ma carte bancaire ?",
-    a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique. La carte bancaire reste possible, en abonnement résiliable à tout moment.",
-  },
-  {
-    q: "Que se passe-t-il si j'arrête de payer ?",
-    a: "Ta page reste en ligne, entière, sur le plan Découverte : tes liens, cinq produits, tes statistiques. Tu repasses au plan payant quand tu veux.",
-  },
-  {
-    q: "Puis-je changer l'apparence de ma page ?",
-    a: `Oui — ${spell(READY_THEMES).toLowerCase()} palettes prêtes, ou une palette dérivée de tes propres couleurs, avec un aperçu en direct dans tes réglages.`,
-  },
-  {
-    q: "Qui peut voir mes commandes et mes chiffres ?",
-    a: "Toi seul. Les commandes, les coordonnées de tes clients et tes statistiques sont rattachées à ton compte, et la base de données refuse de les servir à quelqu'un d'autre. Ce n'est pas un filtre dans le code : c'est une règle en dessous.",
-  },
-];
+/** Comment l'acheteur paie : entre lui et le vendeur par défaut, par la caisse Bio-Lien drapeau allumé. */
+function buyerPaymentAnswer(): string {
+  if (!isOnlineCheckoutEnabled()) {
+    return "Directement avec toi. La commande arrive sur ton WhatsApp ; vous convenez du paiement (Mobile Money, espèces, virement) et tu la marques payée dans ton tableau de bord. Bio-Lien ne touche pas l'argent de tes ventes.";
+  }
+  return `En Mobile Money — Orange Money, Wave, MTN MoMo, Moov, M-Pesa et ${OPERATOR_COUNT - 5} autres — ou par carte bancaire. Le client choisit, paie, et tu reçois la confirmation sur WhatsApp.`;
+}
+
+// Construite au rendu : la première réponse dépend du mode.
+function buildFaq() {
+  return [
+    {
+      q: "Comment mes clients paient-ils ?",
+      a: buyerPaymentAnswer(),
+    },
+    {
+      q: "Dois-je donner ma carte bancaire ?",
+      a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique. La carte bancaire reste possible, en abonnement résiliable à tout moment.",
+    },
+    {
+      q: "Que se passe-t-il si j'arrête de payer ?",
+      a: "Ta page reste en ligne, entière, sur le plan Découverte : tes liens, cinq produits, tes statistiques. Tu repasses au plan payant quand tu veux.",
+    },
+    {
+      q: "Puis-je changer l'apparence de ma page ?",
+      a: `Oui — ${spell(READY_THEMES).toLowerCase()} palettes prêtes, ou une palette dérivée de tes propres couleurs, avec un aperçu en direct dans tes réglages.`,
+    },
+    {
+      q: "Qui peut voir mes commandes et mes chiffres ?",
+      a: "Toi seul. Les commandes, les coordonnées de tes clients et tes statistiques sont rattachées à ton compte, et la base de données refuse de les servir à quelqu'un d'autre. Ce n'est pas un filtre dans le code : c'est une règle en dessous.",
+    },
+  ];
+}
 
 function Faq() {
+  const FAQ = buildFaq();
   return (
     <section id="faq" className="mx-auto max-w-[760px] pb-18">
       <h2
@@ -688,7 +727,11 @@ function Footer() {
 
 export default function LandingPage() {
   const facts = [
-    { value: String(OPERATOR_COUNT), label: "opérateurs Mobile Money acceptés" },
+    // Caisse masquée, Bio-Lien ne prélève rien sur les ventes : c'est le fait
+    // à mettre en avant, pas un nombre d'opérateurs qu'on ne propose plus.
+    isOnlineCheckoutEnabled()
+      ? { value: String(OPERATOR_COUNT), label: "opérateurs Mobile Money acceptés" }
+      : { value: "0 %", label: "de commission sur tes ventes" },
     { value: "0 F", label: "pour ouvrir sa page, sans carte bancaire" },
     { value: "3 min", label: "pour être en ligne" },
   ];

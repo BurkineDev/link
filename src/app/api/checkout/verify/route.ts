@@ -11,6 +11,7 @@ import { notifyPaidOrder } from "@/lib/order-notifications";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { ops } from "@/lib/ops/events";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 /**
  * La page de succès interroge cette route toutes les 4 s pendant 150 s, soit
@@ -42,6 +43,13 @@ export async function GET(request: NextRequest) {
       { name: "checkout-verify:ip", key: getClientIp(request), ...VERIFY_PER_IP },
     ]);
     if (blocked) return blocked;
+
+    // Caisse Bio-Lien masquée : aucune commande en ligne en vol, la route
+    // n'existe pas. Après le rate-limit, avant toute lecture de l'URL ou de
+    // la base.
+    if (!isOnlineCheckoutEnabled()) {
+      return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+    }
 
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("session_id");

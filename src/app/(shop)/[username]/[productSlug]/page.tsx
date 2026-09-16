@@ -19,6 +19,7 @@ import {
 import { ProductPage } from "./product-page";
 import { getEffectivePlanForUser } from "@/lib/db/plans";
 import { showBioLienBadge } from "@/lib/plans/badge";
+import { effectiveCheckoutMode } from "@/lib/payments/online-checkout";
 
 interface Props {
   params: Promise<{ username: string; productSlug: string }>;
@@ -152,7 +153,14 @@ export default async function Page({ params }: Props) {
   ]);
 
   // Les composants d'affichage lisent la forme Supabase (snake_case).
-  const shop = serializeShop(shopRow) as unknown as ShopRow;
+  //
+  // Même règle que la page boutique : le mode de commande transmis est celui
+  // qui s'applique vraiment. Une boutique « online » en base reste WhatsApp
+  // tant que la caisse Bio-Lien est masquée ; la base n'est pas modifiée.
+  const shop: ShopRow = {
+    ...(serializeShop(shopRow) as unknown as ShopRow),
+    checkout_mode: effectiveCheckoutMode(shopRow.checkoutMode),
+  };
   const product = serializeProduct(productRow) as unknown as ProductRow;
   const variants = variantRows.map(serializeVariant) as unknown as ProductVariantRow[];
   const related = relatedRows.map(serializeProduct) as unknown as ProductRow[];

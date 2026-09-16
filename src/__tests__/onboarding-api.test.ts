@@ -1,5 +1,7 @@
 /**
- * POST /api/onboarding — une transaction, une seule fois.
+ * POST /api/onboarding — une transaction, une seule fois. Et, caisse
+ * masquée (drapeau NEXT_PUBLIC_ONLINE_CHECKOUT absent, le défaut sous
+ * Jest), toute boutique naît en WhatsApp avec un numéro.
  */
 import { NextRequest } from "next/server";
 
@@ -62,6 +64,10 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+});
+
 test("crée profil (drapeau posé d'emblée, sous verrou), boutique non publiée et blocs, sans objectif obligatoire", async () => {
   const res = await post(BODY);
   expect(res.status).toBe(201);
@@ -112,4 +118,44 @@ test("anonyme → 401 ; numéro WhatsApp sans indicatif → 422", async () => {
   expect((await post(BODY)).status).toBe(401);
   _user = { id: "u-1" };
   expect((await post({ ...BODY, shop: { ...BODY.shop, whatsappNumber: "70123456" } })).status).toBe(422);
+});
+
+describe("caisse masquée (drapeau absent)", () => {
+  test("le mode « online » est refusé (422), rien n'est écrit", async () => {
+    const res = await post({ ...BODY, shop: { ...BODY.shop, checkoutMode: "online", whatsappNumber: null } });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: "ONLINE_CHECKOUT_DISABLED" });
+    expect(_writes).toEqual([]);
+  });
+
+  test("le numéro WhatsApp est obligatoire (422), absent ou vide", async () => {
+    for (const whatsappNumber of [undefined, null, ""]) {
+      const res = await post({ ...BODY, shop: { ...BODY.shop, whatsappNumber } });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({ code: "WHATSAPP_NUMBER_REQUIRED" });
+    }
+    expect(_writes).toEqual([]);
+  });
+
+  test("un mode inconnu est refusé (422) : le schéma est strict", async () => {
+    expect((await post({ ...BODY, shop: { ...BODY.shop, checkoutMode: "cash" } })).status).toBe(422);
+    expect(_writes).toEqual([]);
+  });
+
+  test("le cas nominal WhatsApp passe toujours", async () => {
+    expect((await post(BODY)).status).toBe(201);
+    expect((_writes[1]![1] as { data: Record<string, unknown> }).data).toMatchObject({ checkoutMode: "whatsapp", whatsappNumber: "+22670123456" });
+  });
+});
+
+describe("caisse allumée (NEXT_PUBLIC_ONLINE_CHECKOUT=1)", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+  });
+
+  test("le mode « online » est accepté, sans numéro WhatsApp", async () => {
+    const res = await post({ ...BODY, shop: { ...BODY.shop, checkoutMode: "online", whatsappNumber: null } });
+    expect(res.status).toBe(201);
+    expect((_writes[1]![1] as { data: Record<string, unknown> }).data).toMatchObject({ checkoutMode: "online", whatsappNumber: null });
+  });
 });

@@ -14,11 +14,13 @@ export const maxDuration = 120;
 // ---------------------------------------------------------------------------
 // GET /api/cron/reconcile-orders
 //
-// Filet de sécurité : rattrape les commandes Mobile Money qu'aucun webhook n'a
-// fait aboutir, toutes boutiques confondues. Les deux autres déclencheurs (la
-// page de retour de l'acheteur et le tableau de bord du vendeur) couvrent le
-// cas courant ; celui-ci existe pour les commandes que plus personne ne
-// regarde, et notamment pour libérer le stock des paniers abandonnés.
+// Le passage quotidien, toutes boutiques confondues. Il expire les commandes
+// WhatsApp que personne n'a confirmées en sept jours, relance les
+// reversements que l'équipe n'a pas encore exécutés, puis envoie le rapport
+// du matin. Il rattrape aussi les commandes Mobile Money qu'aucun webhook
+// n'a fait aboutir — la caisse Bio-Lien, masquée depuis le 14 septembre
+// 2026 (voir @/lib/payments/online-checkout) : drapeau éteint, l'étape
+// tourne encore pour solder ce qui reste en vol et ne coûte rien à lot vide.
 //
 // Vercel Cron envoie `Authorization: Bearer $CRON_SECRET`. Sans ce secret en
 // variable d'environnement, la route refuse tout le monde : un endpoint qui
@@ -31,12 +33,12 @@ export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
 
   if (!secret) {
-    console.error("[cron] CRON_SECRET manquant — réconciliation désactivée");
+    console.error("[cron] CRON_SECRET manquant — passage quotidien désactivé");
     await recordOpsEvent({
       kind: "cron.not_configured",
       severity: "critical",
       title: "Cron quotidien désactivé : CRON_SECRET absent",
-      detail: "Sans CRON_SECRET sur Vercel, la réconciliation Mobile Money, l'expiration des commandes hors ligne et la relance des reversements ne tournent plus.",
+      detail: "Sans CRON_SECRET sur Vercel, l'expiration des commandes WhatsApp, la réconciliation Mobile Money, la relance des reversements et le rapport du matin ne tournent plus.",
       dedupeKey: "cron.not_configured",
     });
     return NextResponse.json(
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
         kind: "cron.unauthorized",
         severity: "critical",
         title: "Vercel Cron refusé : CRON_SECRET différent",
-        detail: "Le secret a changé sur Vercel sans redéploiement (ou l'inverse) : la réconciliation, l'expiration et la relance des reversements ne tournent plus.",
+        detail: "Le secret a changé sur Vercel sans redéploiement (ou l'inverse) : l'expiration des commandes WhatsApp, la réconciliation Mobile Money, la relance des reversements et le rapport du matin ne tournent plus.",
         dedupeKey: "cron.unauthorized",
       });
     }
@@ -74,8 +76,10 @@ export async function GET(request: NextRequest) {
   });
   console.info("[cron] reversements en attente:", payouts);
 
-  // Et les commandes hors ligne (WhatsApp, livraison) que personne n'a
-  // confirmées en sept jours.
+  // Et les commandes WhatsApp (ou à la livraison, mode « En ligne ») que
+  // personne n'a confirmées en sept jours. Le libellé « hors ligne » des
+  // journaux et de l'alerte d'étape (cron.step_failed) reste tel quel : il
+  // couvre les deux modes et les tests le fixent.
   const expired = await expireStaleManualOrders().catch((error) => {
     console.error("[cron] expiration des commandes hors ligne:", error);
     return { expired: -1, errors: 1 };
