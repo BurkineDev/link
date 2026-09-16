@@ -21,9 +21,10 @@ export const runtime = "nodejs";
 //   payment.initiated | payment.success | payment.failed |
 //   payment.cancelled | payment.expired | payment.refunded
 //
-// The signature is HMAC-SHA256(timestamp + "." + rawJson, webhookSecret).
-// We restore reserved stock when a payment fails / expires, and mark
-// the order as paid + confirmed on success.
+// Signature : voir verifyWebhookSignature (corps brut selon la doc actuelle,
+// ancien schéma timestamp.corps accepté aussi ; en-têtes X-GeniusPay-* ou
+// X-Webhook-*). We restore reserved stock when a payment fails / expires,
+// and mark the order as paid + confirmed on success.
 // ---------------------------------------------------------------------------
 
 interface WebhookData {
@@ -44,9 +45,13 @@ interface WebhookPayload {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
-  const signature = request.headers.get("x-webhook-signature");
-  const timestamp = request.headers.get("x-webhook-timestamp");
-  const event = request.headers.get("x-webhook-event") ?? "";
+  // Deux familles d'en-têtes selon la version de Genius Pay.
+  const signature =
+    request.headers.get("x-geniuspay-signature") ?? request.headers.get("x-webhook-signature");
+  const timestamp =
+    request.headers.get("x-geniuspay-timestamp") ?? request.headers.get("x-webhook-timestamp");
+  const event =
+    request.headers.get("x-geniuspay-event") ?? request.headers.get("x-webhook-event") ?? "";
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
     // Secret absent ou tourné, horloge en dérive : le fondateur doit le
@@ -54,7 +59,8 @@ export async function POST(request: NextRequest) {
     // Money, et les ventes si le mode En ligne est actif, sans autre
     // symptôme. Une requête sans en-têtes du tout n'est pas Genius Pay
     // (robot, scanner) : une trace, pas un réveil.
-    const signed = Boolean(signature && timestamp);
+    // Une signature seule suffit désormais (la doc n'impose pas d'horodatage).
+    const signed = Boolean(signature);
     const secretMissing = !process.env.GENIUSPAY_WEBHOOK_SECRET;
     ops[signed || secretMissing ? "critical" : "warning"]({
       kind: "webhook.signature_rejected",
@@ -66,7 +72,7 @@ export async function POST(request: NextRequest) {
       detail: secretMissing
         ? "Aucun webhook Genius Pay ne peut être accepté tant que le secret n'est pas posé sur Vercel."
         : signed
-          ? "Signature invalide ou horodatage hors des 300 s. Si ça se répète, compare le secret webhook chez Genius Pay et GENIUSPAY_WEBHOOK_SECRET sur Vercel."
+          ? "Signature invalide ou horodatage hors des 300 s. Si ça se répète, compare le secret du webhook « bio-lien » chez Genius Pay et GENIUSPAY_WEBHOOK_SECRET dans Infisical."
           : "Probablement un robot : aucune signature ni horodatage. Rien à faire si ça reste isolé.",
       context: { event: safeToken(event), hasSignature: Boolean(signature), hasTimestamp: Boolean(timestamp) },
       dedupeKey: `webhook.signature_rejected:geniuspay${signed || secretMissing ? "" : ":unsigned"}`,
