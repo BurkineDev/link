@@ -46,12 +46,13 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
   // Deux familles d'en-têtes selon la version de Genius Pay.
+  // (`||` : un en-tête présent mais vide replie sur l'autre famille.)
   const signature =
-    request.headers.get("x-geniuspay-signature") ?? request.headers.get("x-webhook-signature");
+    request.headers.get("x-geniuspay-signature") || request.headers.get("x-webhook-signature");
   const timestamp =
-    request.headers.get("x-geniuspay-timestamp") ?? request.headers.get("x-webhook-timestamp");
+    request.headers.get("x-geniuspay-timestamp") || request.headers.get("x-webhook-timestamp");
   const event =
-    request.headers.get("x-geniuspay-event") ?? request.headers.get("x-webhook-event") ?? "";
+    request.headers.get("x-geniuspay-event") || request.headers.get("x-webhook-event") || "";
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
     // Secret absent ou tourné, horloge en dérive : le fondateur doit le

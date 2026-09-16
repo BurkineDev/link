@@ -64,11 +64,15 @@ jest.mock("@/lib/db/subscriptions", () => ({
 }));
 
 let _verifyResult = true;
+// true : vérificateur réel, pour rejouer le chemin complet en-têtes → HMAC.
+let _verifyReal = false;
 jest.mock("@/lib/geniuspay", () => {
   const original = jest.requireActual("@/lib/geniuspay");
   return {
     ...original,
-    verifyWebhookSignature: jest.fn().mockImplementation(() => _verifyResult),
+    verifyWebhookSignature: jest.fn((args: unknown) =>
+      _verifyReal ? original.verifyWebhookSignature(args) : _verifyResult,
+    ),
   };
 });
 
@@ -82,6 +86,9 @@ const mockOps = { critical: jest.fn(), warning: jest.fn(), info: jest.fn() };
 jest.mock("@/lib/ops/events", () => ({ ops: mockOps, recordOpsEvent: jest.fn(), recordOpsEventAfterResponse: jest.fn() }));
 
 import { POST } from "@/app/api/webhooks/geniuspay/route";
+import { verifyWebhookSignature } from "@/lib/geniuspay";
+import { applySubscriptionPayment } from "@/lib/db/subscriptions";
+import { createHmac } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Fixtures & Setup
@@ -110,6 +117,7 @@ beforeEach(() => {
   _rpcResult = null;
   _rpcError = null;
   _verifyResult = true;
+  _verifyReal = false;
   mockNotifySellerOfPaidOrder.mockClear();
   mockRecordRefund.mockClear();
   mockOps.critical.mockClear();
@@ -332,5 +340,84 @@ describe("POST /api/webhooks/geniuspay", () => {
     const res = await POST(makeRequest(payload, { "x-webhook-event": "payment.refunded" }));
     expect(res.status).toBe(200);
     expect(mockRecordRefund).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Le chemin de l'incident du 15/09/2026 : les en-têtes doivent arriver tels
+// quels au vérificateur, et le vérificateur réel doit accepter les deux
+// familles. Une faute de frappe sur un nom d'en-tête ou un corps
+// re-sérialisé rejetterait tout webhook réel — et donc tout revenu
+// Mobile Money — sans qu'aucun autre test ne bouge.
+// ---------------------------------------------------------------------------
+
+describe("en-têtes Genius Pay transmis jusqu'au vérificateur", () => {
+  const URL = "http://localhost:3000/api/webhooks/geniuspay";
+  const SECRET = "whsec_route_test";
+  const hmac = (msg: string, secret = SECRET) => createHmac("sha256", secret).update(msg).digest("hex");
+  const fresh = () => String(Math.floor(Date.now() / 1000));
+  // Octets non canoniques (espaces, retour final, comme json_encode côté PHP) :
+  // seule la chaîne exacte doit signer, pas une re-sérialisation.
+  const RAW_SUBSCRIPTION =
+    '{"event": "payment.success", "data": {"reference": "SUB-1", "status": "completed", "amount": 5000, "currency": "XOF", "metadata": {"kind": "subscription"}}}\n';
+  const post = (raw: string, headers: Record<string, string>) =>
+    POST(new NextRequest(URL, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: raw }));
+
+  beforeEach(() => {
+    process.env.GENIUSPAY_WEBHOOK_SECRET = SECRET;
+    (applySubscriptionPayment as jest.Mock).mockClear();
+    (verifyWebhookSignature as jest.Mock).mockClear();
+  });
+  afterEach(() => {
+    delete process.env.GENIUSPAY_WEBHOOK_SECRET;
+  });
+
+  test("X-GeniusPay-* : signature, horodatage et corps brut arrivent tels quels au vérificateur", async () => {
+    const raw = JSON.stringify(validPayload());
+    await post(raw, { "x-geniuspay-signature": "sig-gp", "x-geniuspay-timestamp": "1735587600", "x-geniuspay-event": "payment.success" });
+    expect(verifyWebhookSignature).toHaveBeenCalledWith({ rawBody: raw, signature: "sig-gp", timestamp: "1735587600" });
+  });
+
+  test("X-Webhook-* : idem", async () => {
+    const raw = JSON.stringify(validPayload());
+    await post(raw, { "x-webhook-signature": "sig-wh", "x-webhook-timestamp": "1735587600", "x-webhook-event": "payment.success" });
+    expect(verifyWebhookSignature).toHaveBeenCalledWith({ rawBody: raw, signature: "sig-wh", timestamp: "1735587600" });
+  });
+
+  test("X-GeniusPay-Signature vide + X-Webhook-Signature valide : c'est la valide qui compte", async () => {
+    _verifyReal = true;
+    const raw = RAW_SUBSCRIPTION;
+    const res = await post(raw, { "x-geniuspay-signature": "", "x-webhook-signature": hmac(raw), "x-webhook-timestamp": fresh() });
+    expect(res.status).toBe(200);
+    expect(mockOps.warning).not.toHaveBeenCalled();
+    expect(mockOps.critical).not.toHaveBeenCalled();
+  });
+
+  test("15/09/2026 : X-Webhook-Signature = HMAC(corps brut) + X-Webhook-Timestamp → 200, abonnement crédité", async () => {
+    _verifyReal = true;
+    const raw = RAW_SUBSCRIPTION;
+    const res = await post(raw, { "x-webhook-signature": hmac(raw), "x-webhook-timestamp": fresh(), "x-webhook-event": "payment.success" });
+    expect(res.status).toBe(200);
+    expect(applySubscriptionPayment).toHaveBeenCalledWith("SUB-1");
+    expect(mockOps.critical).not.toHaveBeenCalled();
+  });
+
+  test("doc actuelle : X-GeniusPay-Signature = HMAC(corps brut), sans horodatage → 200, abonnement crédité", async () => {
+    _verifyReal = true;
+    const raw = RAW_SUBSCRIPTION;
+    const res = await post(raw, { "x-geniuspay-signature": hmac(raw), "x-geniuspay-event": "payment.success" });
+    expect(res.status).toBe(200);
+    expect(applySubscriptionPayment).toHaveBeenCalledWith("SUB-1");
+  });
+
+  test("mauvais secret → 401, rien crédité, alerte critique (signé)", async () => {
+    _verifyReal = true;
+    const raw = RAW_SUBSCRIPTION;
+    const res = await post(raw, { "x-geniuspay-signature": hmac(raw, "autre-secret"), "x-geniuspay-event": "payment.success" });
+    expect(res.status).toBe(401);
+    expect(applySubscriptionPayment).not.toHaveBeenCalled();
+    expect(mockOps.critical).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "webhook.signature_rejected", dedupeKey: "webhook.signature_rejected:geniuspay" }),
+    );
   });
 });

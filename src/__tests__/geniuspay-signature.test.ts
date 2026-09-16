@@ -47,6 +47,8 @@ describe("verifyWebhookSignature", () => {
   test("horodatage fourni mais hors fenêtre ou illisible : refusé, même signature juste", () => {
     const old = String(Math.floor(Date.now() / 1000) - 600);
     expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: old, webhookSecret: SECRET })).toBe(false);
+    const future = String(Math.floor(Date.now() / 1000) + 600);
+    expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: future, webhookSecret: SECRET })).toBe(false);
     expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: "hier", webhookSecret: SECRET })).toBe(false);
   });
 

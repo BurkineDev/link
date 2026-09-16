@@ -5,9 +5,7 @@ import { getEffectivePlan } from "@/lib/subscription";
 import type { SubscriptionPlan } from "@/lib/types/database";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { PricingClient } from "./pricing-client";
-import { iso2FromE164 } from "@/lib/phone/dial-codes";
-import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
-import { countryLabel } from "@/lib/countries";
+import { mobileMoneyBlockedCountryForShop } from "@/lib/payments/mobile-money-coverage";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/pricing" },
@@ -34,8 +32,7 @@ export default async function PricingPage() {
       where: { ownerId: user.id },
       select: { whatsappNumber: true, contactPhone: true },
     });
-    const iso2 = iso2FromE164(shop?.whatsappNumber ?? shop?.contactPhone ?? null);
-    if (iso2 && !isMobileMoneyCovered(iso2)) mobileMoneyBlockedCountry = countryLabel(iso2) ?? iso2;
+    mobileMoneyBlockedCountry = mobileMoneyBlockedCountryForShop(shop);
     const sub = await prisma.creatorSubscription.findUnique({
       where: { userId: user.id },
       select: { plan: true, status: true, provider: true, currentPeriodEnd: true },

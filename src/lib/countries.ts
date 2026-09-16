@@ -64,6 +64,12 @@ const FRENCH_NAMES: Record<string, string> = {
   UG: "Ouganda",
   ZM: "Zambie",
   ZW: "Zimbabwe",
+  // Diaspora (indicatifs acceptés par les formulaires) : nommés plutôt
+  // qu'affichés en code brut sur la page Tarifs.
+  FR: "France",
+  BE: "Belgique",
+  CA: "Canada",
+  US: "États-Unis",
 };
 
 /** « Sénégal » pour « SN » ; le nom anglais de la liste, puis le code, en repli. */
