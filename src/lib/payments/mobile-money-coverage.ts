@@ -17,6 +17,9 @@
  * c'est de là qu'il faudra la lire plutôt que d'ici.
  */
 
+import { iso2FromE164, isValidE164 } from "@/lib/phone/dial-codes";
+import { countryLabel } from "@/lib/countries";
+
 /** Codes ISO2 où le Mobile Money aboutit réellement. */
 export const MOBILE_MONEY_COUNTRIES = new Set([
   "BJ", // Bénin — MTN, Moov
@@ -62,4 +65,24 @@ export const MOBILE_MONEY_CURRENCIES = new Set(["XOF"]);
 export function isMobileMoneyCurrency(currency: string | null | undefined): boolean {
   if (!currency) return false;
   return MOBILE_MONEY_CURRENCIES.has(currency.toUpperCase());
+}
+
+/**
+ * Le pays du vendeur, tel que Genius Pay le verra : son numéro WhatsApp
+ * (ou, à défaut, son téléphone de contact) est celui qui reçoit le push.
+ * Renvoie le nom du pays quand il n'est PAS couvert, null sinon — ou si
+ * aucun numéro international plausible ne fixe un pays (un texte libre sans
+ * indicatif ne doit pas bloquer quelqu'un, cf. isMobileMoneyCovered).
+ *
+ * Un +1 ne se départage pas entre Canada et États-Unis : on ne tranche pas
+ * à la place du vendeur.
+ */
+export function mobileMoneyBlockedCountryForShop(
+  shop: { whatsappNumber: string | null; contactPhone: string | null } | null | undefined,
+): string | null {
+  const phone = [shop?.whatsappNumber, shop?.contactPhone].find((p) => p && isValidE164(p)) ?? null;
+  const iso2 = iso2FromE164(phone);
+  if (!iso2 || isMobileMoneyCovered(iso2)) return null;
+  if (iso2 === "CA" || iso2 === "US") return "Canada / États-Unis";
+  return countryLabel(iso2);
 }

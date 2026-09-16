@@ -25,6 +25,7 @@ import {
 import type { OrderRow } from "@/lib/types/database";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { isValidWhatsAppNumber } from "@/lib/utils/whatsapp";
+import { mobileMoneyBlockedCountryForShop } from "@/lib/payments/mobile-money-coverage";
 
 function formatCurrency(amount: number, currency: string): string {
   try {
@@ -124,9 +125,13 @@ export default async function DashboardPage() {
         currency: true,
         featuredUntil: true,
         whatsappNumber: true,
+        contactPhone: true,
       },
     }),
   ]);
+
+  // Le boost se paie en Mobile Money : hors couverture, on propose la carte.
+  const mobileMoneyBlockedCountry = mobileMoneyBlockedCountryForShop(shopRow);
 
   // Caisse masquée, WhatsApp est la seule prise de commande : une boutique
   // publiée sans numéro exploitable (passée « en ligne » avant la bascule,
@@ -480,7 +485,11 @@ export default async function DashboardPage() {
       {shop?.id && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="lg:col-span-1">
-            <BoostCard shopId={shop.id} featuredUntil={shop.featured_until} />
+            <BoostCard
+              shopId={shop.id}
+              featuredUntil={shop.featured_until}
+              mobileMoneyBlockedCountry={mobileMoneyBlockedCountry}
+            />
           </div>
         </div>
       )}
