@@ -686,7 +686,9 @@ export function SettingsClient({
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="space-y-6">
+    // Même respiration que l'accueil et les commandes : sur mobile, la page
+    // collait au bord gauche.
+    <div className="space-y-6 p-4 md:p-6 lg:p-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground">

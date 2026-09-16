@@ -648,9 +648,11 @@ function OnboardingWizard({
 
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         {/* Progress */}
-        <div className="flex items-center justify-center mb-8 gap-2">
+        {/* Sur un téléphone, cinq pastilles et quatre traits ne tiennent pas
+            en 375 px avec les écarts de bureau : traits et écarts réduits. */}
+        <div className="flex items-center justify-center mb-8 gap-1 sm:gap-2">
           {STEPS.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-2">
+            <div key={s.id} className="flex items-center gap-1 sm:gap-2">
               <div
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold transition-all",
@@ -666,7 +668,7 @@ function OnboardingWizard({
               {i < STEPS.length - 1 && (
                 <div
                   className={cn(
-                    "h-0.5 w-8 transition-all",
+                    "h-0.5 w-4 transition-all sm:w-8",
                     step > s.id ? "bg-primary" : "bg-muted"
                   )}
                 />

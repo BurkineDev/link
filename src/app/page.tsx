@@ -132,14 +132,14 @@ function Nav({ dark = false, hero = false }: { dark?: boolean; hero?: boolean })
       <div className={`flex items-center gap-2.5 ${hero ? "ml-auto md:ml-0" : ""}`}>
         <Link
           href="/login"
-          className={`whitespace-nowrap px-2 py-2.5 text-[15px] font-medium no-underline transition-colors sm:px-3.5 ${hover} ${hero ? "lg:text-white lg:hover:text-[var(--b-lime)]" : ""}`}
+          className={`whitespace-nowrap px-1.5 py-2.5 text-sm font-medium no-underline transition-colors sm:px-3.5 sm:text-[15px] ${hover} ${hero ? "lg:text-white lg:hover:text-[var(--b-lime)]" : ""}`}
           style={hero ? undefined : { color: text }}
         >
           Se connecter
         </Link>
         <Link
           href="/register"
-          className={`whitespace-nowrap rounded-[var(--r-full)] px-5.5 py-3 text-[15px] font-semibold no-underline transition-colors ${dark || hero ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
+          className={`whitespace-nowrap rounded-[var(--r-full)] px-4 py-2.5 text-sm font-semibold no-underline transition-colors sm:px-5.5 sm:py-3 sm:text-[15px] ${dark || hero ? "hover:bg-[var(--b-lime-deep)]" : "hover:bg-[var(--b-ink-hover)]"}`}
           style={
             dark || hero
               ? { background: "var(--b-lime)", color: "var(--b-ink)" }

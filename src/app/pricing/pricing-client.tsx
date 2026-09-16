@@ -377,7 +377,9 @@ export function PricingClient({
           </Card>
 
           {/* Pro */}
-          <Card className="border-2 border-primary relative shadow-lg shadow-primary/10">
+          {/* overflow-visible : la Card coupe par défaut (overflow-hidden), et le
+              badge « Recommandé » dépasse du bord haut sur mobile. */}
+          <Card className="border-2 border-primary relative overflow-visible shadow-lg shadow-primary/10">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
               <Badge className="bg-primary text-primary-foreground">
                 Recommandé
