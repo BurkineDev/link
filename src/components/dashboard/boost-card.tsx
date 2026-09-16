@@ -12,12 +12,18 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BOOSTS, PREPAID_CURRENCY } from "@/lib/subscription";
+import { BOOSTS, PREPAID_CURRENCY, formatPlanPrice } from "@/lib/subscription";
 import { formatPrice } from "@/lib/utils/format";
 
 interface BoostCardProps {
   shopId: string;
   featuredUntil: string | null;
+  /**
+   * Nom du pays du numéro WhatsApp quand Genius Pay ne l'y sert pas : le
+   * push Mobile Money n'arriverait jamais, on encaisse alors par carte
+   * (Stripe, 1,99 $CA) via /api/boosts/checkout. Null = Mobile Money.
+   */
+  mobileMoneyBlockedCountry: string | null;
 }
 
 function formatRemaining(featuredUntil: string): string {
@@ -34,7 +40,8 @@ function isBoostActive(featuredUntil: string | null): boolean {
   return new Date(featuredUntil).getTime() > Date.now();
 }
 
-export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
+export function BoostCard({ shopId, featuredUntil, mobileMoneyBlockedCountry }: BoostCardProps) {
+  const cardOnly = mobileMoneyBlockedCountry !== null;
   const [loading, setLoading] = useState(false);
 
   const active = isBoostActive(featuredUntil);
@@ -42,7 +49,7 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
   async function buy() {
     setLoading(true);
     try {
-      const res = await fetch("/api/boosts/geniuspay", {
+      const res = await fetch(cardOnly ? "/api/boosts/checkout" : "/api/boosts/geniuspay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shopId, type: "featured_24h" }),
@@ -94,7 +101,9 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
           <>
             <div className="flex items-baseline justify-between">
               <p className="text-2xl font-black">
-                {formatPrice(BOOSTS.featured_24h.amountXof, PREPAID_CURRENCY)}
+                {cardOnly
+                  ? formatPlanPrice(BOOSTS.featured_24h.amount)
+                  : formatPrice(BOOSTS.featured_24h.amountXof, PREPAID_CURRENCY)}
               </p>
               <p className="text-xs text-muted-foreground">paiement unique</p>
             </div>
@@ -108,12 +117,14 @@ export function BoostCard({ shopId, featuredUntil }: BoostCardProps) {
               ) : (
                 <>
                   <Sparkles className="size-4" />
-                  Booster ma boutique
+                  {cardOnly ? "Booster par carte" : "Booster ma boutique"}
                 </>
               )}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
-              Mobile Money : Wave, Orange, MTN, Moov.
+              {cardOnly
+                ? `Mobile Money indisponible : ${mobileMoneyBlockedCountry}. Paiement par carte.`
+                : "Mobile Money : Wave, Orange, MTN, Moov."}
             </p>
           </>
         )}

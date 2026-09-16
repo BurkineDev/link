@@ -47,6 +47,8 @@ describe("verifyWebhookSignature", () => {
   test("horodatage fourni mais hors fenêtre ou illisible : refusé, même signature juste", () => {
     const old = String(Math.floor(Date.now() / 1000) - 600);
     expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: old, webhookSecret: SECRET })).toBe(false);
+    const future = String(Math.floor(Date.now() / 1000) + 600);
+    expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: future, webhookSecret: SECRET })).toBe(false);
     expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: "hier", webhookSecret: SECRET })).toBe(false);
   });
 
@@ -55,5 +57,33 @@ describe("verifyWebhookSignature", () => {
     delete process.env.GENIUSPAY_WEBHOOK_SECRET;
     expect(verifyWebhookSignature({ rawBody: BODY, signature: hmac(BODY), timestamp: null })).toBe(false);
     if (saved !== undefined) process.env.GENIUSPAY_WEBHOOK_SECRET = saved;
+  });
+});
+
+describe("probeWebhookSignatureScheme (diagnostic, noms seulement)", () => {
+  const saved = { w: process.env.GENIUSPAY_WEBHOOK_SECRET, a: process.env.GENIUSPAY_API_SECRET };
+  beforeEach(() => {
+    process.env.GENIUSPAY_WEBHOOK_SECRET = SECRET;
+    process.env.GENIUSPAY_API_SECRET = "sk_api_secret";
+  });
+  afterEach(() => {
+    if (saved.w === undefined) delete process.env.GENIUSPAY_WEBHOOK_SECRET; else process.env.GENIUSPAY_WEBHOOK_SECRET = saved.w;
+    if (saved.a === undefined) delete process.env.GENIUSPAY_API_SECRET; else process.env.GENIUSPAY_API_SECRET = saved.a;
+  });
+
+  test("nomme le schéma qui aurait accepté la requête", async () => {
+    const { probeWebhookSignatureScheme } = await import("@/lib/geniuspay");
+    const ts = nowSeconds();
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: hmac(BODY), timestamp: ts })).toBe("webhook:raw:hex");
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: hmac(`${ts}${BODY}`), timestamp: ts })).toBe("webhook:ts+raw:hex");
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: hmac(BODY, "sk_api_secret"), timestamp: ts })).toBe("api:raw:hex");
+    const b64 = createHmac("sha256", SECRET).update(BODY).digest("base64");
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: b64, timestamp: null })).toBe("webhook:raw:base64");
+  });
+
+  test("secret inconnu : null (aucun nom inventé)", async () => {
+    const { probeWebhookSignatureScheme } = await import("@/lib/geniuspay");
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: hmac(BODY, "autre"), timestamp: null })).toBeNull();
+    expect(probeWebhookSignatureScheme({ rawBody: BODY, signature: null, timestamp: null })).toBeNull();
   });
 });

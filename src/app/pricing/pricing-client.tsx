@@ -26,6 +26,7 @@ import {
   PREPAID_MONTHS,
   getPrepaidPrice,
   prepaidSavingsPercent,
+  formatPlanPrice,
   type PrepaidMonths,
 } from "@/lib/subscription";
 import {
@@ -90,6 +91,12 @@ export function PricingClient({
 }) {
   const searchParams = useSearchParams();
   const [months, setMonths] = useState<PrepaidMonths>(1);
+  // Hors couverture Mobile Money (numéro WhatsApp d'un pays que Genius Pay
+  // ne sert pas), la carte est la seule voie : on affiche ses prix et ses
+  // durées, pas une offre prépayée qu'on ne peut pas acheter.
+  const cardOnly = mobileMoneyBlockedCountry !== null;
+  const interval: "month" | "year" = months === 12 ? "year" : "month";
+  const intervalLabel = interval === "year" ? "an" : "mois";
   const [checkingOutPlan, setCheckingOutPlan] = useState<Plan | null>(null);
 
   const wasCancelled = searchParams.get("cancelled") === "1";
@@ -146,7 +153,7 @@ export function PricingClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan,
-          interval: months === 12 ? "year" : "month",
+          interval,
         }),
       });
       const data = await res.json();
@@ -192,9 +199,15 @@ export function PricingClient({
             <b>Mobile Money pas encore disponible : {mobileMoneyBlockedCountry}.</b> Notre
             partenaire n&apos;y envoie pas la demande de confirmation sur le téléphone — le
             paiement resterait bloqué « en attente ». Ton numéro WhatsApp est de ce pays, donc
-            les boutons Mobile Money sont désactivés. Tu peux payer <b>par carte bancaire</b>
-            (lien sous chaque plan), ou nous écrire si tu as un compte Wave ou Orange Money dans
-            un pays couvert.
+            les plans se paient <b>par carte bancaire</b> (bouton sous chaque plan). Tu as un
+            compte Wave ou Orange Money dans un pays couvert ?{" "}
+            <a
+              href="mailto:support@bio-lien.com?subject=Mobile%20Money%20hors%20couverture"
+              className="underline font-medium"
+            >
+              Écris-nous
+            </a>
+            .
           </div>
         )}
 
@@ -218,9 +231,9 @@ export function PricingClient({
             aria-label="Durée de l'abonnement"
             className="inline-flex items-center rounded-full border border-border bg-card p-1"
           >
-            {PREPAID_MONTHS.map((value) => {
+            {(cardOnly ? ([1, 12] as const) : PREPAID_MONTHS).map((value) => {
               const selected = months === value;
-              const savings = prepaidSavingsPercent("pro", value);
+              const savings = cardOnly ? 0 : prepaidSavingsPercent("pro", value);
               return (
                 <button
                   key={value}
@@ -329,9 +342,9 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {formatPrice(getPrepaidPrice("starter", months), "XOF")}
+                {cardOnly ? cardPriceLabel("starter", interval) : formatPrice(getPrepaidPrice("starter", months), "XOF")}
                 <span className="text-base font-normal text-muted-foreground ml-1">
-                  / {MONTH_LABEL[months]}
+                  / {cardOnly ? intervalLabel : MONTH_LABEL[months]}
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
@@ -346,17 +359,14 @@ export function PricingClient({
                 <Button
                   variant="outline"
                   className="w-full h-11 mb-6 gap-2"
-                  onClick={() => startPrepaidCheckout("starter")}
-                  disabled={checkingOutPlan !== null || mobileMoneyBlockedCountry !== null}
-                  title={mobileMoneyBlockedCountry ? `Mobile Money indisponible : ${mobileMoneyBlockedCountry}` : undefined}
+                  onClick={() => (cardOnly ? startCardCheckout("starter") : startPrepaidCheckout("starter"))}
+                  disabled={checkingOutPlan !== null}
                 >
                   {checkingOutPlan === "starter" ? (
                     <Loader2 className="size-4 animate-spin" />
-                  ) : mobileMoneyBlockedCountry ? (
-                    <>Mobile Money indisponible ici</>
                   ) : (
                     <>
-                      Passer en Starter
+                      {cardOnly ? "Payer par carte" : "Passer en Starter"}
                       <ArrowRight className="size-4" />
                     </>
                   )}
@@ -384,14 +394,20 @@ export function PricingClient({
                   carte, partout : abonnement renouvelé automatiquement,
                   résiliable depuis ton profil.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => startCardCheckout("starter")}
-                  disabled={checkingOutPlan !== null}
-                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
-                >
-                  Payer par carte ({cardPriceLabel("starter", months === 12 ? "year" : "month")} / {months === 12 ? "an" : "mois"}, renouvelé automatiquement)
-                </button>
+                {cardOnly ? (
+                  <p className="text-xs text-muted-foreground">
+                    Mobile Money indisponible : {mobileMoneyBlockedCountry}. Abonnement par carte, renouvelé automatiquement.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startCardCheckout("starter")}
+                    disabled={checkingOutPlan !== null}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                  >
+                    Payer par carte ({cardPriceLabel("starter", interval)} / {intervalLabel}, renouvelé automatiquement)
+                  </button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -416,9 +432,9 @@ export function PricingClient({
                 )}
               </div>
               <p className="text-4xl font-black mb-1">
-                {formatPrice(getPrepaidPrice("pro", months), "XOF")}
+                {cardOnly ? cardPriceLabel("pro", interval) : formatPrice(getPrepaidPrice("pro", months), "XOF")}
                 <span className="text-base font-normal text-muted-foreground ml-1">
-                  / {MONTH_LABEL[months]}
+                  / {cardOnly ? intervalLabel : MONTH_LABEL[months]}
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
@@ -432,17 +448,14 @@ export function PricingClient({
               ) : (
                 <Button
                   className="w-full h-11 mb-6 font-semibold gap-2"
-                  onClick={() => startPrepaidCheckout("pro")}
-                  disabled={checkingOutPlan !== null || mobileMoneyBlockedCountry !== null}
-                  title={mobileMoneyBlockedCountry ? `Mobile Money indisponible : ${mobileMoneyBlockedCountry}` : undefined}
+                  onClick={() => (cardOnly ? startCardCheckout("pro") : startPrepaidCheckout("pro"))}
+                  disabled={checkingOutPlan !== null}
                 >
                   {checkingOutPlan === "pro" ? (
                     <Loader2 className="size-4 animate-spin" />
-                  ) : mobileMoneyBlockedCountry ? (
-                    <>Mobile Money indisponible ici</>
                   ) : (
                     <>
-                      Passer en Pro
+                      {cardOnly ? "Payer par carte" : "Passer en Pro"}
                       <ArrowRight className="size-4" />
                     </>
                   )}
@@ -470,14 +483,20 @@ export function PricingClient({
                   carte, partout : abonnement renouvelé automatiquement,
                   résiliable depuis ton profil.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => startCardCheckout("pro")}
-                  disabled={checkingOutPlan !== null}
-                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
-                >
-                  Payer par carte ({cardPriceLabel("pro", months === 12 ? "year" : "month")} / {months === 12 ? "an" : "mois"}, renouvelé automatiquement)
-                </button>
+                {cardOnly ? (
+                  <p className="text-xs text-muted-foreground">
+                    Mobile Money indisponible : {mobileMoneyBlockedCountry}. Abonnement par carte, renouvelé automatiquement.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startCardCheckout("pro")}
+                    disabled={checkingOutPlan !== null}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                  >
+                    Payer par carte ({cardPriceLabel("pro", interval)} / {intervalLabel}, renouvelé automatiquement)
+                  </button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -488,7 +507,7 @@ export function PricingClient({
           <h2 className="text-xl font-bold mb-2">Besoin d&apos;un coup d&apos;accélérateur ?</h2>
           <p className="text-sm text-muted-foreground mb-6">
             Des boosts ponctuels que tu peux activer depuis ton dashboard, sans
-            t&apos;engager.
+            t&apos;engager{cardOnly ? ", payables par carte" : ""}.
           </p>
           <div className="rounded-2xl border border-border bg-card p-5 flex items-center gap-4 text-left">
             <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -501,7 +520,7 @@ export function PricingClient({
               </p>
             </div>
             <p className="font-bold whitespace-nowrap">
-              {formatPrice(BOOSTS.featured_24h.amountXof, "XOF")}
+              {cardOnly ? formatPlanPrice(BOOSTS.featured_24h.amount) : formatPrice(BOOSTS.featured_24h.amountXof, "XOF")}
             </p>
           </div>
         </div>

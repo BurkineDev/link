@@ -5,6 +5,7 @@ import { applyBoostPayment, applySubscriptionPayment } from "@/lib/db/subscripti
 import {
   mapStatusToPaymentStatus,
   verifyWebhookSignature,
+  probeWebhookSignatureScheme,
   type GeniusPayStatus,
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
@@ -46,12 +47,13 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
   // Deux familles d'en-têtes selon la version de Genius Pay.
+  // (`||` : un en-tête présent mais vide replie sur l'autre famille.)
   const signature =
-    request.headers.get("x-geniuspay-signature") ?? request.headers.get("x-webhook-signature");
+    request.headers.get("x-geniuspay-signature") || request.headers.get("x-webhook-signature");
   const timestamp =
-    request.headers.get("x-geniuspay-timestamp") ?? request.headers.get("x-webhook-timestamp");
+    request.headers.get("x-geniuspay-timestamp") || request.headers.get("x-webhook-timestamp");
   const event =
-    request.headers.get("x-geniuspay-event") ?? request.headers.get("x-webhook-event") ?? "";
+    request.headers.get("x-geniuspay-event") || request.headers.get("x-webhook-event") || "";
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
     // Secret absent ou tourné, horloge en dérive : le fondateur doit le
@@ -74,7 +76,21 @@ export async function POST(request: NextRequest) {
         : signed
           ? "Signature invalide ou horodatage hors des 300 s. Si ça se répète, compare le secret du webhook « bio-lien » chez Genius Pay et GENIUSPAY_WEBHOOK_SECRET dans Infisical."
           : "Probablement un robot : aucune signature ni horodatage. Rien à faire si ça reste isolé.",
-      context: { event: safeToken(event), hasSignature: Boolean(signature), hasTimestamp: Boolean(timestamp) },
+      // La forme de ce qui a été reçu (jamais la valeur) : c'est ce qui
+      // permet de distinguer « mauvais secret » de « autre encodage » sans
+      // capturer la requête — hex de 64 = HMAC-SHA256 attendu.
+      context: {
+        event: safeToken(event),
+        hasSignature: Boolean(signature),
+        hasTimestamp: Boolean(timestamp),
+        signatureLength: signature?.length ?? 0,
+        signatureHex: Boolean(signature && /^[0-9a-f]+$/i.test(signature.trim())),
+        timestampDigits: timestamp?.replace(/\D/g, "").length ?? 0,
+        bodyBytes: Buffer.byteLength(rawBody),
+        // Quel schéma connu aurait accepté la requête (nom seulement) : null
+        // avec une signature hex de 64 = le secret configuré n'est pas le bon.
+        matchedScheme: probeWebhookSignatureScheme({ rawBody, signature, timestamp }),
+      },
       dedupeKey: `webhook.signature_rejected:geniuspay${signed || secretMissing ? "" : ":unsigned"}`,
     });
     return new NextResponse(null, { status: 401 });
