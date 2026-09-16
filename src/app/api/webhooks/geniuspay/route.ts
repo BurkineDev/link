@@ -75,7 +75,18 @@ export async function POST(request: NextRequest) {
         : signed
           ? "Signature invalide ou horodatage hors des 300 s. Si ça se répète, compare le secret du webhook « bio-lien » chez Genius Pay et GENIUSPAY_WEBHOOK_SECRET dans Infisical."
           : "Probablement un robot : aucune signature ni horodatage. Rien à faire si ça reste isolé.",
-      context: { event: safeToken(event), hasSignature: Boolean(signature), hasTimestamp: Boolean(timestamp) },
+      // La forme de ce qui a été reçu (jamais la valeur) : c'est ce qui
+      // permet de distinguer « mauvais secret » de « autre encodage » sans
+      // capturer la requête — hex de 64 = HMAC-SHA256 attendu.
+      context: {
+        event: safeToken(event),
+        hasSignature: Boolean(signature),
+        hasTimestamp: Boolean(timestamp),
+        signatureLength: signature?.length ?? 0,
+        signatureHex: Boolean(signature && /^[0-9a-f]+$/i.test(signature.trim())),
+        timestampDigits: timestamp?.replace(/\D/g, "").length ?? 0,
+        bodyBytes: Buffer.byteLength(rawBody),
+      },
       dedupeKey: `webhook.signature_rejected:geniuspay${signed || secretMissing ? "" : ":unsigned"}`,
     });
     return new NextResponse(null, { status: 401 });
