@@ -206,20 +206,20 @@ export function fetchPayment(reference: string) {
 /**
  * Vérifie un webhook Genius Pay entrant.
  *
- * La documentation marchande (« Sécurité des webhooks », septembre 2026)
- * signe le CORPS BRUT seul : `HMAC-SHA256(rawBody, secret)`, en-têtes
- * `X-GeniusPay-Signature` / `X-GeniusPay-Timestamp` / `X-GeniusPay-Event`.
- * Une version antérieure signait `timestamp + "." + rawBody` avec des
- * en-têtes `X-Webhook-*` : c'est ce que ce code attendait, et les deux
- * seuls webhooks réels reçus (15 septembre 2026, `payment.initiated`) ont
- * été rejetés en 401 — sans webhook accepté, aucun abonnement prépayé ni
- * boost Mobile Money n'est crédité.
+ * Vérifié sur une requête réelle capturée le 16 septembre 2026 (webhook de
+ * test, secret connu) : Genius Pay envoie les en-têtes `X-Webhook-Signature`
+ * / `X-Webhook-Timestamp` (secondes) / `X-Webhook-Event` et signe
+ * `timestamp + "." + corpsBrut` en HMAC-SHA256 hex — contrairement à sa
+ * documentation marchande, qui décrit `HMAC(corpsBrut)` avec des en-têtes
+ * `X-GeniusPay-*`. Les deux schémas et les deux familles d'en-têtes restent
+ * acceptés, en comparaison à temps constant, pour survivre à un changement
+ * de leur côté ; l'horodatage n'est contrôlé que s'il est fourni.
  *
- * On accepte donc les deux schémas, en comparaison à temps constant, et
- * l'horodatage n'est contrôlé que s'il est fourni (la référence PHP de la
- * doc n'en envoie pas) : l'idempotence des traitements (déjà payé → rien)
- * couvre le rejeu. `rawBody` DOIT être les octets exacts reçus
- * (`await request.text()` avant tout parsing).
+ * Les rejets du 15 septembre (webhook « bio-lien » à 0 succès) venaient
+ * d'un secret qui n'était pas celui du webhook, pas du schéma : l'alerte
+ * porte désormais `matchedScheme` (probeWebhookSignatureScheme) pour le
+ * dire sans capturer la requête. `rawBody` DOIT être les octets exacts
+ * reçus (`await request.text()` avant tout parsing).
  */
 export function verifyWebhookSignature(args: {
   rawBody: string;
