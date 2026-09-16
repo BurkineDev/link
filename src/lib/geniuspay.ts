@@ -261,6 +261,52 @@ export function verifyWebhookSignature(args: {
   });
 }
 
+/**
+ * Diagnostic d'un webhook rejeté : quel schéma de signature AURAIT accepté
+ * cette requête ? Ne renvoie qu'un nom de schéma (ou null), jamais une
+ * valeur — c'est ce nom qui part dans l'alerte fondateur. Si aucun schéma
+ * connu ne correspond avec le secret configuré, c'est le secret qui est
+ * faux (ou un schéma inconnu), et on le sait sans capturer la requête.
+ */
+export function probeWebhookSignatureScheme(args: {
+  rawBody: string;
+  signature: string | null;
+  timestamp: string | null;
+}): string | null {
+  const signature = args.signature?.trim() ?? "";
+  if (!signature) return null;
+  const secrets: Array<[string, string | undefined]> = [
+    ["webhook", process.env.GENIUSPAY_WEBHOOK_SECRET],
+    ["api", process.env.GENIUSPAY_API_SECRET],
+  ];
+  const ts = args.timestamp ?? "";
+  let canonical: string | null = null;
+  try {
+    canonical = JSON.stringify(JSON.parse(args.rawBody));
+  } catch {
+    canonical = null;
+  }
+  const messages: Array<[string, string]> = [
+    ["raw", args.rawBody],
+    ["ts.raw", `${ts}.${args.rawBody}`],
+    ["ts+raw", `${ts}${args.rawBody}`],
+    ["raw+ts", `${args.rawBody}${ts}`],
+    ...(canonical !== null && canonical !== args.rawBody ? ([["json", canonical]] as Array<[string, string]>) : []),
+  ];
+  const provided = signature.toLowerCase();
+  for (const [secretName, secret] of secrets) {
+    if (!secret) continue;
+    for (const [msgName, message] of messages) {
+      const mac = createHmac("sha256", secret).update(message);
+      const hex = mac.digest("hex");
+      if (hex === provided) return `${secretName}:${msgName}:hex`;
+      const b64 = createHmac("sha256", secret).update(message).digest("base64");
+      if (b64 === signature || b64.replace(/=+$/, "") === signature.replace(/=+$/, "")) return `${secretName}:${msgName}:base64`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Status mapping → our internal payment_status enum
 // ---------------------------------------------------------------------------

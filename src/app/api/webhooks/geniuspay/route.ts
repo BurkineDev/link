@@ -5,6 +5,7 @@ import { applyBoostPayment, applySubscriptionPayment } from "@/lib/db/subscripti
 import {
   mapStatusToPaymentStatus,
   verifyWebhookSignature,
+  probeWebhookSignatureScheme,
   type GeniusPayStatus,
 } from "@/lib/geniuspay";
 import { notifyPaidOrder } from "@/lib/order-notifications";
@@ -86,6 +87,9 @@ export async function POST(request: NextRequest) {
         signatureHex: Boolean(signature && /^[0-9a-f]+$/i.test(signature.trim())),
         timestampDigits: timestamp?.replace(/\D/g, "").length ?? 0,
         bodyBytes: Buffer.byteLength(rawBody),
+        // Quel schéma connu aurait accepté la requête (nom seulement) : null
+        // avec une signature hex de 64 = le secret configuré n'est pas le bon.
+        matchedScheme: probeWebhookSignatureScheme({ rawBody, signature, timestamp }),
       },
       dedupeKey: `webhook.signature_rejected:geniuspay${signed || secretMissing ? "" : ":unsigned"}`,
     });
