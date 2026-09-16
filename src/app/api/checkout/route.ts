@@ -20,6 +20,7 @@ import { notifyCashOnDeliveryOrder, notifyPaidOrder } from "@/lib/order-notifica
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { ops } from "@/lib/ops/events";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 // ---------------------------------------------------------------------------
 // Limitation de débit
@@ -104,6 +105,13 @@ export async function POST(request: NextRequest) {
       { name: "checkout:ip", key: getClientIp(request), ...CHECKOUT_PER_IP },
     ]);
     if (blocked) return blocked;
+
+    // Caisse Bio-Lien masquée (décision du 14 septembre 2026) : la route
+    // n'existe pas. Après le rate-limit (un scan reste compté), avant toute
+    // lecture du corps ou de la base.
+    if (!isOnlineCheckoutEnabled()) {
+      return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+    }
 
     const body: unknown = await request.json();
     const parsed = checkoutRequestSchema.safeParse(body);

@@ -3,6 +3,17 @@
 Document de référence pour la refonte progressive. **Phase 0 : audit, gap
 analysis, plan de migration.** Écrit à partir du code réel, pas d'hypothèses.
 
+> **Mise à jour du 15 septembre 2026.** Depuis la décision fondateur du
+> 14 septembre, **WhatsApp est le parcours nominal** : la commande part dans
+> une conversation WhatsApp pré-remplie, arrive « Non payée » dans le tableau
+> de bord, et le vendeur la marque payée lui-même. La caisse Bio-Lien
+> (checkout Stripe / GeniusPay côté acheteur, page `/checkout`, paiement à la
+> livraison, commission, reversements) est le **mode En ligne, masqué derrière
+> le drapeau `NEXT_PUBLIC_ONLINE_CHECKOUT`** (`src/lib/payments/online-checkout.ts`)
+> — code conservé, réversible. Les abonnements vendeurs et les boosts ne lisent
+> jamais ce drapeau. Les lignes marquées *(mode En ligne, derrière le drapeau)*
+> ci-dessous décrivent ce qui ne s'exécute que drapeau allumé.
+
 ---
 
 ## 1. Audit de l'existant
@@ -13,7 +24,7 @@ analysis, plan de migration.** Écrit à partir du code réel, pas d'hypothèses
 | Backend | Routes API Next (`src/app/api/**`), pas de serveur séparé |
 | Base de données | Supabase Postgres, **19 migrations**, RLS activée sur toutes les tables publiques |
 | Authentification | Supabase Auth (email/mot de passe + Google), trigger `handle_new_user()` qui crée le profil |
-| Paiements | **Stripe** (checkout, abonnements, boosts, webhook signé) et **GeniusPay** (mobile money, webhook signé) |
+| Paiements | **Stripe** (abonnements, boosts, webhook signé ; checkout acheteur : *mode En ligne, derrière le drapeau*) et **GeniusPay** (abonnements prépayés, webhook signé ; mobile money acheteur : *mode En ligne, derrière le drapeau*). Parcours nominal des ventes : **WhatsApp**, sans passage d'argent par Bio-Lien |
 | Stock | RPC `reserve_stock` / `release_stock` en `security definer`, appelées côté checkout |
 | Analytics | `shop_page_views` (compteur/jour), `shop_links.click_count`, RPC de tracking anonymes |
 | Abonnements | `creator_subscriptions` + `PLAN_LIMITS` (free/starter/pro) |
@@ -28,7 +39,9 @@ analysis, plan de migration.** Écrit à partir du code réel, pas d'hypothèses
 ### Routes
 
 25 routes API, 24 pages. Publiques : `/{username}`, `/{username}/{produit}`,
-`/explore`, `/checkout`, `/outils`, `/pricing`. Dashboard : 10 pages.
+`/explore`, `/checkout` *(mode En ligne, derrière le drapeau ; parcours
+nominal : bouton « Commander sur WhatsApp »)*, `/outils`, `/pricing`.
+Dashboard : 10 pages.
 
 ---
 
@@ -36,15 +49,20 @@ analysis, plan de migration.** Écrit à partir du code réel, pas d'hypothèses
 
 ### ✅ À CONSERVER (fonctionne, testé, ne pas toucher pour uniformiser)
 
-- **Les deux intégrations de paiement.** Stripe et GeniusPay sont câblées, avec
-  signature de webhook vérifiée et idempotence (`payment_status` déjà réglé →
-  no-op). 4 suites de tests les couvrent.
+- **Les deux intégrations de paiement** *(côté acheteur : mode En ligne,
+  derrière le drapeau ; côté abonnements : toujours actives)*. Stripe et
+  GeniusPay sont câblées, avec signature de webhook vérifiée et idempotence
+  (`payment_status` déjà réglé → no-op). 4 suites de tests les couvrent. Le
+  parcours nominal des ventes est WhatsApp : la commande naît « Non payée »
+  et c'est le vendeur qui la marque payée.
 - **La réservation de stock** par RPC atomique — protège de la survente.
 - **Le socle RLS.** Chaque table publique a ses politiques ; les écritures
   anonymes passent par des fonctions `security definer` à capacité unique.
 - **Les thèmes de BioPage** (`bio-themes.ts`) et leurs garde-fous de contraste.
 - **Les stories générées** (page + produit) et le tracking clics/vues.
-- **Le checkout invité** — aucun compte requis pour acheter, déjà conforme à la cible.
+- **Le checkout invité** — aucun compte requis pour acheter, déjà conforme à la
+  cible *(la page `/checkout` elle-même : mode En ligne, derrière le drapeau ;
+  le parcours WhatsApp ne demande pas non plus de compte)*.
 
 ### ♻️ À REFACTORER
 

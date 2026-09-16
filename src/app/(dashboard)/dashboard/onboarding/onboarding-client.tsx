@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
@@ -93,32 +93,40 @@ const step1Schema = z.object({
   username: usernameSchema,
 });
 
-const step2Schema = z
-  .object({
-    shopName: z.string().min(2, "Minimum 2 caractères"),
-    shopSlug: z
-      .string()
-      .min(3, "Minimum 3 caractères")
-      .regex(/^[a-z0-9_-]+$/, "Lettres, chiffres, - et _ uniquement"),
-    description: z.string().max(500, "Maximum 500 caractères").optional(),
-    currency: z.string().min(1),
-    checkoutMode: z.enum(["whatsapp", "online"]),
-    whatsappNumber: z.string().optional(),
-  })
-  .superRefine((data, ctx) => {
-    // Le champ ne renvoie qu'un numéro composé valide (indicatif + longueur
-    // du pays) ou "" : un numéro sans indicatif ne peut plus passer.
-    if (data.checkoutMode === "whatsapp" && !isValidE164(data.whatsappNumber ?? "")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["whatsappNumber"],
-        message: "Choisis l'indicatif et saisis un numéro WhatsApp complet.",
-      });
-    }
-  });
+/**
+ * Écran Boutique. Caisse masquée (voir src/lib/payments/online-checkout.ts),
+ * toute boutique prend ses commandes sur WhatsApp : le numéro est exigé
+ * quel que soit le mode porté par le formulaire.
+ */
+function step2Schema(onlineCheckout: boolean) {
+  return z
+    .object({
+      shopName: z.string().min(2, "Minimum 2 caractères"),
+      shopSlug: z
+        .string()
+        .min(3, "Minimum 3 caractères")
+        .regex(/^[a-z0-9_-]+$/, "Lettres, chiffres, - et _ uniquement"),
+      description: z.string().max(500, "Maximum 500 caractères").optional(),
+      currency: z.string().min(1),
+      checkoutMode: z.enum(["whatsapp", "online"]),
+      whatsappNumber: z.string().optional(),
+    })
+    .superRefine((data, ctx) => {
+      // Le champ ne renvoie qu'un numéro composé valide (indicatif + longueur
+      // du pays) ou "" : un numéro sans indicatif ne peut plus passer.
+      const needsNumber = !onlineCheckout || data.checkoutMode === "whatsapp";
+      if (needsNumber && !isValidE164(data.whatsappNumber ?? "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["whatsappNumber"],
+          message: "Choisis l'indicatif et saisis un numéro WhatsApp complet.",
+        });
+      }
+    });
+}
 
 type Step1Values = z.infer<typeof step1Schema>;
-type Step2Values = z.infer<typeof step2Schema>;
+type Step2Values = z.infer<ReturnType<typeof step2Schema>>;
 
 // ─── Live preview ────────────────────────────────────────────
 // The page the seller is building, rendered while they type. Same resolver
@@ -194,10 +202,13 @@ export default function OnboardingClient({
   userId,
   profile,
   nextPath,
+  onlineCheckout,
 }: {
   userId: string;
   profile: SessionProfile;
   nextPath: string | null;
+  /** Caisse Bio-Lien allumée : le vendeur choisit entre WhatsApp et le paiement en ligne. Éteinte : WhatsApp, point. */
+  onlineCheckout: boolean;
 }) {
   const [draft, setDraft] = useState<OnboardingDraft | null | undefined>(undefined);
   useEffect(() => {
@@ -225,7 +236,14 @@ export default function OnboardingClient({
   }
 
   return (
-    <OnboardingWizard key={userId} userId={userId} profile={profile} draft={draft} nextPath={nextPath} />
+    <OnboardingWizard
+      key={userId}
+      userId={userId}
+      profile={profile}
+      draft={draft}
+      nextPath={nextPath}
+      onlineCheckout={onlineCheckout}
+    />
   );
 }
 
@@ -234,12 +252,14 @@ function OnboardingWizard({
   profile,
   draft,
   nextPath,
+  onlineCheckout,
 }: {
   userId: string;
   profile: SessionProfile;
   draft: OnboardingDraft | null;
   /** Le visiteur qui avait choisi un plan avant de s'inscrire y retourne (déjà validé par le serveur). */
   nextPath: string | null;
+  onlineCheckout: boolean;
 }) {
   const router = useRouter();
   const exitTo = nextPath ?? "/dashboard";
@@ -263,7 +283,11 @@ function OnboardingWizard({
     return null;
   });
   const [step2Data, setStep2Data] = useState<Step2Values | null>(() =>
-    draft?.step2?.shopName && draft.step2.shopSlug ? draft.step2 : null,
+    draft?.step2?.shopName && draft.step2.shopSlug
+      ? // Caisse masquée : un brouillon « online » repris est ignoré, le mode
+        // est WhatsApp (le numéro manquant est rattrapé à la fin).
+        { ...draft.step2, checkoutMode: onlineCheckout ? draft.step2.checkoutMode : "whatsapp" }
+      : null,
   );
 
   // Step 3 — ce que le vendeur veut faire, et le minimum pour le lui livrer.
@@ -301,14 +325,18 @@ function OnboardingWizard({
       username: draft?.step1?.username || profile.username || "",
     },
   });
+  // Le drapeau est figé au build : le schéma ne change pas pendant la session.
+  const step2Resolver = useMemo(() => zodResolver(step2Schema(onlineCheckout)), [onlineCheckout]);
   const form2 = useForm<Step2Values>({
-    resolver: zodResolver(step2Schema),
+    resolver: step2Resolver,
     defaultValues: {
       shopName: draft?.step2?.shopName ?? "",
       shopSlug: draft?.step2?.shopSlug ?? "",
       description: draft?.step2?.description ?? "",
       currency: draft?.step2?.currency ?? "XOF",
-      checkoutMode: draft?.step2?.checkoutMode ?? "whatsapp",
+      // Caisse masquée : un brouillon « online » (repris d'avant) est ignoré,
+      // le mode est WhatsApp.
+      checkoutMode: onlineCheckout ? (draft?.step2?.checkoutMode ?? "whatsapp") : "whatsapp",
       whatsappNumber: draft?.step2?.whatsappNumber ?? "",
     },
   });
@@ -324,6 +352,9 @@ function OnboardingWizard({
     control: form2.control,
     name: "checkoutMode",
   });
+  // Le mode qui s'applique vraiment : caisse masquée, WhatsApp quoi que
+  // porte le formulaire.
+  const effectiveMode: "whatsapp" | "online" = onlineCheckout ? watchedCheckoutMode : "whatsapp";
 
   const watchedSlug = useWatch({ control: form2.control, name: "shopSlug" });
   const watchedCurrency = useWatch({ control: form2.control, name: "currency" });
@@ -464,6 +495,21 @@ function OnboardingWizard({
 
   const handleFinish = async () => {
     if (!step1Data || !step2Data) return;
+
+    // Caisse masquée, le serveur refuse « online » : on envoie toujours
+    // WhatsApp, quel que soit le mode porté par le formulaire.
+    const checkoutMode = onlineCheckout ? step2Data.checkoutMode : "whatsapp";
+    const whatsappNumber =
+      checkoutMode === "whatsapp"
+        ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
+        : null;
+    // Un brouillon « online » repris n'a pas de numéro : retour à l'écran
+    // Boutique, l'erreur sur le bon champ — plutôt qu'un 422 en toast.
+    if (checkoutMode === "whatsapp" && !isValidE164(whatsappNumber)) {
+      form2.setError("whatsappNumber", { message: "Choisis l'indicatif et saisis un numéro WhatsApp complet." });
+      setStep(2);
+      return;
+    }
     setLoading(true);
 
     try {
@@ -471,11 +517,7 @@ function OnboardingWizard({
       // crée profil, boutique et blocs en une seule transaction. Sans
       // objectif choisi, la page reçoit le strict nécessaire pour vendre.
       const effectiveIntentions =
-        intentions.length > 0 ? intentions : defaultIntentions(step2Data.checkoutMode);
-      const whatsappNumber =
-        step2Data.checkoutMode === "whatsapp"
-          ? (step2Data.whatsappNumber ?? "").replace(/\D/g, "")
-          : null;
+        intentions.length > 0 ? intentions : defaultIntentions(checkoutMode);
       const seeds = seedBlocksForIntentions({
         intentions: effectiveIntentions,
         whatsappNumber: whatsappNumber ?? undefined,
@@ -495,7 +537,7 @@ function OnboardingWizard({
             slug: step2Data.shopSlug,
             description: step2Data.description ?? null,
             currency: step2Data.currency,
-            checkoutMode: step2Data.checkoutMode,
+            checkoutMode,
             whatsappNumber,
             bioTheme,
             intentions: effectiveIntentions,
@@ -538,6 +580,11 @@ function OnboardingWizard({
         if (body.code === "SLUG_TAKEN") {
           form2.setError("shopSlug", { message: body.error ?? "Cette adresse est déjà prise." });
           setSlugAvailable(false);
+          setStep(2);
+          return;
+        }
+        if (body.code === "WHATSAPP_NUMBER_REQUIRED") {
+          form2.setError("whatsappNumber", { message: body.error ?? "Ton numéro WhatsApp est obligatoire." });
           setStep(2);
           return;
         }
@@ -835,64 +882,76 @@ function OnboardingWizard({
                     </select>
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    <Label className="pt-2 block">Comment veux-tu encaisser ?</Label>
-                    <p className="text-xs text-muted-foreground -mt-1 mb-2">
-                      Tu pourras changer plus tard depuis les paramètres.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <label
-                        className={cn(
-                          "cursor-pointer rounded-lg border-2 p-3 transition-all",
-                          watchedCheckoutMode === "whatsapp"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/40",
-                        )}
-                      >
-                        <input
-                          type="radio"
-                          value="whatsapp"
-                          {...form2.register("checkoutMode")}
-                          className="sr-only"
-                        />
-                        <div className="flex items-start gap-2">
-                          <span className="text-xl">💬</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm">WhatsApp</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Tes clients t&apos;écrivent pour commander. Recommandé.
-                            </p>
+                  {onlineCheckout ? (
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <Label className="pt-2 block">Comment veux-tu encaisser ?</Label>
+                      <p className="text-xs text-muted-foreground -mt-1 mb-2">
+                        Tu pourras changer plus tard depuis les paramètres.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label
+                          className={cn(
+                            "cursor-pointer rounded-lg border-2 p-3 transition-all",
+                            watchedCheckoutMode === "whatsapp"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            value="whatsapp"
+                            {...form2.register("checkoutMode")}
+                            className="sr-only"
+                          />
+                          <div className="flex items-start gap-2">
+                            <span className="text-xl">💬</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm">WhatsApp</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Tes clients t&apos;écrivent pour commander. Recommandé.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </label>
-                      <label
-                        className={cn(
-                          "cursor-pointer rounded-lg border-2 p-3 transition-all",
-                          watchedCheckoutMode === "online"
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/40",
-                        )}
-                      >
-                        <input
-                          type="radio"
-                          value="online"
-                          {...form2.register("checkoutMode")}
-                          className="sr-only"
-                        />
-                        <div className="flex items-start gap-2">
-                          <span className="text-xl">💳</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm">Paiement en ligne</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Carte + Mobile Money. Plus de config.
-                            </p>
+                        </label>
+                        <label
+                          className={cn(
+                            "cursor-pointer rounded-lg border-2 p-3 transition-all",
+                            watchedCheckoutMode === "online"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            value="online"
+                            {...form2.register("checkoutMode")}
+                            className="sr-only"
+                          />
+                          <div className="flex items-start gap-2">
+                            <span className="text-xl">💳</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm">Paiement en ligne</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Carte + Mobile Money. Plus de config.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </label>
+                        </label>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    // Caisse masquée : pas de choix, WhatsApp est le fonctionnement.
+                    <div className="space-y-1 pt-2 border-t border-border">
+                      <Label className="pt-2 block">Tes commandes arrivent sur WhatsApp</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Le client t&apos;écrit avec sa commande déjà rédigée ;
+                        tu la marques payée dans ton tableau de bord. Tu
+                        pourras changer de numéro depuis les paramètres.
+                      </p>
+                    </div>
+                  )}
 
-                  {watchedCheckoutMode === "whatsapp" && (
+                  {effectiveMode === "whatsapp" && (
                     <div className="space-y-2">
                       <WhatsAppNumberField
                         key={formEpoch}
@@ -1074,7 +1133,7 @@ function OnboardingWizard({
                 </div>
                 {intentions.length === 0 && (
                   <p className="text-center text-xs text-muted-foreground -mt-2">
-                    {watchedCheckoutMode === "whatsapp"
+                    {effectiveMode === "whatsapp"
                       ? "Sans objectif, ta page part avec l'essentiel : tes produits et un bouton WhatsApp."
                       : "Sans objectif, ta page part avec l'essentiel : tes produits."}
                   </p>
@@ -1261,7 +1320,7 @@ function OnboardingWizard({
         {/* Footer note */}
         <p className="text-center text-xs text-muted-foreground mt-6">
           En créant ta boutique, tu acceptes les{" "}
-          <Link href="/terms" className="underline hover:text-primary">
+          <Link href="/legal/terms" className="underline hover:text-primary">
             conditions d&apos;utilisation
           </Link>{" "}
           de Bio-Lien

@@ -11,6 +11,7 @@
  */
 
 import type { ReactElement } from "react";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 // ---------------------------------------------------------------------------
 // Rendu
@@ -129,7 +130,7 @@ export function breadcrumbJsonLd(items: { name: string; url: string }[]) {
   };
 }
 
-/** L'éditeur du site, déclaré une fois sur l'accueil. */
+/** L'éditeur du site, déclaré une fois sur l'accueil. La description suit le mode : caisse masquée, on ne promet pas d'encaisser. */
 export function organizationJsonLd(siteUrl: string) {
   return {
     "@context": "https://schema.org",
@@ -137,8 +138,9 @@ export function organizationJsonLd(siteUrl: string) {
     name: "Bio-Lien",
     url: siteUrl,
     logo: `${siteUrl}/icon.svg`,
-    description:
-      "Bio-Lien permet aux vendeurs d'Afrique de l'Ouest de créer leur boutique en ligne et d'encaisser en Mobile Money ou par carte.",
+    description: isOnlineCheckoutEnabled()
+      ? "Bio-Lien permet aux vendeurs d'Afrique de l'Ouest de créer leur boutique en ligne et d'encaisser en Mobile Money ou par carte."
+      : "Bio-Lien permet aux vendeurs d'Afrique de l'Ouest de créer leur boutique en ligne et de recevoir leurs commandes sur WhatsApp.",
   };
 }
 

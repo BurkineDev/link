@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import CheckoutForm from "./checkout-form";
 import { CheckoutSkeleton } from "@/components/checkout/checkout-skeleton";
 import { isGeniusPayConfigured } from "@/lib/geniuspay";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { loadCheckoutShop, type CheckoutShop, type CheckoutShopStatus } from "@/lib/checkout/shop-context";
 
 export const metadata: Metadata = {
@@ -38,6 +40,11 @@ export default async function CheckoutPage({
 }: {
   searchParams: Promise<{ shop?: string | string[] }>;
 }) {
+  // Caisse Bio-Lien masquée (décision du 14 septembre 2026) : la page
+  // n'existe pas, avant même de lire l'URL ou la base. Le code reste en
+  // place, NEXT_PUBLIC_ONLINE_CHECKOUT=1 la rouvre.
+  if (!isOnlineCheckoutEnabled()) notFound();
+
   const mobileMoneyEnabled = isGeniusPayConfigured();
   const { shop: param } = await searchParams;
   const shopRef = (Array.isArray(param) ? param[0] : param) ?? null;

@@ -8,6 +8,7 @@ import {
 } from "@/lib/db/serialize";
 import { MarketingClient } from "./marketing-client";
 import type { ShopRow, ShopLinkRow, PromoCodeRow } from "@/lib/types/database";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata = {
   title: "Marketing",
@@ -20,15 +21,20 @@ export default async function MarketingPage() {
 
   if (!shopRow) redirect("/dashboard");
 
+  // Caisse masquée : les codes promo n'ont plus de point d'entrée acheteur,
+  // l'onglet n'est pas rendu et la liste n'est pas lue.
+  const onlineCheckout = isOnlineCheckoutEnabled();
   const [linkRows, codeRows] = await Promise.all([
     prisma.shopLink.findMany({
       where: { shopId: shopRow.id },
       orderBy: { position: "asc" },
     }),
-    prisma.promoCode.findMany({
-      where: { shopId: shopRow.id },
-      orderBy: { createdAt: "desc" },
-    }),
+    onlineCheckout
+      ? prisma.promoCode.findMany({
+          where: { shopId: shopRow.id },
+          orderBy: { createdAt: "desc" },
+        })
+      : [],
   ]);
 
   const shop = serializeShop(shopRow) as unknown as ShopRow;
@@ -41,6 +47,7 @@ export default async function MarketingPage() {
       links={linkRows.map(serializeShopLink) as unknown as ShopLinkRow[]}
       codes={codeRows.map(serializePromoCode) as unknown as PromoCodeRow[]}
       publicShopUrl={publicShopUrl}
+      onlineCheckout={onlineCheckout}
     />
   );
 }

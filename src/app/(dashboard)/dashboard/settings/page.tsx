@@ -5,6 +5,7 @@ import { serializeShop, serializeShopLink, serializeShippingZone } from "@/lib/d
 import { getPlanLimits } from "@/lib/subscription";
 import { getEffectivePlanForUser } from "@/lib/db/plans";
 import { canHideBadge } from "@/lib/plans/badge";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import type { ShopLinkRow, ShopRow } from "@/lib/types/database";
 import { SettingsClient } from "./settings-client";
 
@@ -19,15 +20,21 @@ export default async function SettingsPage() {
 
   if (!shopRow) redirect("/dashboard");
 
+  // Caisse masquée (voir src/lib/payments/online-checkout.ts) : l'onglet
+  // Livraison n'est pas monté, inutile de charger les zones.
+  const onlineCheckout = isOnlineCheckoutEnabled();
+
   const [linkRows, zoneRows, plan] = await Promise.all([
     prisma.shopLink.findMany({
       where: { shopId: shopRow.id },
       orderBy: { position: "asc" },
     }),
-    prisma.shippingZone.findMany({
-      where: { shopId: shopRow.id },
-      orderBy: { createdAt: "asc" },
-    }),
+    onlineCheckout
+      ? prisma.shippingZone.findMany({
+          where: { shopId: shopRow.id },
+          orderBy: { createdAt: "asc" },
+        })
+      : [],
     // La rédaction assistée est réservée au plan Pro, le retrait du badge aux
     // plans payants. Les boutons restent visibles pour les autres — une porte
     // fermée qu'on voit vaut mieux qu'une fonctionnalité dont on ignore
@@ -44,6 +51,7 @@ export default async function SettingsPage() {
       shippingZones={zoneRows.map(serializeShippingZone)}
       canUseAi={getPlanLimits(plan).aiWriting}
       canHideBadge={canHideBadge(plan)}
+      onlineCheckout={onlineCheckout}
     />
   );
 }

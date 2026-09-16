@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { RESERVED_SLUGS } from "@/lib/constants";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { Prisma } from "../../../../prisma/generated/client/client";
 
 /**
@@ -15,6 +16,10 @@ import { Prisma } from "../../../../prisma/generated/client/client";
  * vendeur avec une boutique mais sans onboarding terminé — donc renvoyé
  * dessus en boucle. Ici tout passe en une transaction : soit tout existe,
  * soit rien.
+ *
+ * Caisse masquée (voir src/lib/payments/online-checkout.ts) : toute boutique
+ * prend ses commandes sur WhatsApp. Le mode « online » est refusé et le
+ * numéro WhatsApp est obligatoire — c'est là que les commandes arrivent.
  */
 
 const CURRENCIES = ["XOF", "XAF", "GHS", "NGN", "KES", "MAD", "USD"] as const;
@@ -37,7 +42,7 @@ const bodySchema = z.object({
       .regex(/^[a-z0-9_-]+$/),
     description: z.string().trim().max(500).nullable().optional(),
     currency: z.enum(CURRENCIES),
-    checkoutMode: z.string().min(1).max(30),
+    checkoutMode: z.enum(["whatsapp", "online"]),
     whatsappNumber: z
       .string()
       .max(20)
@@ -84,6 +89,22 @@ export async function POST(request: NextRequest) {
   }
 
   const { fullName, username, shop, blocks } = parsed.data;
+
+  // Lu à chaque requête, jamais figé à l'import.
+  if (!isOnlineCheckoutEnabled()) {
+    if (shop.checkoutMode === "online") {
+      return NextResponse.json(
+        { error: "Le paiement en ligne n'est pas disponible.", code: "ONLINE_CHECKOUT_DISABLED" },
+        { status: 422 },
+      );
+    }
+    if (!shop.whatsappNumber) {
+      return NextResponse.json(
+        { error: "Ton numéro WhatsApp est obligatoire : c'est là que les commandes arrivent.", code: "WHATSAPP_NUMBER_REQUIRED" },
+        { status: 422 },
+      );
+    }
+  }
 
   if ((RESERVED_SLUGS as readonly string[]).includes(shop.slug)) {
     return NextResponse.json(

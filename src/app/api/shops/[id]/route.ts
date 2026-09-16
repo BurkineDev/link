@@ -8,6 +8,7 @@ import { serializeShop } from "@/lib/db/serialize";
 import { RESERVED_SLUGS } from "@/lib/constants";
 import { revalidateShopSlug } from "@/lib/shops/revalidate";
 import { loadBalance } from "@/lib/payouts/balance-db";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { formatPrice } from "@/lib/utils/format";
 import { Prisma } from "../../../../../prisma/generated/client/client";
 
@@ -19,6 +20,12 @@ import { Prisma } from "../../../../../prisma/generated/client/client";
  * tout passe par ici : le corps est en snake_case (ce que les composants
  * envoient déjà), la liste des champs est fermée, et le `where` sur le
  * propriétaire est la barrière.
+ *
+ * Caisse masquée (voir src/lib/payments/online-checkout.ts) : le mode
+ * « online », la livraison facturée et le paiement à la livraison sont
+ * refusés, et le numéro WhatsApp ne peut plus être retiré — c'est là que
+ * les commandes arrivent. La valeur déjà en base n'est pas touchée : le
+ * jour où la caisse rallume, chaque boutique retrouve son réglage.
  */
 
 const CURRENCIES = ["XOF", "XAF", "GHS", "NGN", "KES", "MAD", "USD"] as const;
@@ -50,7 +57,7 @@ const patchSchema = z
     whatsapp_number: nullableText(30).refine((v) => !v || isValidE164(v), {
       message: "Numéro WhatsApp incomplet : indicatif du pays requis.",
     }),
-    checkout_mode: z.string().trim().max(30).optional(),
+    checkout_mode: z.enum(["whatsapp", "online"]).optional(),
     intentions: z.array(z.string().max(50)).max(20).optional(),
     show_biolien_badge: z.boolean().optional(),
     shipping_enabled: z.boolean().optional(),
@@ -148,6 +155,34 @@ export async function PATCH(
     return NextResponse.json({ error: "Cette adresse est réservée." }, { status: 409 });
   }
 
+  // Lu à chaque requête, jamais figé à l'import.
+  const onlineCheckout = isOnlineCheckoutEnabled();
+  if (!onlineCheckout) {
+    if (parsed.data.checkout_mode === "online") {
+      return NextResponse.json(
+        { error: "Le paiement en ligne n'est pas disponible.", code: "ONLINE_CHECKOUT_DISABLED" },
+        { status: 422 },
+      );
+    }
+    if (parsed.data.shipping_enabled !== undefined || parsed.data.cash_on_delivery !== undefined) {
+      return NextResponse.json(
+        {
+          error: "La livraison facturée et le paiement à la livraison sont réservés au paiement en ligne.",
+          code: "ONLINE_CHECKOUT_DISABLED",
+        },
+        { status: 422 },
+      );
+    }
+    // `null` ou "" : le vendeur retire son numéro. Sans caisse, plus aucun
+    // moyen de commander — refusé.
+    if (parsed.data.whatsapp_number === null || parsed.data.whatsapp_number === "") {
+      return NextResponse.json(
+        { error: "Ton numéro WhatsApp est obligatoire : c'est là que les commandes arrivent.", code: "WHATSAPP_NUMBER_REQUIRED" },
+        { status: 422 },
+      );
+    }
+  }
+
   try {
     const owned = await findOwnedShop(id, user.id);
     if (!owned) {
@@ -161,9 +196,14 @@ export async function PATCH(
       const balance = await loadBalance(owned.id, owned.currency);
       const outstanding = balance.available + balance.maturing + balance.reserved;
       if (outstanding > 0) {
+        // Caisse masquée, l'écran Reversements n'est plus dans le menu : le
+        // solde se règle avec l'équipe.
+        const howTo = onlineCheckout
+          ? "Demande d'abord le reversement dans Paiements → Reversements"
+          : "Écris à l'équipe Bio-Lien pour le reversement de ton solde";
         return NextResponse.json(
           {
-            error: `Impossible de changer de devise : ${formatPrice(outstanding, owned.currency)} restent à te reverser en ${owned.currency}. Demande d'abord le reversement dans Paiements → Reversements, puis change de devise une fois versé.`,
+            error: `Impossible de changer de devise : ${formatPrice(outstanding, owned.currency)} restent à te reverser en ${owned.currency}. ${howTo}, puis change de devise une fois versé.`,
             code: "OUTSTANDING_BALANCE",
           },
           { status: 409 },

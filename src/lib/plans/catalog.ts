@@ -7,6 +7,7 @@ import {
   prepaidSavingsPercent,
   type PaidPlan,
 } from "@/lib/subscription";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import type { BillingInterval, SubscriptionPlan } from "@/lib/types/database";
 import { formatPrice } from "@/lib/utils/format";
 
@@ -21,6 +22,15 @@ import { formatPrice } from "@/lib/utils/format";
  * viennent des constantes qui facturent (PLAN_LIMITS, PLAN_PRICES,
  * PREPAID_PRICES) et la liste ne contient que ce que le produit fait.
  *
+ * Deux modes, un seul catalogue (voir src/lib/payments/online-checkout.ts).
+ * PLAN_FEATURES et PLAN_TAGLINES restent le catalogue complet, celui de la
+ * caisse Bio-Lien (mode « En ligne » : Mobile Money, carte, commission).
+ * Les fonctions planFeatures(), planTagline() et commissionNote() lisent le
+ * drapeau à chaque appel — jamais en constante de module — et, caisse
+ * masquée, retirent tout ce qui parle d'argent encaissé par Bio-Lien : la
+ * commande arrive sur WhatsApp, aucune commission. Les pages passent par ces
+ * fonctions, pas par les constantes.
+ *
  * Aucune dépendance serveur : importable depuis une page, un composant
  * client ou un e-mail.
  */
@@ -33,39 +43,75 @@ function fcfa(amount: number): string {
   return formatPrice(amount, "XOF");
 }
 
-/** Ce que le plan comprend, dans l'ordre où on le lit. */
+// Les lignes qui n'ont de sens que caisse allumée, nommées pour que le
+// catalogue WhatsApp les retire par identité et pas par une regex fragile.
+const ONLINE_PAYMENTS = "Paiements Mobile Money et carte bancaire";
+const STARTER_COMMISSION = `Commission réduite à ${percent(PLAN_LIMITS.starter.commissionRate)}`;
+const PRO_COMMISSION = `${percent(PLAN_LIMITS.pro.commissionRate)} de commission sur les ventes`;
+/** Ce qui remplace le paiement en ligne quand la commande part sur WhatsApp. */
+const WHATSAPP_ORDERS = "Commandes reçues sur WhatsApp";
+
+/** Ce que le plan comprend, dans l'ordre où on le lit — catalogue complet (mode En ligne). */
 export const PLAN_FEATURES: Record<SubscriptionPlan, readonly string[]> = {
   free: [
     `Jusqu'à ${PLAN_LIMITS.free.maxProducts} produits`,
     "Ton lien @pseudo et ta page de liens",
-    "Paiements Mobile Money et carte bancaire",
+    ONLINE_PAYMENTS,
     "Tous les thèmes",
     "Statistiques de la boutique",
   ],
   starter: [
     `Jusqu'à ${PLAN_LIMITS.starter.maxProducts} produits`,
-    `Commission réduite à ${percent(PLAN_LIMITS.starter.commissionRate)}`,
+    STARTER_COMMISSION,
     "Badge Bio-Lien masquable",
     "Support par e-mail",
   ],
   pro: [
     "Produits illimités",
-    `${percent(PLAN_LIMITS.pro.commissionRate)} de commission sur les ventes`,
+    PRO_COMMISSION,
     "Rédaction assistée par IA",
     "Badge Bio-Lien masquable",
     "Support prioritaire",
   ],
 };
 
-/** Une phrase par plan, pour les cartes. */
+/**
+ * Le même catalogue, caisse masquée. Dérivé de PLAN_FEATURES pour qu'une
+ * ligne ajoutée là-haut apparaisse ici aussi sans qu'on y pense.
+ */
+const WHATSAPP_PLAN_FEATURES: Record<SubscriptionPlan, readonly string[]> = {
+  free: PLAN_FEATURES.free.map((f) => (f === ONLINE_PAYMENTS ? WHATSAPP_ORDERS : f)),
+  starter: PLAN_FEATURES.starter.filter((f) => f !== STARTER_COMMISSION),
+  pro: PLAN_FEATURES.pro.filter((f) => f !== PRO_COMMISSION),
+};
+
+/** Ce que le plan comprend, selon le mode en vigueur. C'est par ici que passent les pages. */
+export function planFeatures(plan: SubscriptionPlan): readonly string[] {
+  return isOnlineCheckoutEnabled() ? PLAN_FEATURES[plan] : WHATSAPP_PLAN_FEATURES[plan];
+}
+
+/** Une phrase par plan, pour les cartes — catalogue complet (mode En ligne). */
 export const PLAN_TAGLINES: Record<SubscriptionPlan, string> = {
   free: "Démarre et teste ta boutique",
   starter: "Pour dépasser les premiers articles",
   pro: "Pour vendre régulièrement, sans commission",
 };
 
-/** Ce que le plan gratuit coûte vraiment : la commission. */
+/** Une phrase par plan, selon le mode : sans caisse, Pro ne vend plus « sans commission » mais « sans limite ». */
+export function planTagline(plan: SubscriptionPlan): string {
+  if (plan === "pro" && !isOnlineCheckoutEnabled()) {
+    return "Pour vendre régulièrement, sans limite";
+  }
+  return PLAN_TAGLINES[plan];
+}
+
+/**
+ * Ce que le plan gratuit coûte vraiment : la commission. Caisse masquée,
+ * Bio-Lien ne prélève rien : chaîne vide, et l'appelant ne rend pas de
+ * paragraphe.
+ */
 export function commissionNote(plan: SubscriptionPlan): string {
+  if (!isOnlineCheckoutEnabled()) return "";
   const rate = PLAN_LIMITS[plan].commissionRate;
   return rate > 0 ? `${percent(rate)} de commission sur chaque vente.` : "Aucune commission.";
 }
@@ -113,9 +159,9 @@ export function planLabel(plan: SubscriptionPlan): string {
   return PLAN_LIMITS[plan].label;
 }
 
-/** Les fonctionnalités en une phrase (« jusqu'à 20 produits, … »), pour un texte courant. */
+/** Les fonctionnalités en une phrase (« jusqu'à 20 produits, … »), pour un texte courant. Suit planFeatures, donc le mode. */
 export function featureSentence(plan: SubscriptionPlan): string {
-  return PLAN_FEATURES[plan]
+  return planFeatures(plan)
     .map((feature) => feature.charAt(0).toLowerCase() + feature.slice(1))
     .join(", ");
 }

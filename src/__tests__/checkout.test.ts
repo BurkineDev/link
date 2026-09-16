@@ -244,6 +244,13 @@ beforeEach(() => {
   mockCreateCoupon.mockResolvedValue({ id: "coupon_order_123" });
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  // La caisse Bio-Lien est masquée par défaut (décision du 14 septembre
+  // 2026) : ces cas décrivent son comportement une fois rallumée.
+  process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
 });
 
 // ---------------------------------------------------------------------------
@@ -625,5 +632,28 @@ describe("POST /api/checkout", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBe("42");
     expect(mockPrisma.shop.findUnique).not.toHaveBeenCalled();
+  });
+
+  // TC-OFF — caisse masquée : la route n'existe pas. Le rate-limit reste
+  // évalué avant (un scan est compté), rien n'est lu ni écrit ensuite.
+  test("TC-OFF: drapeau éteint → 404 après le rate-limit, avant toute lecture de base", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    const rateLimit = jest.requireMock("@/lib/rate-limit") as { enforceLimits: jest.Mock };
+    rateLimit.enforceLimits.mockClear();
+    mockPrisma.shop.findUnique.mockClear();
+
+    const res = await POST(makeRequest(validPayload()));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Introuvable" });
+    expect(rateLimit.enforceLimits).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.shop.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.order.create).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+
+    // Un client bloqué reste bloqué : le 429 passe avant le 404.
+    const { NextResponse } = jest.requireActual("next/server") as typeof import("next/server");
+    _blockedResponse = NextResponse.json({ error: "Trop de requêtes." }, { status: 429 });
+    expect((await POST(makeRequest(validPayload()))).status).toBe(429);
   });
 });

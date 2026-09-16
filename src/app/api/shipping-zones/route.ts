@@ -6,12 +6,18 @@ import { serializeShippingZone } from "@/lib/db/serialize";
 import { shippingZoneSchema, zoneAmountIssue } from "@/lib/shipping/zone-schema";
 import { CURRENCY_META, type Currency } from "@/lib/constants";
 import { revalidateShop } from "@/lib/shops/revalidate";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 /**
  * Zones de livraison d'une boutique. Elles existaient en base et au
  * checkout (frais calculés selon le pays) sans qu'aucun écran ne permette
  * d'en créer : aucune boutique n'en avait. Le vendeur ne lit et n'écrit que
  * les siennes ; le tarif est dans la devise de la boutique.
+ *
+ * Caisse masquée (voir src/lib/payments/online-checkout.ts) : la livraison
+ * facturée n'a plus d'écran. On ne crée plus de zone (404, comme une route
+ * qui n'existe pas) ; la lecture reste ouverte, les zones existantes sont
+ * conservées telles quelles.
  */
 
 const MAX_ZONES = 20;
@@ -46,6 +52,9 @@ const createSchema = z.object({ shop_id: z.string().uuid() }).and(shippingZoneSc
 
 // POST /api/shipping-zones — crée une zone.
 export async function POST(request: NextRequest) {
+  if (!isOnlineCheckoutEnabled()) {
+    return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  }
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 

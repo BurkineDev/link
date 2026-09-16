@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { percentDiscount } from "@/lib/checkout/money";
 import { enforceLimits, getClientIp } from "@/lib/rate-limit";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 /**
  * POST /api/promo-codes/validate
@@ -34,6 +35,13 @@ export async function POST(request: NextRequest) {
     { name: "promo:ip", key: ip, ...PROMO_PER_IP },
   ]);
   if (blockedByIp) return blockedByIp;
+
+  // Les codes promo ne servent qu'à la caisse Bio-Lien : masquée, la route
+  // n'existe pas. Après le rate-limit, avant toute lecture du corps ou de
+  // la base.
+  if (!isOnlineCheckoutEnabled()) {
+    return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  }
 
   let body: unknown;
   try {

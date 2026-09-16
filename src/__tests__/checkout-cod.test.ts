@@ -144,6 +144,16 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+// La caisse Bio-Lien est masquée par défaut (décision du 14 septembre
+// 2026) : ces cas décrivent le paiement à la livraison une fois rallumée.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+});
+
 describe("POST /api/checkout — paiement à la livraison", () => {
   it("enregistre une commande en attente : rien de prélevé, statut inchangé, vendeur prévenu", async () => {
     setup();
@@ -228,5 +238,20 @@ describe("POST /api/checkout — paiement à la livraison", () => {
     const res = await post(payload({ paymentMethod: { type: "card" } }));
     expect(res.status).not.toBe(200);
     expect(mockReserve).not.toHaveBeenCalled();
+  });
+
+  it("drapeau éteint → 404 avant toute lecture de base : ni commande, ni vendeur prévenu", async () => {
+    setup();
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+
+    const res = await post(payload());
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Introuvable" });
+
+    expect(mockPrisma.shop.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.product.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.order.create).not.toHaveBeenCalled();
+    await flush();
+    expect(mockNotifyCod).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,41 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Mode par défaut : la commande part sur WhatsApp
+
+Depuis le 14 septembre 2026 (décision fondateur), **Bio-Lien ne porte plus
+l'argent des ventes**. Toute boutique fonctionne en mode WhatsApp : le bouton
+« Commander sur WhatsApp » ouvre une conversation avec un message pré-rempli
+(articles, total, référence), la commande apparaît **Non payée** dans le
+tableau de bord, et c'est le vendeur qui la marque payée quand l'argent est
+là — Mobile Money, espèces, virement, ça se règle entre lui et l'acheteur.
+
+Le mode **En ligne** — la caisse Bio-Lien : Mobile Money acheteur via Genius
+Pay, carte via Stripe Checkout, paiement à la livraison, livraison facturée,
+commission 5 / 3 / 0 % selon le plan, grand livre et reversements — est
+**masqué derrière un drapeau**, code conservé, réversible :
+
+```bash
+# Vide ou absente (le défaut) : caisse masquée, tout passe par WhatsApp.
+# « 1 » : rallume la caisse pour tout le monde (Stripe / Mobile Money côté
+# acheteur, paiement à la livraison, commission, reversements à l'écran).
+# Valeur NEXT_PUBLIC_ : figée dans les bundles au build — redéployer après
+# l'avoir changée. Voir src/lib/payments/online-checkout.ts.
+NEXT_PUBLIC_ONLINE_CHECKOUT=
+```
+
+Le drapeau ne touche pas au revenu de Bio-Lien : les **abonnements vendeurs**
+(Stripe par carte en CAD, Genius Pay prépayé en XOF) et les **boosts** ne le
+lisent jamais. `STRIPE_*` et `GENIUSPAY_*` restent donc requis en production,
+drapeau éteint compris. L'endpoint Stripe `/api/webhooks/stripe` doit recevoir
+`checkout.session.completed`, `checkout.session.expired`,
+`customer.subscription.updated`, `customer.subscription.deleted`,
+`invoice.payment_failed`, `charge.refunded`, `charge.dispute.created` et
+`charge.dispute.closed`. Les commandes historiques `stripe` / `geniuspay` /
+`cash_on_delivery` restent lisibles : aucune colonne, aucun enum, aucune
+migration n'a été retirée. Les paragraphes marqués « mode En ligne, derrière
+le drapeau » plus bas décrivent des parcours qui ne s'exécutent que drapeau
+allumé.
+
 ## Getting Started
 
 Create a local environment file (`.env.local`, see `.env.example`) with the
@@ -80,14 +116,21 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
 
 ## Notifications WhatsApp du vendeur
 
-Quand une commande passe en « payé » (webhooks Stripe et GeniusPay), le
-vendeur est prévenu sur WhatsApp par deux canaux complémentaires :
+> **Mode En ligne, derrière le drapeau.** Drapeau éteint (le défaut), il n'y a
+> ni webhook de paiement ni page de succès : la commande *est* le message
+> WhatsApp que l'acheteur envoie lui-même au vendeur. Ce qui suit ne
+> s'exécute que `NEXT_PUBLIC_ONLINE_CHECKOUT=1`.
 
-**1. Relais acheteur — actif sans aucune configuration.** La page de succès
-du paiement propose à l'acheteur « Prévenir le vendeur sur WhatsApp » : un
-wa.me pré-rempli (référence, total, nom) vers le numéro du vendeur. C'est la
-norme du commerce visé — et ce message ouvre la fenêtre de service de 24 h
-côté Meta, qui rend le canal 2 livrable en texte libre.
+Quand une commande passe en « payé » (webhooks Stripe et GeniusPay — mode En
+ligne, derrière le drapeau), le vendeur est prévenu sur WhatsApp par deux
+canaux complémentaires :
+
+**1. Relais acheteur — actif sans aucune configuration (page de succès :
+mode En ligne, derrière le drapeau).** La page de succès du paiement propose
+à l'acheteur « Prévenir le vendeur sur WhatsApp » : un wa.me pré-rempli
+(référence, total, nom) vers le numéro du vendeur. C'est la norme du commerce
+visé — et ce message ouvre la fenêtre de service de 24 h côté Meta, qui rend
+le canal 2 livrable en texte libre.
 
 **2. API Cloud WhatsApp — quand `WHATSAPP_ACCESS_TOKEN` et
 `WHATSAPP_PHONE_NUMBER_ID` sont configurés.** `notifySellerOfPaidOrder()`
@@ -145,9 +188,14 @@ public `POST /api/shop-links/{id}/click` endpoint, which is backed by the
 `track_shop_link_click()` SECURITY DEFINER function (migration 018) — visitors
 can increment a counter without any UPDATE policy on `shop_links`.
 
-Stripe Checkout redirects back to `/checkout/success?session_id=...`. Configure
-the Stripe webhook URL as `/api/webhooks/stripe` and subscribe to
-`checkout.session.completed` and `checkout.session.expired`.
+**Stripe Checkout acheteur — mode En ligne, derrière le drapeau.** Stripe
+Checkout redirects back to `/checkout/success?session_id=...` only when
+`NEXT_PUBLIC_ONLINE_CHECKOUT=1`. Configure the Stripe webhook URL as
+`/api/webhooks/stripe` regardless: the same endpoint carries the seller
+subscriptions, so subscribe to `checkout.session.completed`,
+`checkout.session.expired`, `customer.subscription.updated`,
+`customer.subscription.deleted`, `invoice.payment_failed`, `charge.refunded`,
+`charge.dispute.created` and `charge.dispute.closed`.
 
 First, run the development server:
 

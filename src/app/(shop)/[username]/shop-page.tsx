@@ -20,6 +20,7 @@ import {
 } from "@/lib/constants";
 import { bioThemeCssVars, resolveBioTheme } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { isProductBlock, selectProductsForBlocks } from "@/lib/blocks/public";
 import type { ResolvedBlock } from "@/lib/blocks/types";
 import type { ShopRow, ProductRow, CategoryRow } from "@/lib/types/database";
@@ -167,20 +168,32 @@ export function ShopPage({
   const buttonRadius = CTA_SHAPE_CLASS[shop.cta_shape] ?? CTA_SHAPE_CLASS.rounded;
   const cardRadius = BORDER_RADIUS_CLASS[shop.border_radius] ?? BORDER_RADIUS_CLASS.lg;
 
-  // WhatsApp mode only counts when a usable number exists — otherwise buyers
-  // would hit a dead end with no way to order.
-  const whatsappUrl =
-    shop.checkout_mode === "whatsapp"
-      ? buildWhatsAppOrderUrl({
-          whatsappNumber: shop.whatsapp_number,
-          shopName: shop.name,
-          shopUrl: pageUrl,
-        })
-      : null;
-  const isWhatsAppMode = whatsappUrl !== null;
+  // Trois notions distinctes, jamais confondues :
+  //   • sellsOnline — la boutique passe par la caisse Bio-Lien. Le serveur a
+  //     déjà appliqué le drapeau : « online » n'arrive ici que si la caisse
+  //     est rallumée ET que le vendeur l'a choisie.
+  //   • hasWhatsApp — un numéro WhatsApp exploitable existe. Pilote le CTA
+  //     flottant et les boutons « Commander sur WhatsApp ».
+  //   • cartEnabled — le panier est montré. Vente en ligne, ou repli d'une
+  //     boutique WhatsApp sans numéro valide — ce repli n'existe que caisse
+  //     rallumée (comportement d'origine, inchangé). Caisse masquée, il
+  //     mènerait à /checkout en 404 : sans panier ni WhatsApp, la page ne
+  //     montre aucun bouton d'achat.
+  // `isOnlineCheckoutEnabled()` est lisible ici : NEXT_PUBLIC_ est figé dans
+  // le bundle au build, même valeur côté serveur et côté client.
+  const sellsOnline = shop.checkout_mode === "online";
+  const whatsappUrl = !sellsOnline
+    ? buildWhatsAppOrderUrl({
+        whatsappNumber: shop.whatsapp_number,
+        shopName: shop.name,
+        shopUrl: pageUrl,
+      })
+    : null;
+  const hasWhatsApp = whatsappUrl !== null;
+  const cartEnabled = sellsOnline || (!hasWhatsApp && isOnlineCheckoutEnabled());
 
   const showTabs = hasLinks && hasProducts;
-  const showCartFab = !isWhatsAppMode && (tab === "shop" || itemCount > 0);
+  const showCartFab = cartEnabled && (tab === "shop" || itemCount > 0);
 
   return (
     <div
@@ -368,8 +381,9 @@ export function ShopPage({
                     currency={shop.currency}
                     palette={palette}
                     radiusClass={cardRadius}
-                    whatsappNumber={isWhatsAppMode ? shop.whatsapp_number : null}
+                    whatsappNumber={hasWhatsApp ? shop.whatsapp_number : null}
                     pageUrl={pageUrl}
+                    cartEnabled={cartEnabled}
                   />
                 ))}
               </div>
@@ -442,7 +456,7 @@ export function ShopPage({
       </main>
 
       {/* ── Floating order CTA ── */}
-      {isWhatsAppMode ? (
+      {hasWhatsApp ? (
         !hasWhatsAppBlock && (
         <SmartAppLink
           href={whatsappUrl}
@@ -487,7 +501,7 @@ export function ShopPage({
         )
       )}
 
-      {!isWhatsAppMode && cartMounted && (
+      {cartEnabled && cartMounted && (
         <CartDrawer
           open={cartOpen}
           onOpenChange={setCartOpen}

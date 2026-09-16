@@ -142,6 +142,13 @@ beforeEach(() => {
   mockRetrieveSession.mockReset();
   mockOps.critical.mockClear();
   process.env.STRIPE_SECRET_KEY = "sk_test_123";
+  // La caisse Bio-Lien est masquée par défaut (décision du 14 septembre
+  // 2026) : ces cas décrivent la vérification une fois rallumée.
+  process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+});
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
 });
 
 // ---------------------------------------------------------------------------
@@ -278,6 +285,36 @@ describe("GET /api/checkout/verify", () => {
     expect(res.status).toBe(429);
     expect(mockPrisma.order.findFirst).not.toHaveBeenCalled();
     expect(mockRetrieveSession).not.toHaveBeenCalled();
+  });
+
+  // TC-OFF — caisse masquée : plus aucune commande en ligne en vol, la route
+  // n'existe pas. Le rate-limit passe avant, rien n'est lu ensuite — ni en
+  // base, ni chez Stripe.
+  test("TC-OFF: drapeau éteint → 404 après le rate-limit, avant toute lecture de base", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    const rateLimit = jest.requireMock("@/lib/rate-limit") as { enforceLimits: jest.Mock };
+    rateLimit.enforceLimits.mockClear();
+    mockPrisma.order.findFirst.mockClear();
+    mockPrisma.order.findUnique.mockClear();
+
+    for (const url of [
+      "http://localhost:3000/api/checkout/verify?session_id=cs_test_123",
+      "http://localhost:3000/api/checkout/verify?provider=cash_on_delivery&order=cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      // Même sans paramètre : le 404 précède la validation de l'URL.
+      "http://localhost:3000/api/checkout/verify",
+    ]) {
+      const res = await GET(new NextRequest(url));
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Introuvable" });
+    }
+    expect(rateLimit.enforceLimits).toHaveBeenCalledTimes(3);
+    expect(mockPrisma.order.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.order.findUnique).not.toHaveBeenCalled();
+    expect(mockRetrieveSession).not.toHaveBeenCalled();
+
+    const { NextResponse } = jest.requireActual("next/server") as typeof import("next/server");
+    _blockedResponse = NextResponse.json({ error: "Trop de requêtes." }, { status: 429 });
+    expect((await GET(makeRequest("cs_test_123"))).status).toBe(429);
   });
 });
 

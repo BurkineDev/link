@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -29,12 +29,13 @@ import {
   type PrepaidMonths,
 } from "@/lib/subscription";
 import {
-  PLAN_FEATURES,
-  PLAN_TAGLINES,
   cardPriceLabel,
   commissionNote,
+  planFeatures,
   planPricing,
+  planTagline,
 } from "@/lib/plans/catalog";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 type Plan = "free" | "starter" | "pro";
 
@@ -43,11 +44,29 @@ type Plan = "free" | "starter" | "pro";
 // annoncer un tarif que Stripe ou Mobile Money ne pratique pas.
 // Les cartes sont présentées en cumul (« Tout du plan X, plus : ») : on ne
 // répète pas ce que le plan précédent comprend déjà.
-const FREE_FEATURES = PLAN_FEATURES.free;
-const STARTER_FEATURES = PLAN_FEATURES.starter.filter((f) => !PLAN_FEATURES.free.includes(f));
-const PRO_FEATURES = PLAN_FEATURES.pro.filter((f) => !PLAN_FEATURES.starter.includes(f));
+//
+// Le catalogue suit le mode (src/lib/payments/online-checkout.ts) : caisse
+// masquée, aucune ligne ne parle de commission ni de paiement en ligne. On le
+// lit dans le composant, pas à l'import — NEXT_PUBLIC_ est figé au build,
+// mais une constante de module ne se teste pas.
+function cumulativeFeatures() {
+  const free = planFeatures("free");
+  const starter = planFeatures("starter");
+  const pro = planFeatures("pro");
+  return {
+    free,
+    starter: starter.filter((f) => !free.includes(f)),
+    pro: pro.filter((f) => !starter.includes(f)),
+  };
+}
 const STARTER = planPricing("starter");
 const PRO = planPricing("pro");
+
+/** « , 5 % de commission sur chaque vente » à glisser dans une parenthèse — ou rien, caisse masquée. */
+function commissionAside(plan: Plan): string {
+  const note = commissionNote(plan);
+  return note ? `, ${note.replace(/\.$/, "").toLowerCase()}` : "";
+}
 
 const MONTH_LABEL: Record<PrepaidMonths, string> = {
   1: "1 mois",
@@ -68,6 +87,12 @@ export function PricingClient({
 
   const wasCancelled = searchParams.get("cancelled") === "1";
   const paymentFailed = searchParams.get("paiement") === "echec";
+
+  // Le drapeau est figé au build : ces valeurs ne changent pas pendant la
+  // vie du composant, on ne les recalcule pas à chaque rendu.
+  const online = useMemo(() => isOnlineCheckoutEnabled(), []);
+  const features = useMemo(() => cumulativeFeatures(), []);
+  const freeCommissionNote = useMemo(() => commissionNote("free"), []);
 
   /**
    * Achat d'une période, en Mobile Money.
@@ -235,7 +260,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                {PLAN_TAGLINES.free}
+                {planTagline("free")}
               </p>
 
               <Button
@@ -252,7 +277,7 @@ export function PricingClient({
               </Button>
 
               <ul className="space-y-2.5">
-                {FREE_FEATURES.map((item) => (
+                {features.free.map((item) => (
                   <li key={item} className="flex items-start gap-2.5 text-sm">
                     <div className="mt-0.5 size-4 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Check className="size-2.5 text-primary" />
@@ -262,9 +287,13 @@ export function PricingClient({
                 ))}
               </ul>
 
-              <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
-                {commissionNote("free")}
-              </p>
+              {/* La contrepartie du plan gratuit, caisse allumée. Caisse
+                  masquée, il n'y en a pas : pas de paragraphe vide. */}
+              {freeCommissionNote && (
+                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border/60">
+                  {freeCommissionNote}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -289,7 +318,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                {PLAN_TAGLINES.starter}
+                {planTagline("starter")}
               </p>
 
               {currentPlan === "starter" ? (
@@ -318,7 +347,7 @@ export function PricingClient({
                 <li className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
                   Tout du plan Découverte, plus :
                 </li>
-                {STARTER_FEATURES.map((item) => (
+                {features.starter.map((item) => (
                   <li key={item} className="flex items-start gap-2.5 text-sm">
                     <div className="mt-0.5 size-4 rounded-full bg-foreground/10 flex items-center justify-center flex-shrink-0">
                       <Check className="size-2.5 text-foreground" />
@@ -373,7 +402,7 @@ export function PricingClient({
                 </span>
               </p>
               <p className="text-sm text-muted-foreground mb-5">
-                {PLAN_TAGLINES.pro}
+                {planTagline("pro")}
               </p>
 
               {currentPlan === "pro" ? (
@@ -401,7 +430,7 @@ export function PricingClient({
                 <li className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
                   Tout du plan Starter, plus :
                 </li>
-                {PRO_FEATURES.map((item) => (
+                {features.pro.map((item) => (
                   <li key={item} className="flex items-start gap-2.5 text-sm">
                     <div className="mt-0.5 size-4 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                       <Check className="size-2.5 text-primary-foreground" />
@@ -461,12 +490,20 @@ export function PricingClient({
             {[
               {
                 q: "Quelle est la différence entre les plans ?",
-                a: `Découverte (gratuit, ${PLAN_LIMITS.free.maxProducts} produits, ${Math.round(PLAN_LIMITS.free.commissionRate * 100)} % de commission) sert à tester. Starter (${STARTER.prepaid.months1}/mois, ${PLAN_LIMITS.starter.maxProducts} produits, ${Math.round(PLAN_LIMITS.starter.commissionRate * 100)} %) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (${PRO.prepaid.months1}/mois, illimité, ${Math.round(PLAN_LIMITS.pro.commissionRate * 100)} %) est le plan optimal dès que tu vends régulièrement.`,
+                // Ce que chaque plan apporte vraiment : produits, IA, badge,
+                // support. La commission ne s'ajoute que caisse allumée, par
+                // commissionAside — jamais en lisant commissionRate ici.
+                a: `Découverte (gratuit, ${PLAN_LIMITS.free.maxProducts} produits, badge Bio-Lien affiché${commissionAside("free")}) sert à tester. Starter (${STARTER.prepaid.months1}/mois, ${PLAN_LIMITS.starter.maxProducts} produits, badge masquable, support par e-mail${commissionAside("starter")}) est fait pour les vendeurs qui ont dépassé les premiers articles. Pro (${PRO.prepaid.months1}/mois, produits illimités, rédaction assistée par IA, badge masquable, support prioritaire${commissionAside("pro")}) est le plan optimal dès que tu vends régulièrement.`,
               },
-              {
-                q: "Comment fonctionne la commission ?",
-                a: "Sur les plans Découverte et Starter, on prélève automatiquement un % sur le total de chaque vente confirmée. Sur Pro, tu encaisses 100 % du prix de vente — c'est l'abonnement qui couvre les frais.",
-              },
+              // Sans caisse, il n'y a pas de commission à expliquer.
+              ...(online
+                ? [
+                    {
+                      q: "Comment fonctionne la commission ?",
+                      a: "Sur les plans Découverte et Starter, on prélève automatiquement un % sur le total de chaque vente confirmée. Sur Pro, tu encaisses 100 % du prix de vente — c'est l'abonnement qui couvre les frais.",
+                    },
+                  ]
+                : []),
               {
                 q: "Comment se passe le paiement de l'abonnement ?",
                 a: `En Mobile Money, tu achètes une durée d'avance : 1 mois, 3 mois ou 1 an. Rien n'est prélevé automatiquement — quand la période se termine, tu repasses simplement en Découverte et tu peux racheter quand tu veux ; 3 mois ou 1 an reviennent moins cher que mois par mois (${STARTER.prepaid.yearlySavingsPercent} % d'économie sur l'année pour Starter, ${PRO.prepaid.yearlySavingsPercent} % pour Pro). Par carte bancaire, partout, c'est un abonnement en dollars canadiens renouvelé automatiquement (${STARTER.card.month} / mois ou ${STARTER.card.year} / an pour Starter, ${PRO.card.month} / mois ou ${PRO.card.year} / an pour Pro), que tu résilies quand tu veux depuis ton profil.`,

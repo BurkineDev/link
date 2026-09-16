@@ -93,6 +93,13 @@ interface SettingsClientProps {
   canUseAi: boolean;
   /** Retirer le badge Bio-Lien fait partie des plans payants. */
   canHideBadge: boolean;
+  /**
+   * Caisse Bio-Lien allumée (voir src/lib/payments/online-checkout.ts).
+   * Éteinte : plus de choix de mode ni d'onglet Livraison — la commande
+   * arrive sur WhatsApp, le numéro est obligatoire, et le réglage en base
+   * n'est pas touché.
+   */
+  onlineCheckout: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +380,7 @@ export function SettingsClient({
   shippingZones,
   canUseAi,
   canHideBadge,
+  onlineCheckout,
 }: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -444,6 +452,13 @@ export function SettingsClient({
   const [whatsappNumber, setWhatsappNumber] = useState(
     shop.whatsapp_number ?? "",
   );
+  // Le mode qui s'applique vraiment : caisse masquée, c'est WhatsApp quoi
+  // que dise la base — la valeur y reste pour le jour où elle rallume.
+  const effectiveMode: ShopCheckoutMode = onlineCheckout ? checkoutMode : "whatsapp";
+  // Une boutique passée « en ligne » avant que la caisse soit masquée peut
+  // n'avoir aucun numéro : sans lui, le bouton Commander ne mène nulle part.
+  const missingWhatsappNumber =
+    !onlineCheckout && !isValidE164((shop.whatsapp_number ?? "").replace(/\D/g, ""));
 
   // ---------------------------------------------------------------------------
   // Save helpers — toutes les écritures passent par /api/shops/[id], qui
@@ -568,7 +583,7 @@ export function SettingsClient({
     // Le champ ne renvoie qu'un numéro composé valide (indicatif + longueur
     // du pays) ou "" : en mode WhatsApp, il est obligatoire.
     const digits = whatsappNumber.replace(/\D/g, "");
-    if (checkoutMode === "whatsapp" && !isValidE164(digits)) {
+    if (effectiveMode === "whatsapp" && !isValidE164(digits)) {
       toast.error("Choisis l'indicatif et saisis un numéro WhatsApp complet.");
       return;
     }
@@ -576,14 +591,20 @@ export function SettingsClient({
     setSaving(true);
     const result = await patchShop({
       currency,
-      checkout_mode: checkoutMode,
-      whatsapp_number: checkoutMode === "whatsapp" ? digits : whatsappNumber.trim() ? digits : null,
+      // Caisse masquée, on n'envoie pas le mode : le serveur le refuserait
+      // et la valeur en base doit rester intacte (réversibilité).
+      ...(onlineCheckout ? { checkout_mode: checkoutMode } : {}),
+      whatsapp_number: effectiveMode === "whatsapp" ? digits : whatsappNumber.trim() ? digits : null,
     });
     setSaving(false);
     if (!result.ok) {
-      toast.error("Impossible d'enregistrer. Réessaie.");
+      toast.error(result.message);
     } else {
-      toast.success("Paramètres de paiement mis à jour.");
+      toast.success(
+        onlineCheckout
+          ? "Paramètres de paiement mis à jour."
+          : "Numéro WhatsApp et devise enregistrés.",
+      );
       router.refresh();
     }
   };
@@ -634,7 +655,7 @@ export function SettingsClient({
 
   const paymentsDirty =
     currency !== shop.currency ||
-    checkoutMode !== shop.checkout_mode ||
+    (onlineCheckout && checkoutMode !== shop.checkout_mode) ||
     whatsappNumber !== (shop.whatsapp_number ?? "");
 
   // ---- General tab: dirty + validation ----
@@ -669,7 +690,9 @@ export function SettingsClient({
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground">
-          Gère ta boutique, son apparence et tes paiements.
+          {onlineCheckout
+            ? "Gère ta boutique, son apparence et tes paiements."
+            : "Gère ta boutique, son apparence et ta prise de commande WhatsApp."}
         </p>
       </div>
 
@@ -685,11 +708,20 @@ export function SettingsClient({
             Liens CTA
           </TabsTrigger>
           <TabsTrigger value="contact">Contact</TabsTrigger>
-          <TabsTrigger value="payments">Paiements</TabsTrigger>
-          <TabsTrigger value="shipping" className="gap-1.5">
-            <Truck className="size-3.5" />
-            Livraison
-          </TabsTrigger>
+          {onlineCheckout ? (
+            <TabsTrigger value="payments">Paiements</TabsTrigger>
+          ) : (
+            <TabsTrigger value="payments" className="gap-1.5">
+              <MessageCircle className="size-3.5" />
+              WhatsApp
+            </TabsTrigger>
+          )}
+          {onlineCheckout && (
+            <TabsTrigger value="shipping" className="gap-1.5">
+              <Truck className="size-3.5" />
+              Livraison
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="danger"
             className="text-destructive data-active:text-destructive"
@@ -1208,19 +1240,21 @@ export function SettingsClient({
         </TabsContent>
 
         {/* ---------------------------------------------------------------- */}
-        {/* LIVRAISON */}
+        {/* LIVRAISON — caisse allumée seulement */}
         {/* ---------------------------------------------------------------- */}
-        <TabsContent value="shipping" className="space-y-6 pt-6">
-          <ShippingSection
-            shopId={shop.id}
-            currency={shop.currency}
-            checkoutMode={shop.checkout_mode}
-            shippingEnabled={shop.shipping_enabled}
-            cashOnDelivery={shop.cash_on_delivery}
-            initialZones={shippingZones}
-            onChanged={() => router.refresh()}
-          />
-        </TabsContent>
+        {onlineCheckout && (
+          <TabsContent value="shipping" className="space-y-6 pt-6">
+            <ShippingSection
+              shopId={shop.id}
+              currency={shop.currency}
+              checkoutMode={shop.checkout_mode}
+              shippingEnabled={shop.shipping_enabled}
+              cashOnDelivery={shop.cash_on_delivery}
+              initialZones={shippingZones}
+              onChanged={() => router.refresh()}
+            />
+          </TabsContent>
+        )}
 
         {/* ---------------------------------------------------------------- */}
         {/* CONTACT */}
@@ -1335,58 +1369,93 @@ export function SettingsClient({
         </TabsContent>
 
         {/* ---------------------------------------------------------------- */}
-        {/* PAIEMENTS */}
+        {/* PAIEMENTS (caisse allumée) / WHATSAPP (caisse masquée) */}
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="payments" className="space-y-6 pt-6">
           <div className="space-y-4 max-w-xl">
-            {/* ---- Checkout mode ---- */}
-            <div className="space-y-2">
-              <Label>Comment tes clients commandent</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCheckoutMode("whatsapp")}
-                  className={cn(
-                    "text-left rounded-lg border-2 p-3 transition-all",
-                    checkoutMode === "whatsapp"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40",
-                  )}
-                >
-                  <div className="flex items-start gap-2">
-                    <MessageCircle className="size-5 shrink-0 text-[#25D366]" />
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm">WhatsApp</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Les clients t&apos;écrivent pour commander. Recommandé.
+            {/* ---- Caisse masquée : pas de choix, WhatsApp est le fonctionnement ---- */}
+            {!onlineCheckout && (
+              <div className="rounded-xl border border-border bg-muted/30 p-4">
+                <div className="flex items-start gap-3">
+                  <MessageCircle className="size-5 shrink-0 text-[#25D366] mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">
+                      Tes commandes arrivent sur WhatsApp
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Le client touche « Commander sur WhatsApp » : la
+                      conversation s&apos;ouvre avec sa commande déjà écrite,
+                      et elle apparaît comme non payée dans{" "}
+                      <Link href="/dashboard/orders" className="font-medium underline underline-offset-2">
+                        Commandes
+                      </Link>
+                      . Une fois réglée entre vous, tu la marques payée
+                      là-bas. Bio-Lien ne touche pas à l&apos;argent de tes
+                      ventes.
+                    </p>
+                    {missingWhatsappNumber && (
+                      <p className="flex items-start gap-1.5 pt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                        Ton numéro WhatsApp manque : tant qu&apos;il n&apos;est
+                        pas enregistré, tes clients ne peuvent pas commander.
                       </p>
-                    </div>
+                    )}
                   </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCheckoutMode("online")}
-                  className={cn(
-                    "text-left rounded-lg border-2 p-3 transition-all",
-                    checkoutMode === "online"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40",
-                  )}
-                >
-                  <div className="flex items-start gap-2">
-                    <CreditCard className="size-5 shrink-0 text-foreground" />
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm">Paiement en ligne</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Panier + carte et Mobile Money à la validation.
-                      </p>
-                    </div>
-                  </div>
-                </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            {checkoutMode === "whatsapp" && (
+            {/* ---- Checkout mode (caisse allumée seulement) ---- */}
+            {onlineCheckout && (
+              <div className="space-y-2">
+                <Label>Comment tes clients commandent</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutMode("whatsapp")}
+                    className={cn(
+                      "text-left rounded-lg border-2 p-3 transition-all",
+                      checkoutMode === "whatsapp"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40",
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <MessageCircle className="size-5 shrink-0 text-[#25D366]" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm">WhatsApp</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Les clients t&apos;écrivent pour commander. Recommandé.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutMode("online")}
+                    className={cn(
+                      "text-left rounded-lg border-2 p-3 transition-all",
+                      checkoutMode === "online"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40",
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <CreditCard className="size-5 shrink-0 text-foreground" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm">Paiement en ligne</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Panier + carte et Mobile Money à la validation.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Caisse masquée : toujours affiché, toujours obligatoire. */}
+            {effectiveMode === "whatsapp" && (
               <WhatsAppNumberField
                 id="whatsapp-number"
                 value={whatsappNumber}
@@ -1422,7 +1491,7 @@ export function SettingsClient({
               </p>
             </div>
 
-            {checkoutMode === "online" && (
+            {effectiveMode === "online" && (
               <>
                 <Separator />
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">

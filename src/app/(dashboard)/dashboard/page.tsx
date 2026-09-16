@@ -23,6 +23,8 @@ import {
   BarChart3Icon,
 } from "lucide-react";
 import type { OrderRow } from "@/lib/types/database";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
+import { isValidWhatsAppNumber } from "@/lib/utils/whatsapp";
 
 function formatCurrency(amount: number, currency: string): string {
   try {
@@ -121,9 +123,20 @@ export default async function DashboardPage() {
         isPublished: true,
         currency: true,
         featuredUntil: true,
+        whatsappNumber: true,
       },
     }),
   ]);
+
+  // Caisse masquée, WhatsApp est la seule prise de commande : une boutique
+  // publiée sans numéro exploitable (passée « en ligne » avant la bascule,
+  // ou numéro jamais saisi) n'a plus aucun bouton d'achat. Le vendeur doit
+  // le voir ici, pas l'apprendre par un client.
+  const missingWhatsapp =
+    !!shopRow &&
+    shopRow.isPublished &&
+    !isOnlineCheckoutEnabled() &&
+    !isValidWhatsAppNumber(shopRow.whatsappNumber);
 
   // Le reste de la page lit la forme Supabase (snake_case) ; on la reproduit.
   const profile = profileRow
@@ -249,6 +262,27 @@ export default async function DashboardPage() {
               asChild
             >
               <Link href="/dashboard/shop">Publier ma boutique</Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {missingWhatsapp && (
+        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 px-5 py-4">
+          <AlertCircleIcon className="mt-0.5 size-5 shrink-0 text-foreground" />
+          <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Ton numéro WhatsApp manque</p>
+              <p className="mt-0.5 text-xs text-foreground/70">
+                Tes clients ne peuvent pas commander tant qu&apos;il n&apos;est pas enregistré.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 border-0 rounded-xl font-semibold"
+              asChild
+            >
+              <Link href="/dashboard/settings">Ajouter mon numéro</Link>
             </Button>
           </div>
         </div>

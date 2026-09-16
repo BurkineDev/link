@@ -1,10 +1,12 @@
 /**
- * Genius Pay client (https://geniuspay.ci/docs/api).
+ * Client Genius Pay (https://geniuspay.ci/docs/api).
  *
- * Used as the Mobile Money payment rail for African buyers (Wave,
- * Orange Money, MTN MoMo, Moov, M-Pesa, etc.). Stripe handles cards.
+ * Rail Mobile Money (Wave, Orange Money, MTN MoMo, Moov, M-Pesa…) :
+ * abonnements prépayés et boosts des vendeurs ; ventes acheteurs si le mode
+ * En ligne est actif (voir @/lib/payments/online-checkout). Stripe porte la
+ * carte.
  *
- * Server-only — never import this file into a Client Component.
+ * Server-only — ne jamais importer depuis un Client Component.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";

@@ -12,6 +12,7 @@ import {
 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -83,6 +84,29 @@ const dmSerifDisplay = DM_Serif_Display({
   display: "swap",
 });
 
+// Les métadonnées sont figées au build : lire le drapeau ici est correct.
+// Caisse masquée (le défaut), la promesse est « reçois tes commandes sur
+// WhatsApp » et les mots-clés opérateurs disparaissent ; caisse allumée, les
+// textes d'origine reviennent tels quels.
+const ONLINE = isOnlineCheckoutEnabled();
+
+const DESCRIPTION = ONLINE
+  ? "Crée ta boutique en ligne en 5 minutes et vends en Afrique de l'Ouest — Côte d'Ivoire, Sénégal, Burkina Faso, Bénin, Mali, Togo. Partage ton lien sur TikTok et Instagram, encaisse en Mobile Money (Orange, MTN, Wave, Moov) ou par carte bancaire."
+  : "Crée ta boutique en ligne en 5 minutes et vends en Afrique de l'Ouest — Côte d'Ivoire, Sénégal, Burkina Faso, Bénin, Mali, Togo. Partage ton lien sur TikTok et Instagram, reçois tes commandes sur WhatsApp.";
+
+const OG_DESCRIPTION = ONLINE
+  ? "Crée ta boutique en ligne en 5 minutes et vends partout en Afrique de l'Ouest. Mobile Money ou carte bancaire, depuis TikTok et Instagram."
+  : "Crée ta boutique en ligne en 5 minutes et vends partout en Afrique de l'Ouest. Reçois tes commandes sur WhatsApp, depuis TikTok et Instagram.";
+
+const TWITTER_DESCRIPTION = ONLINE
+  ? "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money."
+  : "Crée ta boutique en ligne en 5 minutes. Reçois tes commandes sur WhatsApp.";
+
+// Les opérateurs ne sont un mot-clé que si on les propose aux acheteurs.
+const OPERATOR_KEYWORDS = ONLINE
+  ? ["Mobile Money", "Orange Money", "MTN MoMo", "Wave", "Moov Money"]
+  : [];
+
 export const metadata: Metadata = {
   // Un seul endroit décide de la forme d'un titre d'onglet. Les pages
   // fournissent leur nom, le gabarit ajoute la marque — sinon chacune recolle
@@ -91,8 +115,7 @@ export const metadata: Metadata = {
     default: "Bio-Lien | Crée ta boutique en ligne",
     template: "%s | Bio-Lien",
   },
-  description:
-    "Crée ta boutique en ligne en 5 minutes et vends en Afrique de l'Ouest — Côte d'Ivoire, Sénégal, Burkina Faso, Bénin, Mali, Togo. Partage ton lien sur TikTok et Instagram, encaisse en Mobile Money (Orange, MTN, Wave, Moov) ou par carte bancaire.",
+  description: DESCRIPTION,
   // Google ne se sert plus de cette balise pour classer ; elle ne coûte rien
   // et reste lue par d'autres moteurs. Ce qui pèse vraiment, c'est le titre,
   // la description et le contenu des pages.
@@ -103,11 +126,7 @@ export const metadata: Metadata = {
     "boutique en ligne Burkina Faso",
     "vendre sur TikTok Afrique",
     "vendre sur WhatsApp",
-    "Mobile Money",
-    "Orange Money",
-    "MTN MoMo",
-    "Wave",
-    "Moov Money",
+    ...OPERATOR_KEYWORDS,
     "lien bio boutique",
     "créateur africain",
   ],
@@ -122,16 +141,14 @@ export const metadata: Metadata = {
     locale: "fr_FR",
     url: "https://www.bio-lien.com",
     title: "Bio-Lien | Crée ta boutique en ligne",
-    description:
-      "Crée ta boutique en ligne en 5 minutes et vends partout en Afrique de l'Ouest. Mobile Money ou carte bancaire, depuis TikTok et Instagram.",
+    description: OG_DESCRIPTION,
     siteName: "Bio-Lien",
     // OG image is generated dynamically from src/app/opengraph-image.tsx
   },
   twitter: {
     card: "summary_large_image",
     title: "Bio-Lien | Crée ta boutique en ligne",
-    description:
-      "Crée ta boutique en ligne en 5 minutes. Accepte les paiements Mobile Money.",
+    description: TWITTER_DESCRIPTION,
   },
   robots: {
     index: true,

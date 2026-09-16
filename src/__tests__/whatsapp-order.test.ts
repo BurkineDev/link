@@ -70,6 +70,12 @@ beforeEach(() => {
   mockSettle.mockClear();
 });
 
+// La caisse Bio-Lien est masquée par défaut (décision du 14 septembre
+// 2026) : sauf mention, les cas ci-dessous tournent drapeau éteint.
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+});
+
 describe("message WhatsApp", () => {
   test("référence courte, lignes, total et lien de suivi", () => {
     // La même référence que le tableau de bord, la page de suivi et les e-mails.
@@ -135,13 +141,43 @@ describe("POST /api/orders/whatsapp", () => {
     expect(_created).toMatchObject({ totalAmount: 7000 });
   });
 
-  test("boutique non publiée → 404 ; pas en mode WhatsApp ou sans numéro → 409", async () => {
+  test("boutique non publiée → 404 ; caisse rallumée, pas en mode WhatsApp ou sans numéro → 409 NOT_WHATSAPP_MODE", async () => {
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
     _shop = { ..._shop!, isPublished: false };
     expect((await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] })).status).toBe(404);
     _shop = { ..._shop!, isPublished: true, checkoutMode: "online" };
-    expect((await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] })).status).toBe(409);
+    let res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("NOT_WHATSAPP_MODE");
     _shop = { ..._shop!, checkoutMode: "whatsapp", whatsappNumber: "12" };
-    expect((await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] })).status).toBe(409);
+    res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("NOT_WHATSAPP_MODE");
+    expect(_created).toBeNull();
+  });
+
+  test("caisse masquée : une boutique « online » en base avec un numéro valide est servie (201)", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    _shop = { ..._shop!, checkoutMode: "online" };
+    const res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
+    expect(res.status).toBe(201);
+    expect((await res.json()).wa_url).toMatch(/^https:\/\/wa\.me\/22670123456\?text=/);
+    expect(_created).toMatchObject({ paymentProvider: "manual", totalAmount: 5000 });
+  });
+
+  test("caisse masquée : sans numéro valide → 409 NO_WHATSAPP_NUMBER, quel que soit le mode en base", async () => {
+    delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+    for (const checkoutMode of ["whatsapp", "online"]) {
+      for (const whatsappNumber of ["12", null]) {
+        _shop = { ..._shop!, checkoutMode, whatsappNumber };
+        const res = await post({ shopId: SHOP_ID, items: [{ product_id: PRODUCT_ID, quantity: 1 }] });
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: "Le vendeur n'a pas indiqué de numéro WhatsApp.",
+          code: "NO_WHATSAPP_NUMBER",
+        });
+      }
+    }
     expect(_created).toBeNull();
   });
 

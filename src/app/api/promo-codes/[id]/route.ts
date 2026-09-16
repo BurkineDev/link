@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializePromoCode } from "@/lib/db/serialize";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 const updateSchema = z.object({
   is_active: z.boolean().optional(),
@@ -26,6 +27,8 @@ async function ownsPromo(promoId: string, userId: string): Promise<boolean> {
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
+  // Caisse masquée : rien à modifier sur un code que personne ne peut utiliser.
+  if (!isOnlineCheckoutEnabled()) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
   const { id } = await ctx.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

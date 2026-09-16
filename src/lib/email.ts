@@ -95,7 +95,7 @@ function reportDeadChannel(message: TransactionalEmail, reason: string): void {
     kind: "email.dead",
     severity: "critical",
     title: "Envoi d'e-mail en échec (Resend)",
-    detail: `${reason.slice(0, 200)} — commandes, reversements et vérifications de compte n'arrivent plus. Vérifie la clé Resend, le quota du plan et le domaine d'envoi.`,
+    detail: `${reason.slice(0, 200)} — commandes, reversements, abonnements et vérifications de compte n'arrivent plus. Vérifie la clé Resend, le quota du plan et le domaine d'envoi.`,
     context: { subject: message.subject.slice(0, 120), to: message.to.replace(/^(.).*(@.*)$/, "$1…$2") },
     dedupeKey: "email.dead",
   });

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata = {
   alternates: { canonical: "/legal/mentions" },
@@ -6,14 +7,23 @@ export const metadata = {
   description: "Informations légales sur l'éditeur du service Bio-Lien.",
 };
 
-const LAST_UPDATED = "11 septembre 2026";
+// Deux versions, une par mode (src/lib/payments/online-checkout.ts) : par
+// défaut Bio-Lien n'encaisse pas les ventes et les prestataires ne traitent
+// que l'abonnement du vendeur ; drapeau allumé, le texte d'origine revient,
+// avec sa date.
+const LAST_UPDATED = {
+  online: "11 septembre 2026",
+  whatsapp: "15 septembre 2026",
+} as const;
 
 export default function MentionsPage() {
+  // Lu au rendu, jamais en constante de module.
+  const online = isOnlineCheckoutEnabled();
   return (
     <>
       <h1>Mentions légales</h1>
       <p className="text-sm text-muted-foreground mb-8">
-        Dernière mise à jour : {LAST_UPDATED}
+        Dernière mise à jour : {online ? LAST_UPDATED.online : LAST_UPDATED.whatsapp}
       </p>
 
       <h2>Éditeur du service</h2>
@@ -92,22 +102,39 @@ export default function MentionsPage() {
         prestataire tiers (hors connexion facultative via un compte Google).
       </p>
 
-      <h2>Paiements</h2>
+      {/* Caisse masquée (le défaut) : Bio-Lien n'encaisse pas les ventes, le
+          paiement se règle entre le vendeur et l'acheteur, et les prestataires
+          ci-dessous ne traitent que l'abonnement du vendeur. Caisse allumée :
+          ils traitent aussi les paiements des acheteurs. */}
+      <h2>{online ? "Paiements" : "Paiement des abonnements"}</h2>
       <p>
-        Les paiements en ligne sont traités par :
+        {online
+          ? "Les paiements en ligne sont traités par :"
+          : "Les abonnements des vendeurs sont réglés auprès de :"}
       </p>
       <ul>
         <li>
           <strong>Stripe Payments Europe, Limited</strong> — 1 Grand Canal Street Lower,
           Grand Canal Dock, Dublin, Irlande — <a href="https://stripe.com">stripe.com</a>{" "}
-          (paiements par carte bancaire et abonnements)
+          {online
+            ? "(paiements par carte bancaire et abonnements)"
+            : "(abonnement par carte bancaire)"}
         </li>
         <li>
           <strong>GENIUS GROUPS SAS</strong> (Genius Pay) — Lot n° 524, Îlot n° 40,
           Abidjan, Côte d&apos;Ivoire — RCCM CI-ABJ-03-2025-B17-00081 —{" "}
-          <a href="https://geniuspay.ci">geniuspay.ci</a> (paiements par Mobile Money)
+          <a href="https://geniuspay.ci">geniuspay.ci</a>{" "}
+          {online
+            ? "(paiements par Mobile Money)"
+            : "(abonnement prépayé en Mobile Money)"}
         </li>
       </ul>
+      {!online && (
+        <p>
+          Le paiement des ventes est convenu directement entre le vendeur et
+          l&apos;acheteur, en dehors de la Plateforme.
+        </p>
+      )}
 
       <h2>Propriété intellectuelle</h2>
       <p>

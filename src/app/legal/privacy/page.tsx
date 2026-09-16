@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata = {
   alternates: { canonical: "/legal/privacy" },
@@ -7,14 +8,23 @@ export const metadata = {
     "Comment Bio-Lien collecte, utilise et protège vos données personnelles.",
 };
 
-const LAST_UPDATED = "11 septembre 2026";
+// Deux versions, une par mode (src/lib/payments/online-checkout.ts) : par
+// défaut les prestataires de paiement ne voient que l'abonnement du vendeur,
+// les ventes se réglant hors Plateforme ; drapeau allumé, le texte d'origine
+// (paiements des acheteurs compris) revient, avec sa date.
+const LAST_UPDATED = {
+  online: "11 septembre 2026",
+  whatsapp: "15 septembre 2026",
+} as const;
 
 export default function PrivacyPage() {
+  // Lu au rendu, jamais en constante de module.
+  const online = isOnlineCheckoutEnabled();
   return (
     <>
       <h1>Politique de confidentialité</h1>
       <p className="text-sm text-muted-foreground mb-8">
-        Dernière mise à jour : {LAST_UPDATED}
+        Dernière mise à jour : {online ? LAST_UPDATED.online : LAST_UPDATED.whatsapp}
       </p>
 
       <p>
@@ -39,9 +49,18 @@ export default function PrivacyPage() {
           adresse de livraison, contenu de la commande.
         </li>
         <li>
-          <strong>Données de paiement</strong> : traitées exclusivement par nos
+          <strong>Données de paiement</strong>
+          {online ? "" : " (abonnements des Vendeurs)"} : traitées exclusivement par nos
           prestataires de paiement (Stripe pour la carte bancaire, Genius Pay pour le
           Mobile Money). Nous ne stockons jamais de numéros de carte bancaire.
+          {!online && (
+            <>
+              {" "}
+              Le paiement des ventes est convenu directement entre le Vendeur et
+              l&apos;Acheteur, en dehors de la Plateforme : nous n&apos;en traitons aucune
+              donnée de paiement.
+            </>
+          )}
         </li>
         <li>
           <strong>Données techniques</strong> : adresse IP, type d&apos;appareil, navigateur,
@@ -53,7 +72,7 @@ export default function PrivacyPage() {
       <p>Vos données sont traitées pour :</p>
       <ul>
         <li>Fournir et améliorer le service Bio-Lien.</li>
-        <li>Traiter les commandes et les paiements.</li>
+        <li>{online ? "Traiter les commandes et les paiements." : "Traiter les commandes et les abonnements."}</li>
         <li>Communiquer avec vous (confirmation de commande, support, notifications).</li>
         <li>Prévenir la fraude et garantir la sécurité de la plateforme.</li>
         <li>Respecter nos obligations légales et fiscales.</li>
@@ -70,12 +89,16 @@ export default function PrivacyPage() {
       <p>Nous partageons certaines données avec des prestataires de confiance :</p>
       <ul>
         <li>
-          <strong>Stripe</strong> — traitement des paiements par carte bancaire
-          (commandes et abonnements).
+          <strong>Stripe</strong> —{" "}
+          {online
+            ? "traitement des paiements par carte bancaire (commandes et abonnements)."
+            : "traitement des abonnements réglés par carte bancaire."}
         </li>
         <li>
-          <strong>Genius Pay</strong> (GENIUS GROUPS SAS, Côte d&apos;Ivoire) — traitement
-          des paiements par Mobile Money.
+          <strong>Genius Pay</strong> (GENIUS GROUPS SAS, Côte d&apos;Ivoire) —{" "}
+          {online
+            ? "traitement des paiements par Mobile Money."
+            : "traitement des abonnements prépayés réglés par Mobile Money."}
         </li>
         <li>
           <strong>Vercel</strong> — hébergement de l&apos;application (Francfort,

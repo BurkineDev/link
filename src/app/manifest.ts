@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 /**
  * Manifeste PWA.
@@ -14,8 +15,10 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Bio-Lien — Ta boutique depuis ta bio",
     short_name: "Bio-Lien",
-    description:
-      "Crée ta page, vends tes produits et reçois tes commandes sur WhatsApp ou en Mobile Money.",
+    // Caisse masquée (le défaut) : la commande arrive sur WhatsApp, point.
+    description: isOnlineCheckoutEnabled()
+      ? "Crée ta page, vends tes produits et reçois tes commandes sur WhatsApp ou en Mobile Money."
+      : "Crée ta page, vends tes produits et reçois tes commandes sur WhatsApp.",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

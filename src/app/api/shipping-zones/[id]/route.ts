@@ -6,6 +6,7 @@ import { serializeShippingZone } from "@/lib/db/serialize";
 import { shippingZoneSchema, zoneAmountIssue } from "@/lib/shipping/zone-schema";
 import { CURRENCY_META, type Currency } from "@/lib/constants";
 import { revalidateShop } from "@/lib/shops/revalidate";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -19,6 +20,11 @@ async function ownedZone(zoneId: string, userId: string) {
 
 // PATCH /api/shipping-zones/[id] — modifie une zone (propriétaire).
 export async function PATCH(request: NextRequest, ctx: Ctx) {
+  // Caisse masquée : plus d'écran de livraison, la modification disparaît
+  // avec lui (404). La suppression reste possible pour faire le ménage.
+  if (!isOnlineCheckoutEnabled()) {
+    return NextResponse.json({ error: "Introuvable" }, { status: 404 });
+  }
   const { id } = await ctx.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

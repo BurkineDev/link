@@ -10,6 +10,7 @@ import { Loader2, UserIcon, Sparkles, ArrowRight, Crown, CalendarClock } from "l
 
 import { updateProfileSchema, type UpdateProfileInput } from "@/lib/validations/auth";
 import { PLAN_LIMITS, getEffectivePlan } from "@/lib/subscription";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import type { SubscriptionProvider } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,22 @@ type SubscriptionData = {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
 } | null;
+
+/**
+ * « Jusqu'à 20 produits · 5 % de commission ». La commission n'existe que
+ * caisse allumée (voir src/lib/payments/online-checkout.ts) : masquée,
+ * Bio-Lien ne prélève rien sur les ventes, on ne parle que des produits.
+ * NEXT_PUBLIC_ est figé dans le bundle : lecture littérale, à chaque rendu.
+ */
+function planSummary(plan: "free" | "starter" | "pro", isPaid: boolean): string {
+  const limits = PLAN_LIMITS[plan];
+  const products = Number.isFinite(limits.maxProducts)
+    ? `Jusqu'à ${limits.maxProducts} produits`
+    : "Produits illimités";
+  if (!isOnlineCheckoutEnabled()) return products;
+  const commission = `${Math.round(limits.commissionRate * 100)} % de commission`;
+  return isPaid ? `${products} · ${commission}` : `${products} · ${commission} sur les ventes`;
+}
 
 export function ProfileClient({
   email,
@@ -147,15 +164,7 @@ export function ProfileClient({
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {isPaid
-                    ? `${
-                        Number.isFinite(PLAN_LIMITS[effectivePlan].maxProducts)
-                          ? `Jusqu'à ${PLAN_LIMITS[effectivePlan].maxProducts} produits`
-                          : "Produits illimités"
-                      } · ${Math.round(
-                        PLAN_LIMITS[effectivePlan].commissionRate * 100,
-                      )} % de commission`
-                    : `Jusqu'à ${PLAN_LIMITS.free.maxProducts} produits · ${Math.round(PLAN_LIMITS.free.commissionRate * 100)} % de commission sur les ventes`}
+                  {planSummary(effectivePlan, isPaid)}
                 </p>
                 {subscription?.current_period_end && isPaid && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">

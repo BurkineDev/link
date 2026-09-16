@@ -1,6 +1,10 @@
 /**
  * Zones de livraison : schéma partagé, libellé du délai, et les routes
  * /api/shipping-zones (propriété, validation, plafond, devise).
+ *
+ * La création et la modification n'existent que caisse allumée
+ * (NEXT_PUBLIC_ONLINE_CHECKOUT=1) : les suites POST et PATCH posent le
+ * drapeau ; caisse masquée (le défaut sous Jest), elles répondent 404.
  */
 
 import { NextRequest } from "next/server";
@@ -160,6 +164,10 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_ONLINE_CHECKOUT;
+});
+
 describe("GET /api/shipping-zones", () => {
   it("renvoie les zones du propriétaire, sérialisées", async () => {
     const res = await GET(req("GET", `/api/shipping-zones?shopId=${SHOP_ID}`));
@@ -193,6 +201,10 @@ describe("GET /api/shipping-zones", () => {
 
 describe("POST /api/shipping-zones", () => {
   const body = { shop_id: SHOP_ID, name: "Ouaga", countries: ["bf"], rate: 1500, estimated_min: 1, estimated_max: 3 };
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+  });
 
   it("crée la zone dans la devise de la boutique et revalide la page", async () => {
     _shopCurrency = "GHS";
@@ -234,6 +246,10 @@ describe("POST /api/shipping-zones", () => {
 describe("PATCH & DELETE /api/shipping-zones/[id]", () => {
   const body = { name: "Ouaga élargie", countries: ["BF", "CI"], rate: 0, free_above: null, is_active: false };
 
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_ONLINE_CHECKOUT = "1";
+  });
+
   it("modifie une zone du propriétaire et la remet dans la devise de la boutique", async () => {
     _shopCurrency = "XAF";
     const res = await PATCH(req("PATCH", `/api/shipping-zones/${ZONE_ID}`, body), ctx());
@@ -260,5 +276,28 @@ describe("PATCH & DELETE /api/shipping-zones/[id]", () => {
     expect(res.status).toBe(200);
     expect(mockPrisma.shippingZone.delete).toHaveBeenCalledWith({ where: { id: ZONE_ID } });
     expect(mockRevalidate).toHaveBeenCalledWith(SHOP_ID);
+  });
+});
+
+describe("caisse masquée (drapeau absent)", () => {
+  const create = { shop_id: SHOP_ID, name: "Ouaga", countries: ["bf"], rate: 1500 };
+  const update = { name: "Ouaga élargie", countries: ["BF", "CI"], rate: 0 };
+
+  it("POST et PATCH répondent 404 « Introuvable », même au propriétaire, sans rien écrire", async () => {
+    let res = await POST(req("POST", "/api/shipping-zones", create));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Introuvable" });
+    res = await PATCH(req("PATCH", `/api/shipping-zones/${ZONE_ID}`, update), ctx());
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Introuvable" });
+    expect(mockPrisma.shippingZone.create).not.toHaveBeenCalled();
+    expect(mockPrisma.shippingZone.update).not.toHaveBeenCalled();
+    expect(mockRevalidate).not.toHaveBeenCalled();
+  });
+
+  it("GET et DELETE restent ouverts : lire et faire le ménage, pas créer", async () => {
+    expect((await GET(req("GET", `/api/shipping-zones?shopId=${SHOP_ID}`))).status).toBe(200);
+    expect((await DELETE(req("DELETE", `/api/shipping-zones/${ZONE_ID}`), ctx())).status).toBe(200);
+    expect(mockPrisma.shippingZone.delete).toHaveBeenCalledWith({ where: { id: ZONE_ID } });
   });
 });

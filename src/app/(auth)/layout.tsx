@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
+import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
 export const metadata: Metadata = {
   title: {
     template: "%s | Bio-Lien",
     default: "Authentification | Bio-Lien",
   },
-  description:
-    "Créez votre page Bio-Lien en quelques minutes : vos liens, votre boutique et vos paiements Mobile Money sur une seule adresse.",
+  // Figée au build : caisse masquée, on promet les commandes, pas l'encaissement.
+  description: isOnlineCheckoutEnabled()
+    ? "Créez votre page Bio-Lien en quelques minutes : vos liens, votre boutique et vos paiements Mobile Money sur une seule adresse."
+    : "Créez votre page Bio-Lien en quelques minutes : vos liens, votre boutique et vos commandes sur WhatsApp, à une seule adresse.",
 };
 
 /**
