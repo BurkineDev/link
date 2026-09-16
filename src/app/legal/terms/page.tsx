@@ -20,7 +20,7 @@ export const metadata = {
 // relecture juridique.
 const LAST_UPDATED = {
   online: "13 septembre 2026",
-  whatsapp: "15 septembre 2026",
+  whatsapp: "17 septembre 2026",
 } as const;
 
 export default function TermsPage() {

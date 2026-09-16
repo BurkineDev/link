@@ -24,7 +24,7 @@ import {
 
 describe("PLAN_LIMITS", () => {
   it("caps free at 5 products with 5% commission", () => {
-    expect(PLAN_LIMITS.free.maxProducts).toBe(5);
+    expect(PLAN_LIMITS.free.maxProducts).toBe(3);
     expect(PLAN_LIMITS.free.commissionRate).toBe(0.05);
     expect(PLAN_LIMITS.free.label).toBe("Découverte");
   });

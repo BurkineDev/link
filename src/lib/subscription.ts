@@ -3,7 +3,7 @@
  *
  * Tiers (creator-facing subscriptions, billed via the Canadian Stripe
  * account in CAD):
- *   • Découverte (free)   — 5 produits, 5% commission, gratuit
+ *   • Découverte (free)   — 3 produits (5 jusqu'au 17 septembre 2026), 5% commission, gratuit
  *   • Starter             — 20 produits, 3% commission, 4,99 CAD/mois
  *   • Pro                 — illimité, 0% commission, 9,99 CAD/mois or 99 CAD/an
  *
@@ -28,7 +28,10 @@ import type {
 
 export const PLAN_LIMITS = {
   free: {
-    maxProducts: 5,
+    // 3 depuis le 17 septembre 2026 (5 avant) : une mini-vitrine pour
+    // essayer, pas un catalogue. Les boutiques déjà au-dessus gardent leurs
+    // produits ; elles ne peuvent plus en ajouter (voir api/products).
+    maxProducts: 3,
     commissionRate: 0.05,
     label: "Découverte",
     // Chaque génération coûte un appel à un modèle facturé. Un vendeur qui ne
