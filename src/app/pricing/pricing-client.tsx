@@ -77,9 +77,16 @@ const MONTH_LABEL: Record<PrepaidMonths, string> = {
 export function PricingClient({
   isAuthenticated,
   currentPlan,
+  mobileMoneyBlockedCountry,
 }: {
   isAuthenticated: boolean;
   currentPlan: Plan;
+  /**
+   * Nom du pays du numéro WhatsApp du vendeur quand notre partenaire Mobile
+   * Money ne l'y sert pas (le push n'arriverait jamais) ; null sinon. Le
+   * bouton prépayé est alors désactivé, la carte prend le relais.
+   */
+  mobileMoneyBlockedCountry: string | null;
 }) {
   const searchParams = useSearchParams();
   const [months, setMonths] = useState<PrepaidMonths>(1);
@@ -178,6 +185,16 @@ export function PricingClient({
         {wasCancelled && (
           <div className="mx-auto max-w-2xl mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Tu as annulé le paiement. Tu peux réessayer quand tu veux.
+          </div>
+        )}
+        {mobileMoneyBlockedCountry && (
+          <div className="mx-auto max-w-2xl mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <b>Mobile Money pas encore disponible : {mobileMoneyBlockedCountry}.</b> Notre
+            partenaire n&apos;y envoie pas la demande de confirmation sur le téléphone — le
+            paiement resterait bloqué « en attente ». Ton numéro WhatsApp est de ce pays, donc
+            les boutons Mobile Money sont désactivés. Tu peux payer <b>par carte bancaire</b>
+            (lien sous chaque plan), ou nous écrire si tu as un compte Wave ou Orange Money dans
+            un pays couvert.
           </div>
         )}
 
@@ -330,10 +347,13 @@ export function PricingClient({
                   variant="outline"
                   className="w-full h-11 mb-6 gap-2"
                   onClick={() => startPrepaidCheckout("starter")}
-                  disabled={checkingOutPlan !== null}
+                  disabled={checkingOutPlan !== null || mobileMoneyBlockedCountry !== null}
+                  title={mobileMoneyBlockedCountry ? `Mobile Money indisponible : ${mobileMoneyBlockedCountry}` : undefined}
                 >
                   {checkingOutPlan === "starter" ? (
                     <Loader2 className="size-4 animate-spin" />
+                  ) : mobileMoneyBlockedCountry ? (
+                    <>Mobile Money indisponible ici</>
                   ) : (
                     <>
                       Passer en Starter
@@ -413,10 +433,13 @@ export function PricingClient({
                 <Button
                   className="w-full h-11 mb-6 font-semibold gap-2"
                   onClick={() => startPrepaidCheckout("pro")}
-                  disabled={checkingOutPlan !== null}
+                  disabled={checkingOutPlan !== null || mobileMoneyBlockedCountry !== null}
+                  title={mobileMoneyBlockedCountry ? `Mobile Money indisponible : ${mobileMoneyBlockedCountry}` : undefined}
                 >
                   {checkingOutPlan === "pro" ? (
                     <Loader2 className="size-4 animate-spin" />
+                  ) : mobileMoneyBlockedCountry ? (
+                    <>Mobile Money indisponible ici</>
                   ) : (
                     <>
                       Passer en Pro

@@ -5,6 +5,9 @@ import { getEffectivePlan } from "@/lib/subscription";
 import type { SubscriptionPlan } from "@/lib/types/database";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { PricingClient } from "./pricing-client";
+import { iso2FromE164 } from "@/lib/phone/dial-codes";
+import { isMobileMoneyCovered } from "@/lib/payments/mobile-money-coverage";
+import { countryLabel } from "@/lib/countries";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/pricing" },
@@ -20,7 +23,19 @@ export default async function PricingPage() {
   const user = await getCurrentUser();
 
   let currentPlan: SubscriptionPlan = "free";
+  // Le pays du numéro WhatsApp du vendeur : Genius Pay envoie le push Mobile
+  // Money sur ce numéro, et il n'arrive jamais dans un pays non couvert (le
+  // fondateur lui-même est resté trois fois devant « En attente de
+  // confirmation… » avec son numéro burkinabè). On prévient avant, plutôt
+  // que de laisser payer dans le vide.
+  let mobileMoneyBlockedCountry: string | null = null;
   if (user) {
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: user.id },
+      select: { whatsappNumber: true, contactPhone: true },
+    });
+    const iso2 = iso2FromE164(shop?.whatsappNumber ?? shop?.contactPhone ?? null);
+    if (iso2 && !isMobileMoneyCovered(iso2)) mobileMoneyBlockedCountry = countryLabel(iso2) ?? iso2;
     const sub = await prisma.creatorSubscription.findUnique({
       where: { userId: user.id },
       select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
@@ -37,5 +52,11 @@ export default async function PricingPage() {
     );
   }
 
-  return <PricingClient isAuthenticated={!!user} currentPlan={currentPlan} />;
+  return (
+    <PricingClient
+      isAuthenticated={!!user}
+      currentPlan={currentPlan}
+      mobileMoneyBlockedCountry={mobileMoneyBlockedCountry}
+    />
+  );
 }

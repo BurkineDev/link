@@ -204,14 +204,22 @@ export function fetchPayment(reference: string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Verify an incoming Genius Pay webhook.
+ * Vérifie un webhook Genius Pay entrant.
  *
- * Per the docs:
- *   signature = HMAC-SHA256(timestamp + "." + rawJsonPayload, webhookSecret)
- *   + a 5-minute timestamp window guards against replay.
+ * La documentation marchande (« Sécurité des webhooks », septembre 2026)
+ * signe le CORPS BRUT seul : `HMAC-SHA256(rawBody, secret)`, en-têtes
+ * `X-GeniusPay-Signature` / `X-GeniusPay-Timestamp` / `X-GeniusPay-Event`.
+ * Une version antérieure signait `timestamp + "." + rawBody` avec des
+ * en-têtes `X-Webhook-*` : c'est ce que ce code attendait, et les deux
+ * seuls webhooks réels reçus (15 septembre 2026, `payment.initiated`) ont
+ * été rejetés en 401 — sans webhook accepté, aucun abonnement prépayé ni
+ * boost Mobile Money n'est crédité.
  *
- * `rawBody` MUST be the exact bytes that were used to compute the signature
- * (i.e. read with `await request.text()` before parsing).
+ * On accepte donc les deux schémas, en comparaison à temps constant, et
+ * l'horodatage n'est contrôlé que s'il est fourni (la référence PHP de la
+ * doc n'en envoie pas) : l'idempotence des traitements (déjà payé → rien)
+ * couvre le rejeu. `rawBody` DOIT être les octets exacts reçus
+ * (`await request.text()` avant tout parsing).
  */
 export function verifyWebhookSignature(args: {
   rawBody: string;
@@ -220,14 +228,18 @@ export function verifyWebhookSignature(args: {
   webhookSecret?: string;
   toleranceSeconds?: number;
 }): boolean {
-  const { rawBody, signature, timestamp } = args;
-  if (!signature || !timestamp) return false;
+  const { rawBody, timestamp } = args;
+  const signature = args.signature?.trim().toLowerCase() ?? "";
+  if (!signature) return false;
 
-  const ts = Number(timestamp);
-  if (!Number.isFinite(ts)) return false;
-
-  const tolerance = args.toleranceSeconds ?? 300;
-  if (Math.abs(Date.now() / 1000 - ts) > tolerance) return false;
+  if (timestamp) {
+    const raw = Number(timestamp);
+    if (!Number.isFinite(raw)) return false;
+    // Secondes ou millisecondes : la doc dit « Timestamp Unix » sans préciser.
+    const ts = raw > 1e12 ? raw / 1000 : raw;
+    const tolerance = args.toleranceSeconds ?? 300;
+    if (Math.abs(Date.now() / 1000 - ts) > tolerance) return false;
+  }
 
   const secret =
     args.webhookSecret ??
@@ -235,17 +247,18 @@ export function verifyWebhookSignature(args: {
     "";
   if (!secret) return false;
 
-  const expected = createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest("hex");
-
-  // Constant-time compare. Lengths must match for timingSafeEqual.
-  if (expected.length !== signature.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-  } catch {
-    return false;
-  }
+  const candidates = [rawBody];
+  if (timestamp) candidates.push(`${timestamp}.${rawBody}`);
+  const provided = Buffer.from(signature);
+  return candidates.some((message) => {
+    const expected = Buffer.from(createHmac("sha256", secret).update(message).digest("hex"));
+    if (expected.length !== provided.length) return false;
+    try {
+      return timingSafeEqual(expected, provided);
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
