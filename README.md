@@ -99,6 +99,27 @@ Vercel Production (`VERCEL_ENV=production`) ; les previews sont ignorées,
 pas en échec. Retirer cette ligne le jour où Preview reçoit ses propres
 variables.
 
+### Mesurer d'où viennent les vendeurs
+
+Avant de dépenser un franc en publicité, il faut savoir combien de vendeurs
+une campagne amène et combien paient. Trois pièces, toutes optionnelles :
+
+- **UTM du premier contact** (`src/lib/acquisition.ts`) : le proxy garde
+  trente jours en cookie les `utm_*` (ou `ref=`) de la première visite —
+  jamais écrasés par une visite suivante — et Better Auth les écrit sur le
+  compte à l'inscription (`user.acquisition`, JSON). Coller sur chaque lien
+  de campagne `?utm_source=tiktok&utm_medium=video&utm_campaign=<nom>`, et
+  sur un lien partagé à la main `?ref=<nom>`. Le rapport croissance regroupe
+  ensuite inscriptions et abonnements par source.
+- **Pixels de Bio-Lien** (`NEXT_PUBLIC_META_PIXEL_ID`,
+  `NEXT_PUBLIC_TIKTOK_PIXEL_ID`) : chargés sur l'accueil, Tarifs, inscription
+  et connexion seulement — jamais sur les boutiques des vendeurs, qui ont les
+  leurs. Événements : `CompleteRegistration` à l'inscription réussie,
+  `Subscribe` quand la page de retour confirme le plan.
+- **Support sur WhatsApp** (`NEXT_PUBLIC_SUPPORT_WHATSAPP`) : posé, les liens
+  « Écrire au support » (Tarifs, retour de paiement) ouvrent une conversation
+  pré-remplie au lieu d'un e-mail.
+
 ### Santé, alertes et rapport quotidien
 
 Tout ce qui casse en silence (webhook rejeté, paiement arrivé après

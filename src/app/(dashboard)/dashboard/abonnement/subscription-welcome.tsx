@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { trackMarketingEvent } from "@/components/marketing/marketing-pixels";
+import { supportHref, supportLabel } from "@/lib/support";
 import Link from "next/link";
 import { ArrowRight, Check, Crown, Loader2, Mail, RefreshCw, Sparkles, WandSparkles, PackagePlus, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -100,20 +102,25 @@ export function SubscriptionWelcome({
   // serveur redirige vers Tarifs ; ici on ne montre jamais un sablier qui
   // n'attend rien.
   const waiting = Boolean(expected) && !timedOut;
-  const supportMail =
-    "mailto:support@bio-lien.com?subject=" +
-    encodeURIComponent(`Abonnement ${card.label} non activé`) +
-    "&body=" +
-    encodeURIComponent(
-      [
-        `Plan : ${card.label}`,
-        `Paiement : ${via === "mobile-money" ? "Mobile Money" : "carte bancaire"}`,
-        reference ? `Référence : ${reference}` : "",
-        "Heure du paiement : ",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    );
+  const supportMail = supportHref(
+    `Abonnement ${card.label} non activé`,
+    [
+      `Plan : ${card.label}`,
+      `Paiement : ${via === "mobile-money" ? "Mobile Money" : "carte bancaire"}`,
+      reference ? `Référence : ${reference}` : "",
+      "Heure du paiement : ",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+
+  // L'abonnement vient d'être confirmé à l'écran : c'est l'événement qui
+  // dit à une campagne qu'elle a payé. Une fois par arrivée, pas à chaque
+  // rendu, et jamais pour un plan déjà actif avant la visite.
+  useEffect(() => {
+    if (!arrived || !expected) return;
+    trackMarketingEvent("Subscribe", { plan: expected, via });
+  }, [arrived, expected, via]);
 
   if (arrived) {
     return (
@@ -251,7 +258,7 @@ export function SubscriptionWelcome({
             <Button asChild variant="outline" className="h-11 gap-2">
               <a href={supportMail}>
                 <Mail className="size-4" />
-                Écrire au support
+                {supportLabel()}
               </a>
             </Button>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MarketingPixels } from "@/components/marketing/marketing-pixels";
 import { BIO_THEME_IDS } from "@/lib/bio-themes";
 import {
   Examples,
@@ -518,9 +519,10 @@ function Pricing() {
         className="mx-auto mt-4 max-w-[48ch] text-center text-[16px]"
         style={{ color: "var(--b-muted)" }}
       >
-        Payables en Mobile Money, d&apos;avance — un mois, trois mois ou
-        l&apos;année, sans prélèvement automatique. Ou par carte, en
-        abonnement résiliable à tout moment.
+        Payables en Mobile Money en Côte d&apos;Ivoire et au Sénégal,
+        d&apos;avance — un mois, trois mois ou l&apos;année, sans
+        prélèvement automatique. Ailleurs, par carte bancaire, en abonnement
+        résiliable à tout moment.
       </p>
 
       <div className="mt-10 grid items-stretch gap-4.5 md:grid-cols-3">
@@ -629,7 +631,7 @@ function buildFaq() {
     },
     {
       q: "Dois-je donner ma carte bancaire ?",
-      a: "Non. Les plans payants s'achètent d'avance en Mobile Money : un mois, trois mois ou l'année. La période court, puis s'arrête — aucun prélèvement automatique. La carte bancaire reste possible, en abonnement résiliable à tout moment.",
+      a: "Pas en Côte d'Ivoire ni au Sénégal : les plans payants s'y achètent d'avance en Mobile Money (Wave, Orange Money, MTN) — un mois, trois mois ou l'année ; la période court, puis s'arrête, sans prélèvement automatique. Dans les autres pays, la carte bancaire est pour l'instant le seul moyen, en abonnement résiliable à tout moment.",
     },
     {
       q: "Que se passe-t-il si j'arrête de payer ?",
@@ -741,6 +743,7 @@ export default function LandingPage() {
       className="relative min-h-screen font-[family-name:var(--font-brand)]"
       style={{ background: "var(--b-canvas)", color: "var(--b-ink)" }}
     >
+      <MarketingPixels />
       {/* Entités du site, déclarées ici et pas dans le layout racine : elles
           viendraient sinon concurrencer le nom du vendeur sur chaque
           boutique. */}

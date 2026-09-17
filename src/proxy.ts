@@ -1,5 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
+import { ACQUISITION_COOKIE, ACQUISITION_MAX_AGE, acquisitionFromUrl, encodeAcquisition } from "@/lib/acquisition";
 
 /**
  * Next.js proxy for LinkBoutik.
@@ -9,6 +10,9 @@ import { type NextRequest, NextResponse } from "next/server";
  * 2. Redirect authenticated users away from auth pages (/login, /register, etc.)
  *    to their dashboard.
  * 3. Expose the pathname to Server Components via the `x-pathname` header.
+ * 4. Garder trente jours la source d'une visite venue d'une campagne
+ *    (`utm_*`, `ref`), pour l'attribuer à l'inscription qui suit — premier
+ *    contact seulement (voir src/lib/acquisition.ts).
  *
  * Le contrôle ici est volontairement *optimiste* : on regarde si le cookie de
  * session Better Auth est présent, sans le vérifier en base. C'est ce que
@@ -65,7 +69,27 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl);
   }
 
-  return NextResponse.next({ request: { headers: requestHeaders } });
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  rememberAcquisition(request, response);
+  return response;
+}
+
+/**
+ * Premier contact : un cookie déjà posé n'est pas écrasé (la campagne qui a
+ * fait découvrir Bio-Lien compte plus que celle qui a fait revenir), et une
+ * visite sans UTM ne pose rien. Le cookie est lisible par le serveur seul.
+ */
+function rememberAcquisition(request: NextRequest, response: NextResponse) {
+  if (request.cookies.has(ACQUISITION_COOKIE)) return;
+  const acquisition = acquisitionFromUrl(request.nextUrl);
+  if (!acquisition) return;
+  response.cookies.set(ACQUISITION_COOKIE, encodeAcquisition(acquisition), {
+    maxAge: ACQUISITION_MAX_AGE,
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
 }
 
 export const config = {
