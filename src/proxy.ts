@@ -48,7 +48,9 @@ export async function proxy(request: NextRequest) {
   if (isProtected && !hasSession) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
+    // La query aussi : un retour de paiement (/dashboard/abonnement?plan=…)
+    // doit retrouver son contexte après la reconnexion.
+    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
