@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         email: user.email ?? undefined,
         phone: shop?.whatsappNumber ?? shop?.contactPhone ?? undefined,
       },
-      success_url: `${appUrl}/dashboard/settings?abonnement=succes`,
+      success_url: `${appUrl}/dashboard/abonnement?plan=${plan}&via=mobile-money`,
       error_url: `${appUrl}/pricing?paiement=echec`,
       // Relu par le webhook pour savoir qu'il s'agit d'un abonnement et non
       // d'une commande acheteur.
