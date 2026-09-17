@@ -125,19 +125,24 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
   passe au rouge sinon, mais les pages, elles, tombent en 500.
 - **Sonde TikTok** (`src/lib/ops/tiktok-link.ts`) : TikTok fait passer
   chaque lien de bio par `www.tiktok.com/link/v2` et décide par domaine —
-  302 direct pour les domaines qu'il connaît (Linktree, Instagram, wa.me…
-  et même example.com), page « Tu quittes TikTok… Ouvrir quand même » pour
-  `bio-lien.com` (mesuré le 16/09/2026 ; rien côté site n'y change). Le
-  cron rejoue la requête chaque nuit : la phrase est dans le rapport et
-  sur l'écran Santé, et une alerte s'ouvre le jour où le statut bascule
-  (`tiktok.link_direct` / `tiktok.link_interstitial`, et `tiktok.link_blocked`,
-  critique, si TikTok sert sa page « Ce lien peut être dangereux » — elle
-  aussi en 200, d'où la lecture du corps). TikTok tient deux listes : celle
-  de l'app (`aid=1233`, le verdict qui compte) et celle du site tiktok.com
-  (`aid=1988`), gardée à côté. À la main :
+  302 direct pour les domaines de sa liste (Linktree, wa.me… et même
+  example.com), écran « Tu quittes TikTok » pour tout le reste (bio-lien.com
+  comme instagram.com ; mesuré le 16/09/2026 ; rien côté site n'y change).
+  Le 200 recouvre trois gabarits, lus à la classe du conteneur (app) ou de
+  `<body>` (site) : `normal` (l'écran, bouton `continue-button` côté app /
+  `open-anyway-button` côté site), `suspicious` (« Alerte de sécurité »,
+  même bouton), `malicious` (blocage, sans bouton). TikTok tient deux
+  listes : celle de l'app (`aid=1233`, le verdict qui compte) et celle du
+  site tiktok.com (`aid=1988`), gardée à côté. Le cron rejoue la requête
+  chaque nuit : la phrase est dans le rapport et sur l'écran Santé, et une
+  alerte s'ouvre le jour où le statut bascule (`tiktok.link_direct`,
+  `tiktok.link_interstitial`, et — critiques — `tiktok.link_suspicious`,
+  `tiktok.link_blocked`) ; un 200 illisible (gabarit renommé, défi
+  anti-robot) ouvre `tiktok.probe_unreadable` plutôt que de se taire. À la
+  main :
   `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1233&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
-  → `302` = direct, `200` = écran (ou blocage : chercher `open-anyway-button`
-  dans le corps pour les distinguer).
+  → `302` = direct ; `200` = regarder la classe `normal` / `suspicious` /
+  `malicious` dans le corps.
 
 ## Notifications WhatsApp du vendeur
 
