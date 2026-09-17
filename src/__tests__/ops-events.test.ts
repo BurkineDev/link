@@ -83,13 +83,29 @@ const mockPrisma = {
       _rows.push(row);
       return row;
     }),
-    updateMany: jest.fn(async ({ where, data }: { where: { id: string; acknowledgedAt: null }; data: Record<string, unknown> }) => {
-      const row = _rows.find((r) => r.id === where.id && r.acknowledgedAt === null);
-      if (!row) return { count: 0 };
-      row.acknowledgedAt = data.acknowledgedAt as Date;
-      row.acknowledgedBy = data.acknowledgedBy as string;
-      return { count: 1 };
-    }),
+    updateMany: jest.fn(
+      async ({ where, data }: { where: { id?: string; kind?: { in: string[] }; acknowledgedAt: null }; data: Record<string, unknown> }) => {
+        failIfDown();
+        const rows = _rows.filter(
+          (r) => r.acknowledgedAt === null && (where.id ? r.id === where.id : where.kind!.in.includes(r.kind)),
+        );
+        for (const row of rows) {
+          row.acknowledgedAt = data.acknowledgedAt as Date;
+          row.acknowledgedBy = data.acknowledgedBy as string;
+        }
+        return { count: rows.length };
+      },
+    ),
+    findMany: jest.fn(
+      async ({ where, take }: { where: { kind: string }; orderBy: { createdAt: "desc" }; take: number }) => {
+        failIfDown();
+        return _rows
+          .filter((r) => r.kind === where.kind)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, take)
+          .map((r) => ({ context: r.context }));
+      },
+    ),
   },
 };
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
@@ -111,7 +127,7 @@ const fetchMock = jest.fn(async (url: string, init: { body: string }) => {
   return { ok: true, status: 200 } as Response;
 });
 
-import { acknowledgeOpsEvent, recordOpsEvent } from "@/lib/ops/events";
+import { acknowledgeOpsEvent, acknowledgeOpsEventsByKind, recentCronRunContexts, recordOpsEvent } from "@/lib/ops/events";
 
 const T0 = new Date("2026-09-14T03:00:00Z");
 const critical = (over: Record<string, unknown> = {}) => ({
@@ -263,5 +279,56 @@ describe("recordOpsEvent", () => {
     process.env.ADMIN_EMAILS = "a@bio-lien.test, B@bio-lien.test";
     await recordOpsEvent(critical(), { now: T0 });
     expect(_emails.map((m) => m.to)).toEqual(["a@bio-lien.test", "b@bio-lien.test"]);
+  });
+});
+
+describe("recentCronRunContexts", () => {
+  const heartbeat = (day: number, context: unknown) =>
+    recordOpsEvent(
+      { kind: "cron.run", severity: "info", title: `Passage ${day}`, context: context as Record<string, unknown>, dedupeKey: `cron.run:${day}` },
+      { now: new Date(T0.getTime() + day * 24 * 60 * 60 * 1000) },
+    );
+
+  test("les derniers cron.run du plus récent au plus ancien, contexte null conservé, les autres familles ignorées", async () => {
+    await heartbeat(1, { tiktok: { status: "interstitial" } });
+    await heartbeat(2, null);
+    await heartbeat(3, { tiktok: { status: "direct" } });
+    await recordOpsEvent(critical(), { now: T0 });
+    expect(await recentCronRunContexts()).toEqual([{ tiktok: { status: "direct" } }, null, { tiktok: { status: "interstitial" } }]);
+    expect(await recentCronRunContexts(2)).toEqual([{ tiktok: { status: "direct" } }, null]);
+  });
+
+  test("la fenêtre par défaut couvre la rétention : une semaine de sondes en échec n'efface pas la mémoire", async () => {
+    await heartbeat(0, { tiktok: { status: "direct" } });
+    for (let day = 1; day <= 30; day++) await heartbeat(day, { tiktok: { status: "unknown" } });
+    const contexts = await recentCronRunContexts();
+    expect(contexts).toHaveLength(31);
+    expect(contexts[30]).toEqual({ tiktok: { status: "direct" } });
+  });
+
+  test("base injoignable : liste vide, pas d'exception", async () => {
+    _dbDown = true;
+    expect(await recentCronRunContexts()).toEqual([]);
+  });
+});
+
+describe("acknowledgeOpsEventsByKind", () => {
+  test("marque traitées les lignes ouvertes des familles données, pas les autres, et dit combien", async () => {
+    await recordOpsEvent({ kind: "tiktok.link_direct", severity: "warning", title: "direct", dedupeKey: "tiktok.link_direct" }, { now: T0 });
+    await recordOpsEvent({ kind: "tiktok.link_interstitial", severity: "warning", title: "écran", dedupeKey: "tiktok.link_interstitial" }, { now: T0 });
+    await recordOpsEvent(critical(), { now: T0 });
+
+    expect(await acknowledgeOpsEventsByKind(["tiktok.link_direct", "tiktok.link_blocked"], "sonde TikTok")).toBe(1);
+    expect(_rows.find((r) => r.kind === "tiktok.link_direct")).toMatchObject({ acknowledgedBy: "sonde TikTok" });
+    expect(_rows.find((r) => r.kind === "tiktok.link_interstitial")?.acknowledgedAt).toBeNull();
+    expect(_rows.find((r) => r.kind === "payment.late_after_cancel")?.acknowledgedAt).toBeNull();
+    // Déjà traitée : plus rien à faire.
+    expect(await acknowledgeOpsEventsByKind(["tiktok.link_direct"], "sonde TikTok")).toBe(0);
+    expect(await acknowledgeOpsEventsByKind([], "sonde TikTok")).toBe(0);
+  });
+
+  test("base injoignable : 0, pas d'exception", async () => {
+    _dbDown = true;
+    expect(await acknowledgeOpsEventsByKind(["tiktok.link_direct"], "sonde TikTok")).toBe(0);
   });
 });

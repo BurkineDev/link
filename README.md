@@ -89,6 +89,16 @@ Le développement local et les previews Vercel utilisent la branche Neon
 avec `vercel env pull`, et ne collez jamais les URL de `development` dans
 Vercel Production.
 
+**Previews désactivées pour l'instant.** Les variables Vercel sont
+synchronisées depuis Infisical (environnement « Production »), et ce
+mapping donne aujourd'hui aux previews la `DATABASE_URL` de production : le
+garde-fou refuse le build (c'est son rôle) et chaque PR porte un check Vercel
+rouge. En attendant que le mapping envoie la branche `development` à
+Preview, `vercel.json` porte un `ignoreCommand` qui ne construit que
+Vercel Production (`VERCEL_ENV=production`) ; les previews sont ignorées,
+pas en échec. Retirer cette ligne le jour où Preview reçoit ses propres
+variables.
+
 ### Santé, alertes et rapport quotidien
 
 Tout ce qui casse en silence (webhook rejeté, paiement arrivé après
@@ -113,6 +123,19 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
 - Déploiement : appliquer `npm run db:deploy` (ou `prisma migrate deploy`)
   **avant** de fusionner une PR qui porte une migration — `/api/health`
   passe au rouge sinon, mais les pages, elles, tombent en 500.
+- **Sonde TikTok** (`src/lib/ops/tiktok-link.ts`) : TikTok fait passer
+  chaque lien de bio par `www.tiktok.com/link/v2` et décide par domaine —
+  302 direct pour les domaines qu'il connaît (Linktree, Instagram, wa.me…
+  et même example.com), page « Tu quittes TikTok… Ouvrir quand même » pour
+  `bio-lien.com` (mesuré le 16/09/2026 ; rien côté site n'y change). Le
+  cron rejoue la requête chaque nuit : la phrase est dans le rapport et
+  sur l'écran Santé, et une alerte s'ouvre le jour où le statut bascule
+  (`tiktok.link_direct` / `tiktok.link_interstitial`, et `tiktok.link_blocked`,
+  critique, si TikTok sert sa page « Ce lien peut être dangereux » — elle
+  aussi en 200, d'où la lecture du corps). À la main :
+  `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1988&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
+  → `302` = direct, `200` = écran (ou blocage : chercher `open-anyway-button`
+  dans le corps pour les distinguer).
 
 ## Notifications WhatsApp du vendeur
 

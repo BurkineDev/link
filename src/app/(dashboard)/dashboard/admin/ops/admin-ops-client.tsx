@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { formatDate } from "@/lib/utils/format";
 import { SEVERITY_LABELS, type OpsSeverity } from "@/lib/ops/alert";
 import type { HealthSnapshot } from "@/lib/ops/health";
+import { describeTikTokLinkProbe, readTikTokProbe } from "@/lib/ops/tiktok-link";
 import { cn } from "@/lib/utils";
 
 export interface OpsEventView {
@@ -267,13 +268,17 @@ export function AdminOpsClient({
           <CardTitle>Dernier passage du cron</CardTitle>
           <CardDescription>
             Expiration des commandes WhatsApp, réconciliation Mobile Money, relance des reversements,
-            puis rapport quotidien.
+            sonde du lien TikTok, puis rapport quotidien.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {lastRun ? (
             <>
               <p className="text-sm">Le {formatDateTime(lastRun.at)}</p>
+              {/* La sonde TikTok en clair, échec compris ; le brut reste dans le tableau. */}
+              {readTikTokProbe(lastRun.context) ? (
+                <p className="mt-1 text-sm">{describeTikTokLinkProbe(readTikTokProbe(lastRun.context))}</p>
+              ) : null}
               <ContextTable context={lastRun.context} />
             </>
           ) : (

@@ -297,3 +297,45 @@ export async function purgeOpsEvents(now: Date = new Date()): Promise<number> {
   ]);
   return acknowledged.count + traces.count;
 }
+
+/**
+ * Les contextes des derniers battements de cœur (`cron.run`), du plus
+ * récent au plus ancien : c'est là que le passage précédent a laissé ce
+ * qu'il a mesuré (la sonde TikTok, par exemple). La fenêtre couvre la
+ * rétention des traces (60 jours, voir `purgeOpsEvents`) : une semaine de
+ * sonde en échec ne doit pas effacer la mémoire. Jamais d'exception — sans
+ * base, on repart sans mémoire.
+ */
+export async function recentCronRunContexts(limit = 60): Promise<Array<Record<string, unknown> | null>> {
+  try {
+    const rows = await prisma.opsEvent.findMany({
+      where: { kind: "cron.run" },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { context: true },
+    });
+    return rows.map((row) => (row.context as Record<string, unknown> | null) ?? null);
+  } catch (error) {
+    console.error("[ops] impossible de relire les derniers passages du cron", error);
+    return [];
+  }
+}
+
+/**
+ * Marquer traitées toutes les lignes ouvertes de ces familles — pour qu'une
+ * alerte ne contredise pas la suivante (la sonde TikTok qui dit « direct »
+ * ferme le « écran de retour » d'hier). Jamais d'exception.
+ */
+export async function acknowledgeOpsEventsByKind(kinds: readonly string[], by: string): Promise<number> {
+  if (kinds.length === 0) return 0;
+  try {
+    const { count } = await prisma.opsEvent.updateMany({
+      where: { kind: { in: [...kinds] }, acknowledgedAt: null },
+      data: { acknowledgedAt: new Date(), acknowledgedBy: by },
+    });
+    return count;
+  } catch (error) {
+    console.error("[ops] impossible de marquer traitées les familles", kinds, error);
+    return 0;
+  }
+}
