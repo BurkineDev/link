@@ -56,12 +56,6 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-geniuspay-event") || request.headers.get("x-webhook-event") || "";
 
   if (!verifyWebhookSignature({ rawBody, signature, timestamp })) {
-    // Diagnostic temporaire (septembre 2026) : le webhook de test Genius Pay
-    // reste rejeté alors que le secret est vérifié. La signature est un MAC,
-    // pas un secret ; le corps d'une requête refusée n'a rien de fiable. On
-    // journalise pour rejouer les schémas hors ligne. À retirer une fois
-    // le schéma réel identifié.
-    console.error("[geniuspay-webhook] rejeté", JSON.stringify({ signature, timestamp, event, body: rawBody.slice(0, 4000) }));
     // Secret absent ou tourné, horloge en dérive : le fondateur doit le
     // savoir — un secret mal collé arrête les abonnements et boosts Mobile
     // Money, et les ventes si le mode En ligne est actif, sans autre

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     mode: "subscription",
     customer: customerId,
     locale: "fr",
-    success_url: `${appUrl}/dashboard/profile?subscribed=1`,
+    success_url: `${appUrl}/dashboard/abonnement?plan=${parsed.plan}&via=carte`,
     cancel_url: `${appUrl}/pricing?cancelled=1`,
     line_items: [
       priceId
