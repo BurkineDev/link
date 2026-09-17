@@ -219,7 +219,7 @@ describe("formatDigestEmail", () => {
       };
       expect(formatDigestEmail(offline).text).not.toContain("Lien TikTok");
       const withProbe = formatDigestEmail({ ...offline, cron: { ...offline.cron!, tiktok: probe } }).text;
-      expect(withProbe).toContain("- Lien TikTok : encore l'écran « Ouvrir quand même » dans l'app");
+      expect(withProbe).toContain("- Lien TikTok : encore l'écran « Tu quittes TikTok » de l'app");
       expect(withProbe.indexOf("Reversements en retard")).toBeLessThan(withProbe.indexOf("Lien TikTok"));
       const direct = formatDigestEmail({
         ...base,

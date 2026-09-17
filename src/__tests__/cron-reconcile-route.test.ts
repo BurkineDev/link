@@ -52,7 +52,8 @@ jest.mock("@/lib/ops/events", () => ({
 
 // La sonde TikTok : le réseau est remplacé, la lecture de la réponse et la
 // règle de bascule restent les vraies (voir ops-tiktok-link.test.ts).
-let _tiktokStatus: "direct" | "interstitial" | "blocked" | "unknown" = "interstitial";
+let _tiktokStatus: "direct" | "interstitial" | "suspicious" | "blocked" | "unknown" = "interstitial";
+let _tiktokUnreadable = false;
 jest.mock("@/lib/ops/tiktok-link", () => {
   const real = jest.requireActual("@/lib/ops/tiktok-link");
   return {
@@ -60,9 +61,9 @@ jest.mock("@/lib/ops/tiktok-link", () => {
     probeTikTokLink: jest.fn(async () => ({
       status: _tiktokStatus,
       target: real.TIKTOK_PROBE_TARGET,
-      httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "unknown" ? null : 200,
+      httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "unknown" && !_tiktokUnreadable ? null : 200,
       location: _tiktokStatus === "direct" ? real.TIKTOK_PROBE_TARGET : null,
-      error: _tiktokStatus === "unknown" ? "fetch failed" : null,
+      error: _tiktokStatus === "unknown" ? (_tiktokUnreadable ? "200 sans la page attendue — gabarit : aucun" : "fetch failed") : null,
       webStatus: _tiktokStatus,
     })),
   };
@@ -85,6 +86,7 @@ beforeEach(() => {
   _previousRuns = [];
   _acknowledged.length = 0;
   _tiktokStatus = "interstitial";
+  _tiktokUnreadable = false;
   _reconcile = { checked: 2, paid: 1, failed: 0, stillPending: 1, errors: 0 };
   _payoutsThrow = false;
   _expireThrow = false;
@@ -133,14 +135,14 @@ describe("GET /api/cron/reconcile-orders", () => {
   });
 
   describe("sonde TikTok", () => {
-    test("l'écran, comme hier : aucune alerte, rien n'est marqué traité", async () => {
+    test("l'écran, comme hier : aucune alerte ; seule « page illisible » est refermée", async () => {
       _previousRuns = [{ tiktok: { status: "interstitial" } }];
       await call("Bearer s3cret");
       expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
-      expect(_acknowledged).toEqual([]);
+      expect(_acknowledged).toEqual([{ kinds: ["tiktok.probe_unreadable"], by: "sonde TikTok" }]);
     });
 
-    test("le domaine passe (302) : une alerte « ouvre directement », les alertes inverses marquées traitées, le battement de cœur le garde", async () => {
+    test("le domaine passe (302) : une alerte « ouvre directement », les alertes de statut inverses marquées traitées, le battement de cœur le garde", async () => {
       _tiktokStatus = "direct";
       _previousRuns = [{ tiktok: { status: "unknown" } }, { tiktok: { status: "interstitial" } }];
       const res = await call("Bearer s3cret");
@@ -148,9 +150,12 @@ describe("GET /api/cron/reconcile-orders", () => {
       expect(_events.find((e) => e.kind === "tiktok.link_direct")).toMatchObject({
         severity: "warning",
         dedupeKey: "tiktok.link_direct",
-        context: expect.objectContaining({ httpStatus: 302, previous: "interstitial" }),
+        context: expect.objectContaining({ httpStatus: 302, webStatus: "direct", previous: "interstitial" }),
       });
-      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_interstitial", "tiktok.link_blocked"], by: "sonde TikTok" }]);
+      expect(_acknowledged).toEqual([
+        { kinds: ["tiktok.probe_unreadable"], by: "sonde TikTok" },
+        { kinds: ["tiktok.link_interstitial", "tiktok.link_suspicious", "tiktok.link_blocked"], by: "sonde TikTok" },
+      ]);
       expect(_events.find((e) => e.kind === "cron.run")?.context).toMatchObject({ tiktok: { status: "direct" } });
     });
 
@@ -163,26 +168,56 @@ describe("GET /api/cron/reconcile-orders", () => {
       // Le passage suivant relit le battement de cœur que le précédent vient d'écrire.
       _previousRuns = [];
       _tiktokStatus = "interstitial";
+      _acknowledged.length = 0;
       await call("Bearer s3cret");
       expect(_events.map((e) => e.kind)).toEqual(["cron.run", "tiktok.link_interstitial", "cron.run"]);
-      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_direct", "tiktok.link_blocked"], by: "sonde TikTok" }]);
+      expect(_acknowledged).toEqual([
+        { kinds: ["tiktok.probe_unreadable"], by: "sonde TikTok" },
+        { kinds: ["tiktok.link_direct", "tiktok.link_suspicious", "tiktok.link_blocked"], by: "sonde TikTok" },
+      ]);
     });
 
-    test("page de blocage : alerte critique, e-mail immédiat via recordOpsEvent", async () => {
+    test("page de blocage ou alerte de sécurité : alerte critique, e-mail immédiat via recordOpsEvent", async () => {
       _tiktokStatus = "blocked";
       _previousRuns = [{ tiktok: { status: "interstitial" } }];
       await call("Bearer s3cret");
       expect(_events.find((e) => e.kind === "tiktok.link_blocked")).toMatchObject({ severity: "critical" });
-      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_direct", "tiktok.link_interstitial"], by: "sonde TikTok" }]);
+      expect(_acknowledged[1]).toEqual({ kinds: ["tiktok.link_direct", "tiktok.link_interstitial", "tiktok.link_suspicious"], by: "sonde TikTok" });
+
+      _events.length = 0;
+      _acknowledged.length = 0;
+      _tiktokStatus = "suspicious";
+      _previousRuns = [{ tiktok: { status: "interstitial" } }];
+      await call("Bearer s3cret");
+      expect(_events.find((e) => e.kind === "tiktok.link_suspicious")).toMatchObject({ severity: "critical" });
+      expect(_acknowledged[1]).toEqual({ kinds: ["tiktok.link_direct", "tiktok.link_interstitial", "tiktok.link_blocked"], by: "sonde TikTok" });
     });
 
-    test("TikTok injoignable : rien à conclure, le passage réussit quand même", async () => {
+    test("TikTok injoignable : rien à conclure, rien de refermé, le passage réussit quand même", async () => {
       _tiktokStatus = "unknown";
       _previousRuns = [{ tiktok: { status: "direct" } }];
       const res = await call("Bearer s3cret");
       expect(res.status).toBe(200);
       expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+      expect(_acknowledged).toEqual([]);
       expect((await res.json()).tiktok).toMatchObject({ status: "unknown", error: "fetch failed" });
+    });
+
+    test("200 illisible : alerte « page illisible » sans toucher aux alertes de statut ; le statut connu suivant la referme", async () => {
+      _tiktokStatus = "unknown";
+      _tiktokUnreadable = true;
+      _previousRuns = [{ tiktok: { status: "direct" } }];
+      await call("Bearer s3cret");
+      expect(_events.map((e) => e.kind)).toEqual(["tiktok.probe_unreadable", "cron.run"]);
+      expect(_events[0]).toMatchObject({ severity: "warning", dedupeKey: "tiktok.probe_unreadable" });
+      expect(_acknowledged).toEqual([]);
+
+      _events.length = 0;
+      _tiktokStatus = "direct";
+      _tiktokUnreadable = false;
+      await call("Bearer s3cret");
+      expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+      expect(_acknowledged).toEqual([{ kinds: ["tiktok.probe_unreadable"], by: "sonde TikTok" }]);
     });
   });
 

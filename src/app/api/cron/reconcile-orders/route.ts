@@ -7,7 +7,8 @@ import { sendDailyDigest } from "@/lib/ops/digest";
 import {
   previousKnownTikTokStatus,
   probeTikTokLink,
-  TIKTOK_ALERT_KINDS,
+  TIKTOK_PROBE_UNREADABLE_KIND,
+  TIKTOK_STATUS_ALERT_KINDS,
   tiktokLinkChange,
 } from "@/lib/ops/tiktok-link";
 
@@ -115,16 +116,22 @@ export async function GET(request: NextRequest) {
   // Le lien de bio s'ouvre-t-il directement dans TikTok ? (voir
   // @/lib/ops/tiktok-link ; la sonde ne lève jamais). Une alerte s'ouvre
   // seulement le jour où le statut bascule, en le comparant au dernier
-  // battement de cœur qui en avait un — et l'alerte inverse encore ouverte
-  // est marquée traitée, pour que deux lignes ne se contredisent pas.
+  // battement de cœur qui en avait un — et les alertes de statut encore
+  // ouvertes sont marquées traitées, pour que deux lignes ne se
+  // contredisent pas. Un statut connu referme aussi « page illisible ».
   const tiktok = await tiktokPromise;
   console.info("[cron] sonde TikTok:", tiktok);
   const tiktokChange = tiktokLinkChange(previousKnownTikTokStatus(await recentCronRunContexts()), tiktok);
+  if (tiktok.status !== "unknown") {
+    await acknowledgeOpsEventsByKind([TIKTOK_PROBE_UNREADABLE_KIND], "sonde TikTok");
+  }
   if (tiktokChange) {
-    await acknowledgeOpsEventsByKind(
-      TIKTOK_ALERT_KINDS.filter((kind) => kind !== tiktokChange.kind),
-      "sonde TikTok",
-    );
+    if (tiktokChange.kind !== TIKTOK_PROBE_UNREADABLE_KIND) {
+      await acknowledgeOpsEventsByKind(
+        TIKTOK_STATUS_ALERT_KINDS.filter((kind) => kind !== tiktokChange.kind),
+        "sonde TikTok",
+      );
+    }
     await recordOpsEvent(tiktokChange);
   }
 
