@@ -13,8 +13,19 @@ export const metadata = {
   title: "Paramètres de la boutique",
 };
 
-export default async function SettingsPage() {
-  const user = await requireUser();
+const TABS = ["general", "appearance", "links", "contact", "payments", "shipping", "danger"] as const;
+type SettingsTab = (typeof TABS)[number];
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [user, params] = await Promise.all([requireUser(), searchParams]);
+  // ?tab=appearance : la page « Tu es en Pro » envoie droit sur le badge.
+  const initialTab: SettingsTab = (TABS as readonly string[]).includes(String(params.tab))
+    ? (params.tab as SettingsTab)
+    : "general";
 
   const shopRow = await prisma.shop.findFirst({ where: { ownerId: user.id } });
 
@@ -52,6 +63,7 @@ export default async function SettingsPage() {
       canUseAi={getPlanLimits(plan).aiWriting}
       canHideBadge={canHideBadge(plan)}
       onlineCheckout={onlineCheckout}
+      initialTab={initialTab}
     />
   );
 }
