@@ -120,9 +120,12 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
   `bio-lien.com` (mesuré le 16/09/2026 ; rien côté site n'y change). Le
   cron rejoue la requête chaque nuit : la phrase est dans le rapport et
   sur l'écran Santé, et une alerte s'ouvre le jour où le statut bascule
-  (`tiktok.link_direct` / `tiktok.link_interstitial`). À la main :
+  (`tiktok.link_direct` / `tiktok.link_interstitial`, et `tiktok.link_blocked`,
+  critique, si TikTok sert sa page « Ce lien peut être dangereux » — elle
+  aussi en 200, d'où la lecture du corps). À la main :
   `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1988&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
-  → `302` = direct, `200` = écran.
+  → `302` = direct, `200` = écran (ou blocage : chercher `open-anyway-button`
+  dans le corps pour les distinguer).
 
 ## Notifications WhatsApp du vendeur
 

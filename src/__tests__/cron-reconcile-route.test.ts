@@ -28,6 +28,7 @@ jest.mock("@/lib/orders/expire-manual", () => ({
 
 const _events: Array<Record<string, unknown>> = [];
 let _previousRuns: Array<Record<string, unknown> | null> = [];
+const _acknowledged: Array<{ kinds: string[]; by: string }> = [];
 jest.mock("@/lib/ops/events", () => ({
   recordOpsEvent: jest.fn(async (input: Record<string, unknown>) => {
     _events.push(input);
@@ -36,12 +37,22 @@ jest.mock("@/lib/ops/events", () => ({
   ops: { critical: jest.fn(), warning: jest.fn(), info: jest.fn() },
   recordOpsEventAfterResponse: jest.fn(),
   purgeOpsEvents: jest.fn(async () => 0),
-  recentCronRunContexts: jest.fn(async () => _previousRuns),
+  // Comme la base : les battements de cœur déjà écrits par ce test (du plus
+  // récent au plus ancien) précèdent la mémoire simulée — une route qui
+  // écrirait cron.run AVANT de sonder se verrait donc elle-même.
+  recentCronRunContexts: jest.fn(async () => [
+    ..._events.filter((e) => e.kind === "cron.run").map((e) => e.context as Record<string, unknown>).reverse(),
+    ..._previousRuns,
+  ]),
+  acknowledgeOpsEventsByKind: jest.fn(async (kinds: readonly string[], by: string) => {
+    _acknowledged.push({ kinds: [...kinds], by });
+    return kinds.length;
+  }),
 }));
 
 // La sonde TikTok : le réseau est remplacé, la lecture de la réponse et la
 // règle de bascule restent les vraies (voir ops-tiktok-link.test.ts).
-let _tiktokStatus: "direct" | "interstitial" | "unknown" = "interstitial";
+let _tiktokStatus: "direct" | "interstitial" | "blocked" | "unknown" = "interstitial";
 jest.mock("@/lib/ops/tiktok-link", () => {
   const real = jest.requireActual("@/lib/ops/tiktok-link");
   return {
@@ -49,7 +60,7 @@ jest.mock("@/lib/ops/tiktok-link", () => {
     probeTikTokLink: jest.fn(async () => ({
       status: _tiktokStatus,
       target: real.TIKTOK_PROBE_TARGET,
-      httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "interstitial" ? 200 : null,
+      httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "unknown" ? null : 200,
       location: _tiktokStatus === "direct" ? real.TIKTOK_PROBE_TARGET : null,
       error: _tiktokStatus === "unknown" ? "fetch failed" : null,
     })),
@@ -71,6 +82,7 @@ function call(auth?: string, userAgent?: string) {
 beforeEach(() => {
   _events.length = 0;
   _previousRuns = [];
+  _acknowledged.length = 0;
   _tiktokStatus = "interstitial";
   _reconcile = { checked: 2, paid: 1, failed: 0, stillPending: 1, errors: 0 };
   _payoutsThrow = false;
@@ -118,13 +130,14 @@ describe("GET /api/cron/reconcile-orders", () => {
   });
 
   describe("sonde TikTok", () => {
-    test("l'écran, comme hier : aucune alerte", async () => {
+    test("l'écran, comme hier : aucune alerte, rien n'est marqué traité", async () => {
       _previousRuns = [{ tiktok: { status: "interstitial" } }];
       await call("Bearer s3cret");
       expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+      expect(_acknowledged).toEqual([]);
     });
 
-    test("le domaine passe (302) : une alerte « ouvre directement », le battement de cœur le garde", async () => {
+    test("le domaine passe (302) : une alerte « ouvre directement », les alertes inverses marquées traitées, le battement de cœur le garde", async () => {
       _tiktokStatus = "direct";
       _previousRuns = [{ tiktok: { status: "unknown" } }, { tiktok: { status: "interstitial" } }];
       const res = await call("Bearer s3cret");
@@ -134,6 +147,7 @@ describe("GET /api/cron/reconcile-orders", () => {
         dedupeKey: "tiktok.link_direct",
         context: expect.objectContaining({ httpStatus: 302, previous: "interstitial" }),
       });
+      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_interstitial", "tiktok.link_blocked"], by: "sonde TikTok" }]);
       expect(_events.find((e) => e.kind === "cron.run")?.context).toMatchObject({ tiktok: { status: "direct" } });
     });
 
@@ -143,10 +157,20 @@ describe("GET /api/cron/reconcile-orders", () => {
       await call("Bearer s3cret");
       expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
 
-      _events.length = 0;
+      // Le passage suivant relit le battement de cœur que le précédent vient d'écrire.
+      _previousRuns = [];
       _tiktokStatus = "interstitial";
       await call("Bearer s3cret");
-      expect(_events.map((e) => e.kind)).toEqual(["tiktok.link_interstitial", "cron.run"]);
+      expect(_events.map((e) => e.kind)).toEqual(["cron.run", "tiktok.link_interstitial", "cron.run"]);
+      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_direct", "tiktok.link_blocked"], by: "sonde TikTok" }]);
+    });
+
+    test("page de blocage : alerte critique, e-mail immédiat via recordOpsEvent", async () => {
+      _tiktokStatus = "blocked";
+      _previousRuns = [{ tiktok: { status: "interstitial" } }];
+      await call("Bearer s3cret");
+      expect(_events.find((e) => e.kind === "tiktok.link_blocked")).toMatchObject({ severity: "critical" });
+      expect(_acknowledged).toEqual([{ kinds: ["tiktok.link_direct", "tiktok.link_interstitial"], by: "sonde TikTok" }]);
     });
 
     test("TikTok injoignable : rien à conclure, le passage réussit quand même", async () => {

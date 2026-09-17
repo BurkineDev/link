@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { reconcilePendingGeniusPayOrders } from "@/lib/orders/reconcile";
 import { expireStaleManualOrders } from "@/lib/orders/expire-manual";
 import { remindStalePayouts } from "@/lib/payouts/notifications";
-import { purgeOpsEvents, recentCronRunContexts, recordOpsEvent } from "@/lib/ops/events";
+import { acknowledgeOpsEventsByKind, purgeOpsEvents, recentCronRunContexts, recordOpsEvent } from "@/lib/ops/events";
 import { sendDailyDigest } from "@/lib/ops/digest";
-import { previousKnownTikTokStatus, probeTikTokLink, tiktokLinkChange } from "@/lib/ops/tiktok-link";
+import {
+  previousKnownTikTokStatus,
+  probeTikTokLink,
+  TIKTOK_ALERT_KINDS,
+  tiktokLinkChange,
+} from "@/lib/ops/tiktok-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +71,9 @@ export async function GET(request: NextRequest) {
   }
 
   const startedAt = new Date();
+  // La sonde TikTok part tout de suite : son délai réseau (10 s au pire)
+  // se recouvre avec les étapes base de données, qui ne dépendent pas d'elle.
+  const tiktokPromise = probeTikTokLink();
   const result = await reconcilePendingGeniusPayOrders({ limit: BATCH_LIMIT });
   console.info("[cron] réconciliation:", result);
 
@@ -104,14 +112,21 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Le lien de bio s'ouvre-t-il directement dans TikTok ? La sonde rejoue
-  // la requête de l'app (voir @/lib/ops/tiktok-link) et ne lève jamais.
-  // Une alerte s'ouvre seulement le jour où le statut bascule, en le
-  // comparant au dernier battement de cœur qui en avait un.
-  const tiktok = await probeTikTokLink();
+  // Le lien de bio s'ouvre-t-il directement dans TikTok ? (voir
+  // @/lib/ops/tiktok-link ; la sonde ne lève jamais). Une alerte s'ouvre
+  // seulement le jour où le statut bascule, en le comparant au dernier
+  // battement de cœur qui en avait un — et l'alerte inverse encore ouverte
+  // est marquée traitée, pour que deux lignes ne se contredisent pas.
+  const tiktok = await tiktokPromise;
   console.info("[cron] sonde TikTok:", tiktok);
   const tiktokChange = tiktokLinkChange(previousKnownTikTokStatus(await recentCronRunContexts()), tiktok);
-  if (tiktokChange) await recordOpsEvent(tiktokChange);
+  if (tiktokChange) {
+    await acknowledgeOpsEventsByKind(
+      TIKTOK_ALERT_KINDS.filter((kind) => kind !== tiktokChange.kind),
+      "sonde TikTok",
+    );
+    await recordOpsEvent(tiktokChange);
+  }
 
   // Battement de cœur : la ligne que /api/health et l'écran Santé lisent.
   const summary = { reconcile: result, payouts, manualOrders: expired, tiktok };

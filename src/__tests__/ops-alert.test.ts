@@ -224,6 +224,13 @@ describe("formatDigestEmail", () => {
         cron: { ...base.cron!, tiktok: { ...probe, status: "direct", httpStatus: 302, location: probe.target } },
       }).text;
       expect(direct).toContain("- Lien TikTok : bio-lien.com s'ouvre directement dans TikTok (302)");
+      const blocked = formatDigestEmail({ ...offline, cron: { ...offline.cron!, tiktok: { ...probe, status: "blocked" } } }).text;
+      expect(blocked).toContain("- Lien TikTok : BLOQUÉ");
+      const failed = formatDigestEmail({
+        ...offline,
+        cron: { ...offline.cron!, tiktok: { ...probe, status: "unknown", httpStatus: null, error: "fetch failed — ENOTFOUND" } },
+      }).text;
+      expect(failed).toContain("- Lien TikTok : sonde impossible (fetch failed — ENOTFOUND).");
     });
 
     test("à faire : commandes WhatsApp en attente (sans « à la livraison »), manque de stock à voir avec le vendeur", () => {

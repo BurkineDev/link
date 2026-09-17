@@ -58,6 +58,7 @@ export type OpsKind =
   // Sonde TikTok : le lien de bio a changé de côté (voir ./tiktok-link)
   | "tiktok.link_direct"
   | "tiktok.link_interstitial"
+  | "tiktok.link_blocked"
   | (string & {});
 
 export interface OpsEventInput {

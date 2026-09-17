@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { formatDate } from "@/lib/utils/format";
 import { SEVERITY_LABELS, type OpsSeverity } from "@/lib/ops/alert";
 import type { HealthSnapshot } from "@/lib/ops/health";
-import { describeTikTokLinkProbe, readTikTokStatus, type TikTokLinkProbe } from "@/lib/ops/tiktok-link";
+import { describeTikTokLinkProbe, readTikTokProbe } from "@/lib/ops/tiktok-link";
 import { cn } from "@/lib/utils";
 
 export interface OpsEventView {
@@ -275,11 +275,9 @@ export function AdminOpsClient({
           {lastRun ? (
             <>
               <p className="text-sm">Le {formatDateTime(lastRun.at)}</p>
-              {/* La sonde TikTok en clair : le statut brut reste dans le tableau. */}
-              {readTikTokStatus(lastRun.context) ? (
-                <p className="mt-1 text-sm">
-                  {describeTikTokLinkProbe(lastRun.context?.tiktok as TikTokLinkProbe)}
-                </p>
+              {/* La sonde TikTok en clair, échec compris ; le brut reste dans le tableau. */}
+              {readTikTokProbe(lastRun.context) ? (
+                <p className="mt-1 text-sm">{describeTikTokLinkProbe(readTikTokProbe(lastRun.context))}</p>
               ) : null}
               <ContextTable context={lastRun.context} />
             </>
