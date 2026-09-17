@@ -63,6 +63,7 @@ jest.mock("@/lib/ops/tiktok-link", () => {
       httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "unknown" ? null : 200,
       location: _tiktokStatus === "direct" ? real.TIKTOK_PROBE_TARGET : null,
       error: _tiktokStatus === "unknown" ? "fetch failed" : null,
+      webStatus: _tiktokStatus,
     })),
   };
 });
@@ -121,7 +122,9 @@ describe("GET /api/cron/reconcile-orders", () => {
     const run = _events.find((e) => e.kind === "cron.run");
     expect(run).toMatchObject({ severity: "info", context: expect.objectContaining({ reconcile: _reconcile, payouts: { stale: 1, reminded: 1 } }) });
     expect(_events.some((e) => e.kind === "cron.step_failed")).toBe(false);
-    const tiktok = { status: "interstitial", target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null };
+    const tiktok = {
+      status: "interstitial", target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null, webStatus: "interstitial",
+    };
     expect(body.tiktok).toEqual(tiktok);
     expect(run?.context).toMatchObject({ tiktok });
     expect(mockDigest).toHaveBeenCalledWith({
