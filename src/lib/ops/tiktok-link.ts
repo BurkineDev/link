@@ -16,6 +16,12 @@
  * deux pages on a reçue — et un 200 qui n'est ni l'une ni l'autre (défi
  * anti-robot, page de connexion) reste « unknown » plutôt qu'un faux statut.
  *
+ * TikTok tient deux listes légèrement différentes selon le client (`aid`) :
+ * celle de l'app (1233) et celle du site tiktok.com (1988) — youtube.com
+ * passe sur le web mais a l'écran dans l'app, bit.ly l'inverse (mesuré le
+ * 17 septembre 2026). Le verdict qui compte pour un vendeur est celui de
+ * l'app : c'est `status`. Celui du web est gardé à côté (`webStatus`).
+ *
  * La sonde rejoue la même requête que l'app, une fois par jour dans le
  * passage de 03:00, pour savoir objectivement le jour où le domaine change
  * de côté, sans re-tester sur un téléphone. Elle ne lève jamais : une sonde
@@ -30,6 +36,7 @@ export type TikTokLinkStatus = "direct" | "interstitial" | "blocked" | "unknown"
 const KNOWN_STATUSES: ReadonlyArray<TikTokLinkStatus> = ["direct", "interstitial", "blocked"];
 
 export interface TikTokLinkProbe {
+  /** Le verdict de l'app TikTok (`aid=1233`) : celui que voit un visiteur venu d'une vidéo. */
   status: TikTokLinkStatus;
   /** L'URL soumise à TikTok (la page d'accueil : TikTok juge le domaine, pas la page). */
   target: string;
@@ -38,7 +45,12 @@ export interface TikTokLinkProbe {
   location: string | null;
   /** Réseau, délai dépassé ou 200 illisible : le message, jamais une exception. */
   error: string | null;
+  /** Le verdict du site tiktok.com (`aid=1988`), pour information ; null sur les sondes antérieures. */
+  webStatus: TikTokLinkStatus | null;
 }
+
+/** Les identifiants client (`aid`) que TikTok distingue. */
+export const TIKTOK_AID = { app: "1233", web: "1988" } as const;
 
 /** Le domaine que les vendeurs collent dans leur bio ; TikTok le juge en bloc. */
 export const TIKTOK_PROBE_TARGET = "https://www.bio-lien.com/";
@@ -55,19 +67,21 @@ const PROBE_TIMEOUT_MS = 10_000;
 // La page interstitielle fait 2,6 Ko ; on n'en lit jamais plus que ça.
 const BODY_LIMIT = 64_000;
 
-// Marqueurs relevés dans les pages réelles (16/09/2026) : le bouton
-// « Ouvrir quand même » n'existe que sur l'écran franchissable ; la page de
-// blocage porte la classe « malicious » sur <body> et n'a pas ce bouton.
-const OPEN_ANYWAY_MARKER = 'id="open-anyway-button"';
-const BLOCKED_BODY = /<body[^>]*\bclass="[^"]*\bmalicious\b/i;
+// Marqueurs relevés dans les pages réelles (16-17/09/2026). Les deux
+// clients n'ont pas le même gabarit : le bouton de l'écran franchissable est
+// `continue-button` (app, aid 1233) ou `open-anyway-button` (site, aid
+// 1988) ; la page de blocage porte la classe « malicious » (sur <body> côté
+// site, sur le conteneur côté app) et n'a aucun de ces boutons.
+const CONTINUE_MARKERS = ['id="continue-button"', 'id="open-anyway-button"'];
+const BLOCKED_MARKER = /\bclass="[^"]*\bmalicious\b[^"]*"/i;
 
 /** Les familles d'alertes de la sonde : une seule reste ouverte à la fois. */
 export const TIKTOK_ALERT_KINDS = ["tiktok.link_direct", "tiktok.link_interstitial", "tiktok.link_blocked"] as const;
 
 /** L'URL que l'app TikTok ouvre quand on tape un lien de bio (`scene=bio_url`). */
-export function tiktokLinkUrl(target: string): string {
+export function tiktokLinkUrl(target: string, aid: string = TIKTOK_AID.app): string {
   const url = new URL(TIKTOK_LINK_ENDPOINT);
-  url.searchParams.set("aid", "1988");
+  url.searchParams.set("aid", aid);
   url.searchParams.set("lang", "fr");
   url.searchParams.set("scene", "bio_url");
   url.searchParams.set("target", target);
@@ -78,8 +92,8 @@ export function tiktokLinkUrl(target: string): string {
  * Lit la décision de TikTok dans sa réponse.
  * - 3xx vers la cible (même hôte, `Location` relative résolue contre
  *   l'endpoint) : ouverture directe.
- * - 200 avec le bouton « Ouvrir quand même » : l'écran.
- * - 200 avec la page « Ce lien peut être dangereux » : bloqué.
+ * - 200 avec le bouton « Ouvrir » / « Ouvrir quand même » : l'écran.
+ * - 200 avec la page « Ce lien peut être dangereux » (« malicious ») : bloqué.
  * - Tout le reste (redirection ailleurs, 200 inconnu, 403, 5xx) : on ne sait pas.
  */
 export function classifyTikTokLinkResponse(
@@ -93,8 +107,8 @@ export function classifyTikTokLinkResponse(
   }
   if (httpStatus === 200) {
     if (!body) return "unknown";
-    if (body.includes(OPEN_ANYWAY_MARKER)) return "interstitial";
-    if (BLOCKED_BODY.test(body)) return "blocked";
+    if (CONTINUE_MARKERS.some((marker) => body.includes(marker))) return "interstitial";
+    if (BLOCKED_MARKER.test(body)) return "blocked";
     return "unknown";
   }
   return "unknown";
@@ -125,13 +139,16 @@ function describeError(error: unknown): string {
   return detail ? `${error.message} — ${detail}` : error.message;
 }
 
-export async function probeTikTokLink(
-  options: { target?: string; fetchImpl?: typeof fetch } = {},
-): Promise<TikTokLinkProbe> {
-  const target = options.target ?? TIKTOK_PROBE_TARGET;
-  const fetchImpl = options.fetchImpl ?? fetch;
+interface RawVerdict {
+  status: TikTokLinkStatus;
+  httpStatus: number | null;
+  location: string | null;
+  error: string | null;
+}
+
+async function fetchVerdict(fetchImpl: typeof fetch, target: string, aid: string): Promise<RawVerdict> {
   try {
-    const response = await fetchImpl(tiktokLinkUrl(target), {
+    const response = await fetchImpl(tiktokLinkUrl(target, aid), {
       method: "GET",
       // Le 302 est la réponse qu'on veut lire, pas suivre.
       redirect: "manual",
@@ -149,20 +166,26 @@ export async function probeTikTokLink(
     const status = classifyTikTokLinkResponse(response.status, location, target, body);
     return {
       status,
-      target,
       httpStatus: response.status,
       location,
       error: status === "unknown" && response.status === 200 ? "200 sans la page attendue" : null,
     };
   } catch (error) {
-    return {
-      status: "unknown",
-      target,
-      httpStatus: null,
-      location: null,
-      error: describeError(error),
-    };
+    return { status: "unknown", httpStatus: null, location: null, error: describeError(error) };
   }
+}
+
+export async function probeTikTokLink(
+  options: { target?: string; fetchImpl?: typeof fetch } = {},
+): Promise<TikTokLinkProbe> {
+  const target = options.target ?? TIKTOK_PROBE_TARGET;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  // Les deux clients en parallèle ; le verdict de l'app fait foi.
+  const [app, web] = await Promise.all([
+    fetchVerdict(fetchImpl, target, TIKTOK_AID.app),
+    fetchVerdict(fetchImpl, target, TIKTOK_AID.web),
+  ]);
+  return { ...app, target, webStatus: web.status };
 }
 
 /**
@@ -177,12 +200,17 @@ export function readTikTokProbe(context: Record<string, unknown> | null | undefi
   if (probe.status !== "direct" && probe.status !== "interstitial" && probe.status !== "blocked" && probe.status !== "unknown") {
     return null;
   }
+  const webStatus = probe.webStatus;
   return {
     status: probe.status,
     target: typeof probe.target === "string" ? probe.target : TIKTOK_PROBE_TARGET,
     httpStatus: typeof probe.httpStatus === "number" ? probe.httpStatus : null,
     location: typeof probe.location === "string" ? probe.location : null,
     error: typeof probe.error === "string" ? probe.error : null,
+    webStatus:
+      webStatus === "direct" || webStatus === "interstitial" || webStatus === "blocked" || webStatus === "unknown"
+        ? webStatus
+        : null,
   };
 }
 
@@ -214,7 +242,13 @@ export function tiktokLinkChange(
   previous: TikTokLinkStatus | null,
   probe: TikTokLinkProbe,
 ): OpsEventInput | null {
-  const context = { target: probe.target, httpStatus: probe.httpStatus, location: probe.location, previous };
+  const context = {
+    target: probe.target,
+    httpStatus: probe.httpStatus,
+    location: probe.location,
+    webStatus: probe.webStatus,
+    previous,
+  };
   if (probe.status === "blocked" && previous !== "blocked") {
     return {
       kind: "tiktok.link_blocked",
@@ -256,22 +290,35 @@ export function tiktokLinkChange(
   return null;
 }
 
-/** La phrase du rapport quotidien et de l'écran Santé. */
+const WEB_LABEL: Record<TikTokLinkStatus, string> = {
+  direct: "ouverture directe",
+  interstitial: "l'écran",
+  blocked: "bloqué",
+  unknown: "sonde impossible",
+};
+
+/**
+ * La phrase du rapport quotidien et de l'écran Santé : le verdict de l'app,
+ * puis celui du site tiktok.com seulement s'il diffère (les deux listes
+ * ne sont pas tout à fait les mêmes).
+ */
 export function describeTikTokLinkProbe(probe: TikTokLinkProbe | null | undefined): string {
   if (!probe) return "Lien TikTok : sonde non exécutée.";
+  const web =
+    probe.webStatus && probe.webStatus !== probe.status ? ` Sur le site tiktok.com : ${WEB_LABEL[probe.webStatus]}.` : "";
   switch (probe.status) {
     case "direct":
-      return "Lien TikTok : bio-lien.com s'ouvre directement dans TikTok (302), sans l'écran « Ouvrir quand même ».";
+      return `Lien TikTok : bio-lien.com s'ouvre directement dans l'app (302), sans l'écran « Ouvrir quand même ».${web}`;
     case "interstitial":
-      return "Lien TikTok : encore l'écran « Ouvrir quand même » (TikTok ne connaît pas bio-lien.com).";
+      return `Lien TikTok : encore l'écran « Ouvrir quand même » dans l'app (TikTok ne connaît pas bio-lien.com).${web}`;
     case "blocked":
-      return "Lien TikTok : BLOQUÉ — TikTok affiche « Ce lien peut être dangereux » devant bio-lien.com.";
+      return `Lien TikTok : BLOQUÉ — l'app TikTok affiche « Ce lien peut être dangereux » devant bio-lien.com.${web}`;
     default: {
       if (probe.httpStatus !== null && probe.httpStatus >= 300 && probe.httpStatus < 400 && probe.location) {
         const host = hostOf(probe.location);
-        return `Lien TikTok : sonde impossible (TikTok redirige vers ${host ?? "une autre adresse"} au lieu de bio-lien.com).`;
+        return `Lien TikTok : sonde impossible (TikTok redirige vers ${host ?? "une autre adresse"} au lieu de bio-lien.com).${web}`;
       }
-      return `Lien TikTok : sonde impossible (${probe.error ?? `HTTP ${probe.httpStatus ?? "?"}`}).`;
+      return `Lien TikTok : sonde impossible (${probe.error ?? `HTTP ${probe.httpStatus ?? "?"}`}).${web}`;
     }
   }
 }

@@ -214,16 +214,18 @@ describe("formatDigestEmail", () => {
     });
 
     test("passage du cron : la sonde TikTok s'affiche quand le passage l'a exécutée", () => {
-      const probe = { status: "interstitial" as const, target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null };
+      const probe = {
+        status: "interstitial" as const, target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null, webStatus: "interstitial" as const,
+      };
       expect(formatDigestEmail(offline).text).not.toContain("Lien TikTok");
       const withProbe = formatDigestEmail({ ...offline, cron: { ...offline.cron!, tiktok: probe } }).text;
-      expect(withProbe).toContain("- Lien TikTok : encore l'écran « Ouvrir quand même »");
+      expect(withProbe).toContain("- Lien TikTok : encore l'écran « Ouvrir quand même » dans l'app");
       expect(withProbe.indexOf("Reversements en retard")).toBeLessThan(withProbe.indexOf("Lien TikTok"));
       const direct = formatDigestEmail({
         ...base,
-        cron: { ...base.cron!, tiktok: { ...probe, status: "direct", httpStatus: 302, location: probe.target } },
+        cron: { ...base.cron!, tiktok: { ...probe, status: "direct", httpStatus: 302, location: probe.target, webStatus: "direct" } },
       }).text;
-      expect(direct).toContain("- Lien TikTok : bio-lien.com s'ouvre directement dans TikTok (302)");
+      expect(direct).toContain("- Lien TikTok : bio-lien.com s'ouvre directement dans l'app (302)");
       const blocked = formatDigestEmail({ ...offline, cron: { ...offline.cron!, tiktok: { ...probe, status: "blocked" } } }).text;
       expect(blocked).toContain("- Lien TikTok : BLOQUÉ");
       const failed = formatDigestEmail({

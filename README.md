@@ -132,8 +132,10 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
   sur l'écran Santé, et une alerte s'ouvre le jour où le statut bascule
   (`tiktok.link_direct` / `tiktok.link_interstitial`, et `tiktok.link_blocked`,
   critique, si TikTok sert sa page « Ce lien peut être dangereux » — elle
-  aussi en 200, d'où la lecture du corps). À la main :
-  `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1988&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
+  aussi en 200, d'où la lecture du corps). TikTok tient deux listes : celle
+  de l'app (`aid=1233`, le verdict qui compte) et celle du site tiktok.com
+  (`aid=1988`), gardée à côté. À la main :
+  `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1233&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
   → `302` = direct, `200` = écran (ou blocage : chercher `open-anyway-button`
   dans le corps pour les distinguer).
 
