@@ -89,6 +89,16 @@ Le développement local et les previews Vercel utilisent la branche Neon
 avec `vercel env pull`, et ne collez jamais les URL de `development` dans
 Vercel Production.
 
+**Previews désactivées pour l'instant.** Les variables Vercel sont
+synchronisées depuis Infisical (environnement « Production »), et ce
+mapping donne aujourd'hui aux previews la `DATABASE_URL` de production : le
+garde-fou refuse le build (c'est son rôle) et chaque PR porte un check Vercel
+rouge. En attendant que le mapping envoie la branche `development` à
+Preview, `vercel.json` porte un `ignoreCommand` qui ne construit que
+Vercel Production (`VERCEL_ENV=production`) ; les previews sont ignorées,
+pas en échec. Retirer cette ligne le jour où Preview reçoit ses propres
+variables.
+
 ### Santé, alertes et rapport quotidien
 
 Tout ce qui casse en silence (webhook rejeté, paiement arrivé après
