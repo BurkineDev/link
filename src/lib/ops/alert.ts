@@ -55,6 +55,9 @@ export type OpsKind =
   // Santé
   | "health.migration_drift"
   | "health.db_unreachable"
+  // Sonde TikTok : le lien de bio a changé de côté (voir ./tiktok-link)
+  | "tiktok.link_direct"
+  | "tiktok.link_interstitial"
   | (string & {});
 
 export interface OpsEventInput {

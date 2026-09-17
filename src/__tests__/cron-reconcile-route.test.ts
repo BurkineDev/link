@@ -27,6 +27,7 @@ jest.mock("@/lib/orders/expire-manual", () => ({
 }));
 
 const _events: Array<Record<string, unknown>> = [];
+let _previousRuns: Array<Record<string, unknown> | null> = [];
 jest.mock("@/lib/ops/events", () => ({
   recordOpsEvent: jest.fn(async (input: Record<string, unknown>) => {
     _events.push(input);
@@ -35,7 +36,25 @@ jest.mock("@/lib/ops/events", () => ({
   ops: { critical: jest.fn(), warning: jest.fn(), info: jest.fn() },
   recordOpsEventAfterResponse: jest.fn(),
   purgeOpsEvents: jest.fn(async () => 0),
+  recentCronRunContexts: jest.fn(async () => _previousRuns),
 }));
+
+// La sonde TikTok : le réseau est remplacé, la lecture de la réponse et la
+// règle de bascule restent les vraies (voir ops-tiktok-link.test.ts).
+let _tiktokStatus: "direct" | "interstitial" | "unknown" = "interstitial";
+jest.mock("@/lib/ops/tiktok-link", () => {
+  const real = jest.requireActual("@/lib/ops/tiktok-link");
+  return {
+    ...real,
+    probeTikTokLink: jest.fn(async () => ({
+      status: _tiktokStatus,
+      target: real.TIKTOK_PROBE_TARGET,
+      httpStatus: _tiktokStatus === "direct" ? 302 : _tiktokStatus === "interstitial" ? 200 : null,
+      location: _tiktokStatus === "direct" ? real.TIKTOK_PROBE_TARGET : null,
+      error: _tiktokStatus === "unknown" ? "fetch failed" : null,
+    })),
+  };
+});
 const mockDigest = jest.fn(async () => ({ sent: 1, skipped: null }));
 jest.mock("@/lib/ops/digest", () => ({ sendDailyDigest: (...args: unknown[]) => mockDigest(...(args as [])) }));
 
@@ -51,6 +70,8 @@ function call(auth?: string, userAgent?: string) {
 
 beforeEach(() => {
   _events.length = 0;
+  _previousRuns = [];
+  _tiktokStatus = "interstitial";
   _reconcile = { checked: 2, paid: 1, failed: 0, stillPending: 1, errors: 0 };
   _payoutsThrow = false;
   _expireThrow = false;
@@ -88,8 +109,53 @@ describe("GET /api/cron/reconcile-orders", () => {
     const run = _events.find((e) => e.kind === "cron.run");
     expect(run).toMatchObject({ severity: "info", context: expect.objectContaining({ reconcile: _reconcile, payouts: { stale: 1, reminded: 1 } }) });
     expect(_events.some((e) => e.kind === "cron.step_failed")).toBe(false);
+    const tiktok = { status: "interstitial", target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null };
+    expect(body.tiktok).toEqual(tiktok);
+    expect(run?.context).toMatchObject({ tiktok });
     expect(mockDigest).toHaveBeenCalledWith({
-      cron: { reconcile: _reconcile, payouts: { stale: 1, reminded: 1 }, manualOrders: { expired: 3, errors: 0 } },
+      cron: { reconcile: _reconcile, payouts: { stale: 1, reminded: 1 }, manualOrders: { expired: 3, errors: 0 }, tiktok },
+    });
+  });
+
+  describe("sonde TikTok", () => {
+    test("l'écran, comme hier : aucune alerte", async () => {
+      _previousRuns = [{ tiktok: { status: "interstitial" } }];
+      await call("Bearer s3cret");
+      expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+    });
+
+    test("le domaine passe (302) : une alerte « ouvre directement », le battement de cœur le garde", async () => {
+      _tiktokStatus = "direct";
+      _previousRuns = [{ tiktok: { status: "unknown" } }, { tiktok: { status: "interstitial" } }];
+      const res = await call("Bearer s3cret");
+      expect(res.status).toBe(200);
+      expect(_events.find((e) => e.kind === "tiktok.link_direct")).toMatchObject({
+        severity: "warning",
+        dedupeKey: "tiktok.link_direct",
+        context: expect.objectContaining({ httpStatus: 302, previous: "interstitial" }),
+      });
+      expect(_events.find((e) => e.kind === "cron.run")?.context).toMatchObject({ tiktok: { status: "direct" } });
+    });
+
+    test("déjà direct hier : pas de nouvelle alerte ; l'écran qui revient : alerte « remet l'écran »", async () => {
+      _tiktokStatus = "direct";
+      _previousRuns = [{ tiktok: { status: "direct" } }];
+      await call("Bearer s3cret");
+      expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+
+      _events.length = 0;
+      _tiktokStatus = "interstitial";
+      await call("Bearer s3cret");
+      expect(_events.map((e) => e.kind)).toEqual(["tiktok.link_interstitial", "cron.run"]);
+    });
+
+    test("TikTok injoignable : rien à conclure, le passage réussit quand même", async () => {
+      _tiktokStatus = "unknown";
+      _previousRuns = [{ tiktok: { status: "direct" } }];
+      const res = await call("Bearer s3cret");
+      expect(res.status).toBe(200);
+      expect(_events.map((e) => e.kind)).toEqual(["cron.run"]);
+      expect((await res.json()).tiktok).toMatchObject({ status: "unknown", error: "fetch failed" });
     });
   });
 

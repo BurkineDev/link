@@ -8,6 +8,7 @@ import { OPEN_PAYOUT_STATUSES } from "@/lib/payouts/config";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import type { OpsSeverity } from "./alert";
 import { getHealth, type HealthSnapshot } from "./health";
+import { describeTikTokLinkProbe, type TikTokLinkProbe } from "./tiktok-link";
 
 /**
  * Le rapport quotidien du fondateur, envoyé à la fin du cron de 03:00.
@@ -29,6 +30,8 @@ export interface CronSummary {
   reconcile: { checked: number; paid: number; failed: number; stillPending: number; errors: number };
   payouts: { stale: number; reminded: number };
   manualOrders: { expired: number; errors: number };
+  /** La sonde du lien de bio TikTok (absente sur les passages antérieurs à la sonde). */
+  tiktok?: TikTokLinkProbe | null;
 }
 
 export interface DigestData {
@@ -235,6 +238,9 @@ export function formatDigestEmail(data: DigestData): { subject: string; text: st
           ...(reconcile.checked > 0 || reconcile.errors > 0 ? [reconcileLine] : []),
           payoutsLine,
         ];
+    // La sonde TikTok, quand le passage l'a exécutée : une ligne chaque
+    // jour, pour voir le statut sans attendre l'alerte du jour où il change.
+    if (data.cron.tiktok) cronLines.push(describeTikTokLinkProbe(data.cron.tiktok));
   }
 
   const todoLines = [

@@ -113,6 +113,16 @@ ou que l'e-mail est en panne : dans les deux cas `/api/health` répond 503.
 - Déploiement : appliquer `npm run db:deploy` (ou `prisma migrate deploy`)
   **avant** de fusionner une PR qui porte une migration — `/api/health`
   passe au rouge sinon, mais les pages, elles, tombent en 500.
+- **Sonde TikTok** (`src/lib/ops/tiktok-link.ts`) : TikTok fait passer
+  chaque lien de bio par `www.tiktok.com/link/v2` et décide par domaine —
+  302 direct pour les domaines qu'il connaît (Linktree, Instagram, wa.me…
+  et même example.com), page « Tu quittes TikTok… Ouvrir quand même » pour
+  `bio-lien.com` (mesuré le 16/09/2026 ; rien côté site n'y change). Le
+  cron rejoue la requête chaque nuit : la phrase est dans le rapport et
+  sur l'écran Santé, et une alerte s'ouvre le jour où le statut bascule
+  (`tiktok.link_direct` / `tiktok.link_interstitial`). À la main :
+  `curl -s -o /dev/null -w '%{http_code}' 'https://www.tiktok.com/link/v2?aid=1988&scene=bio_url&target=https%3A%2F%2Fwww.bio-lien.com%2F'`
+  → `302` = direct, `200` = écran.
 
 ## Notifications WhatsApp du vendeur
 

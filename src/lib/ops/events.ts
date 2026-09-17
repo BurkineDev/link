@@ -297,3 +297,24 @@ export async function purgeOpsEvents(now: Date = new Date()): Promise<number> {
   ]);
   return acknowledged.count + traces.count;
 }
+
+/**
+ * Les contextes des derniers battements de cœur (`cron.run`), du plus
+ * récent au plus ancien : c'est là que le passage précédent a laissé ce
+ * qu'il a mesuré (la sonde TikTok, par exemple). Jamais d'exception — sans
+ * base, on repart sans mémoire.
+ */
+export async function recentCronRunContexts(limit = 7): Promise<Array<Record<string, unknown> | null>> {
+  try {
+    const rows = await prisma.opsEvent.findMany({
+      where: { kind: "cron.run" },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { context: true },
+    });
+    return rows.map((row) => (row.context as Record<string, unknown> | null) ?? null);
+  } catch (error) {
+    console.error("[ops] impossible de relire les derniers passages du cron", error);
+    return [];
+  }
+}

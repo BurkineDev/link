@@ -213,6 +213,19 @@ describe("formatDigestEmail", () => {
       expect(stepFailed).toContain("Commandes WhatsApp expirées : étape en échec (1 erreur(s)).");
     });
 
+    test("passage du cron : la sonde TikTok s'affiche quand le passage l'a exécutée", () => {
+      const probe = { status: "interstitial" as const, target: "https://www.bio-lien.com/", httpStatus: 200, location: null, error: null };
+      expect(formatDigestEmail(offline).text).not.toContain("Lien TikTok");
+      const withProbe = formatDigestEmail({ ...offline, cron: { ...offline.cron!, tiktok: probe } }).text;
+      expect(withProbe).toContain("- Lien TikTok : encore l'écran « Ouvrir quand même »");
+      expect(withProbe.indexOf("Reversements en retard")).toBeLessThan(withProbe.indexOf("Lien TikTok"));
+      const direct = formatDigestEmail({
+        ...base,
+        cron: { ...base.cron!, tiktok: { ...probe, status: "direct", httpStatus: 302, location: probe.target } },
+      }).text;
+      expect(direct).toContain("- Lien TikTok : bio-lien.com s'ouvre directement dans TikTok (302)");
+    });
+
     test("à faire : commandes WhatsApp en attente (sans « à la livraison »), manque de stock à voir avec le vendeur", () => {
       const mail = formatDigestEmail(offline);
       expect(mail.text).toContain("3 commandes WhatsApp en attente chez les vendeurs, dont 1 qui expire sous 48 h.");
