@@ -4,11 +4,13 @@ import type { SubscriptionPlan } from "@/lib/types/database";
 export type ExpectedPlan = "starter" | "pro";
 export type PaymentVia = "carte" | "mobile-money";
 
-const RANK: Record<SubscriptionPlan, number> = { free: 0, starter: 1, pro: 2 };
-
-/** Le plan attendu est-il servi (ou dépassé) par le plan effectif ? */
+/**
+ * Le plan attendu est-il exactement le plan effectif ? Un plan supérieur
+ * n'est pas « arrivé » : un Pro qui achète Starter va être rétrogradé par
+ * le webhook, il faut l'attendre plutôt que confirmer un Pro qui s'en va.
+ */
 export function planArrived(expected: ExpectedPlan, effective: SubscriptionPlan): boolean {
-  return RANK[effective] >= RANK[expected];
+  return effective === expected;
 }
 
 /** `plan` de l'URL de retour : seuls starter et pro sont des achats. */
@@ -28,4 +30,4 @@ export function parseVia(value: string | string[] | undefined): PaymentVia {
  * une bonne minute après la confirmation sur le téléphone.
  */
 export const WELCOME_POLL_MS = 3_000;
-export const WELCOME_TIMEOUT_MS = 120_000;
+export const WELCOME_TIMEOUT_MS = 150_000;

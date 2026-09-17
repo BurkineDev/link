@@ -100,6 +100,8 @@ interface SettingsClientProps {
    * n'est pas touché.
    */
   onlineCheckout: boolean;
+  /** Onglet ouvert à l'arrivée (?tab=…), « general » par défaut. */
+  initialTab?: "general" | "appearance" | "links" | "contact" | "payments" | "shipping" | "danger";
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +383,7 @@ export function SettingsClient({
   canUseAi,
   canHideBadge,
   onlineCheckout,
+  initialTab = "general",
 }: SettingsClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -696,7 +699,7 @@ export function SettingsClient({
         </p>
       </div>
 
-      <Tabs defaultValue="general">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="general">Général</TabsTrigger>
           <TabsTrigger value="appearance" className="gap-1.5">

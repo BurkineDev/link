@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectivePlan, PLAN_LIMITS } from "@/lib/subscription";
@@ -27,7 +28,7 @@ export default async function SubscriptionWelcomePage({
   const expected = parseExpectedPlan(params.plan);
   const via = parseVia(params.via);
 
-  const [sub, shop] = await Promise.all([
+  const [sub, shop, payment] = await Promise.all([
     prisma.creatorSubscription.findUnique({
       where: { userId: user.id },
       select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
@@ -36,11 +37,23 @@ export default async function SubscriptionWelcomePage({
       where: { ownerId: user.id },
       select: { _count: { select: { products: true } } },
     }),
+    // La référence Genius Pay du paiement en attente : c'est ce que le
+    // vendeur doit nous donner si rien ne s'active.
+    via === "mobile-money"
+      ? prisma.subscriptionPayment.findFirst({
+          where: { userId: user.id, provider: "geniuspay", status: "pending" },
+          orderBy: { createdAt: "desc" },
+          select: { reference: true },
+        })
+      : null,
   ]);
   const current_period_end = sub?.currentPeriodEnd?.toISOString() ?? null;
   const effective = getEffectivePlan(
     sub ? { plan: sub.plan, status: sub.status, provider: sub.provider, current_period_end } : null,
   );
+
+  // Arrivé ici sans achat en cours et sans plan payant : rien à attendre.
+  if (!expected && effective === "free") redirect("/pricing");
 
   const plans = {
     starter: { label: planLabel("starter"), features: planFeatures("starter"), maxProducts: PLAN_LIMITS.starter.maxProducts },
@@ -54,6 +67,7 @@ export default async function SubscriptionWelcomePage({
       initial={{ effective_plan: effective, provider: sub?.provider ?? null, current_period_end }}
       plans={plans}
       productCount={shop?._count.products ?? 0}
+      reference={payment?.reference ?? null}
     />
   );
 }
