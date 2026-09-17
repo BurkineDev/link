@@ -265,6 +265,15 @@ export function ShopPage({
       <main className="relative mx-auto w-full max-w-[680px] px-4 pb-32 pt-5">
         <BioProfile shop={shop} palette={palette} />
 
+        {/* Les réseaux juste sous la bio, comme sur une page de liens
+            classique : c'est la première chose qu'un visiteur venu de
+            TikTok cherche. */}
+        <BioSocials
+          socialLinks={shop.social_links}
+          palette={palette}
+          className="mt-4"
+        />
+
         {/* ── Liens / Boutique switch ── */}
         {showTabs && (
           <div
@@ -420,12 +429,6 @@ export function ShopPage({
           />
         )}
 
-        <BioSocials
-          socialLinks={shop.social_links}
-          palette={palette}
-          className="mt-8"
-        />
-
         {/* ── Growth loop: every visitor is a potential seller ──
              Le slug voyage : la page d'inscription peut alors nommer la
              boutique que le visiteur vient de voir, et l'inscription reste
@@ -462,7 +465,7 @@ export function ShopPage({
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Commander sur WhatsApp"
+          aria-label={tab === "shop" ? "Commander sur WhatsApp" : "Écrire sur WhatsApp"}
           className={cn(
             "fixed bottom-5 right-4 z-40 flex h-14 items-center gap-2 rounded-full px-5 shadow-lg sm:right-6",
             "transition-transform duration-150 active:scale-95",
@@ -471,7 +474,8 @@ export function ShopPage({
           style={{ backgroundColor: "#25D366" }}
         >
           <MessageCircle className="size-5 text-white" />
-          <span className="text-sm font-semibold text-white">Commander</span>
+          {/* Sur l'onglet Liens, personne ne « commande » : on écrit. */}
+          <span className="text-sm font-semibold text-white">{tab === "shop" ? "Commander" : "WhatsApp"}</span>
         </SmartAppLink>
         )
       ) : (

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import type { BioPalette } from "@/lib/bio-themes";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { blockGoHref } from "@/lib/blocks/ids";
+import { linkSubtitle } from "@/lib/links/subtitle";
 
 // Per-link sharing is a rare tap on a page that must paint fast — load the
 // dialog only when someone actually reaches for it.
@@ -109,6 +110,8 @@ export function BioLinkButton({
 
   const Icon = ICONS[link.icon] ?? ICONS.custom;
   const external = isExternal(link.url);
+  // Sous le titre, où ça mène : « @la_philosophia », « maboutique.com ».
+  const subtitle = linkSubtitle(link.url, link.label);
   // Les liens web portent leur route serveur /go/<id> : sur Android, avant
   // hydratation, le script inline y envoie le tap (décision app/web et clic
   // comptés côté serveur). Une fois hydraté, tout se passe ici.
@@ -179,8 +182,11 @@ export function BioLinkButton({
         </span>
       )}
 
-      <span className="min-w-0 flex-1 truncate px-1 text-center text-[15px] font-semibold">
-        {link.label}
+      <span className="flex min-w-0 flex-1 flex-col items-center px-1 text-center">
+        <span className="w-full truncate text-[15px] font-semibold">{link.label}</span>
+        {subtitle && (
+          <span className="w-full truncate text-xs font-medium opacity-60">{subtitle}</span>
+        )}
       </span>
 
       {/* Keeps the label optically centred behind the share button. */}
@@ -189,7 +195,7 @@ export function BioLinkButton({
   );
 
   const sharedClasses = cn(
-    "flex w-full items-center gap-2 p-2",
+    "flex min-h-16 w-full items-center gap-2 p-2",
     "transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
     radiusClass,
