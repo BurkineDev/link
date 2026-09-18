@@ -14,6 +14,7 @@ import { FacebookIcon, XIcon } from "@/components/shop/brand-icons";
 import { QrCode } from "@/components/shared/qr-code";
 import { cn } from "@/lib/utils";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
+import { AddToHomeScreen } from "@/components/pwa/add-to-home-screen";
 
 /**
  * Share sheet for a bio page or a single link.
@@ -184,6 +185,9 @@ export function BioShareSheet({
             );
           })}
         </div>
+
+        {/* Le client garde la page comme une appli, au nom de la vendeuse. */}
+        <AddToHomeScreen shopName={title} />
 
         <button
           type="button"

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeOrder } from "@/lib/db/serialize";
 import { OrderStatusBadge } from "@/components/dashboard/order-status-badge";
 import { BoostCard } from "@/components/dashboard/boost-card";
+import { InstallCard } from "@/components/pwa/install-card";
 import {
   Card,
   CardHeader,
@@ -480,6 +481,9 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Épingler Bio-Lien sur le téléphone : un vendeur revient sans lien. */}
+      <InstallCard />
 
       {/* Boost */}
       {shop?.id && (

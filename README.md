@@ -99,6 +99,24 @@ Vercel Production (`VERCEL_ENV=production`) ; les previews sont ignorées,
 pas en échec. Retirer cette ligne le jour où Preview reçoit ses propres
 variables.
 
+### Épingler sur le téléphone (PWA)
+
+Il n'y a pas encore d'application dans les magasins : « Ajouter à l'écran
+d'accueil » la remplace. Trois pièces :
+
+- `src/app/manifest.ts` (l'espace vendeur, s'ouvre sur `/dashboard`) et un
+  **manifeste par boutique** (`/{slug}/manifest.webmanifest`, icône
+  `/{slug}/app-icon?size=192|512` aux couleurs du thème) : un client qui
+  épingle `bio-lien.com/awa-couture` voit « Awa Couture », pas Bio-Lien.
+- `public/sw.js`, enregistré en production par `RegisterServiceWorker` :
+  il rend l'installation possible sur Android, sert les fichiers hachés de
+  Next depuis le cache et montre `/offline` quand une navigation n'a pas de
+  réseau. Pages, API et images ne sont jamais mises en cache.
+- `InstallCard` (accueil du tableau de bord) et `AddToHomeScreen` (feuille
+  de partage d'une boutique) : un bouton sur Android quand le navigateur le
+  propose, les deux gestes sur iPhone, « ouvre dans Chrome/Safari » depuis
+  TikTok/Instagram, rien quand ça ne marcherait pas (`src/lib/pwa/install.ts`).
+
 ### Mesurer d'où viennent les vendeurs
 
 Avant de dépenser un franc en publicité, il faut savoir combien de vendeurs

@@ -78,6 +78,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Un lien de bio se partage avec toutes sortes de paramètres de suivi.
     // La canonique dit aux moteurs qu'il n'y a qu'une seule boutique derrière.
     alternates: { canonical: `/${username}` },
+    // Épinglée sur un écran d'accueil, la page porte le nom et l'icône de la
+    // vendeuse, pas ceux de Bio-Lien (voir ./manifest.webmanifest/route.ts).
+    manifest: `/${username}/manifest.webmanifest`,
+    appleWebApp: { capable: true, title: shop.name, statusBarStyle: "default" },
+    icons: { apple: [{ url: `/${username}/app-icon?size=192`, sizes: "192x192", type: "image/png" }] },
     openGraph: {
       url: `/${username}`,
       title: shop.name,
