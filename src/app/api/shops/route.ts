@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShop } from "@/lib/db/serialize";
 import { createShopSchema } from "@/lib/validations/shop";
+import { DEFAULT_BIO_THEME } from "@/lib/bio-themes";
 import { Prisma } from "../../../../prisma/generated/client/client";
 
 // GET /api/shops — get authenticated user's shop(s)
@@ -67,6 +68,9 @@ export async function POST(request: NextRequest) {
         templateId: parsed.data.template_id ?? null,
         isPublished: false,
         themeColor: "#69D100",
+        // Le défaut Prisma reste « classic » pour les boutiques existantes ;
+        // une nouvelle boutique part sur le thème présélectionné à l'onboarding.
+        bioTheme: DEFAULT_BIO_THEME,
       },
     });
 

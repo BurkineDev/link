@@ -437,3 +437,130 @@ input[type="submit"] {
   -webkit-text-stroke: 0.045em var(--b-ink);
   paint-order: stroke fill;
 }
+
+/* ---------------------------------------------------------------------------
+   Décor des thèmes « Afrique de l'Ouest » de la page publique
+   ---------------------------------------------------------------------------
+   Ces utilitaires ne connaissent aucune couleur : tout vient des variables
+   --bio-* posées sur la racine par bioThemeCssVars() (src/lib/bio-themes.ts).
+   Sans décor les variables valent none / 0 et rien ne se dessine.
+
+   Posés dans la couche components pour qu'une classe utilitaire (mt-0, h-40)
+   puisse encore les ajuster dans un aperçu. Jamais de mask-image, de
+   background-attachment: fixed, de mix-blend-mode ni de filtre : ces pages
+   s'ouvrent dans le navigateur de TikTok sur des téléphones d'entrée de gamme.
+--------------------------------------------------------------------------- */
+
+@layer components {
+  /* Lavis de tête : la tuile du thème sur la zone haute, fondue vers le fond
+     avant le nom. Deux calques (motif, puis dégradé) plutôt qu'un mask-image :
+     la story reprend la même construction avec deux div. La hauteur vient
+     toujours d'un style inline (decor.header.height dans bio-themes.ts est la
+     seule source) : rien ici. */
+  .bio-wash {
+    position: absolute;
+    inset: 0 0 auto 0;
+    pointer-events: none;
+    background-image: var(--bio-pattern);
+    background-size: var(--bio-pattern-size);
+    background-position: var(--bio-pattern-position, 0 0);
+    background-repeat: repeat;
+    opacity: var(--bio-pattern-opacity);
+  }
+  .bio-wash-fade {
+    position: absolute;
+    inset: 0 0 auto 0;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent var(--bio-wash-fade, 35%), var(--bio-bg-solid) 100%);
+  }
+
+  /* La couture bogolan : même tuile, mais seule la rangée du zigzag est
+     visible (repeat-x, hauteur < tuile), à pleine opacité entre deux filets. */
+  .bio-frieze {
+    height: 18px;
+    margin-top: 22px;
+    border-top: 1px solid var(--bio-border);
+    border-bottom: 1px solid var(--bio-border);
+    background-color: color-mix(in oklab, var(--bio-text) 10%, var(--bio-bg-solid));
+    background-image: var(--bio-pattern);
+    background-size: var(--bio-pattern-size);
+    background-position: 3px 1px;
+    background-repeat: repeat-x;
+  }
+
+  /* Bande imprimée : remplace la bannière quand banner_url est vide. Le
+     motif ne vit qu'ici, jamais sous du texte. Hauteur en inline, comme le
+     lavis. */
+  .bio-band {
+    position: absolute;
+    inset: 0 0 auto 0;
+    background-color: var(--bio-band-fill);
+  }
+  .bio-band::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: var(--bio-pattern);
+    background-size: var(--bio-pattern-size);
+    background-position: var(--bio-pattern-position, 0 0);
+    background-repeat: repeat;
+    opacity: var(--bio-pattern-opacity);
+  }
+  /* Lisière festonnée (wax), coût nul : des demi-disques de la bande qui
+     mordent sur la page. */
+  .bio-band-scallop::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -7px;
+    height: 8px;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 0, var(--bio-band-fill) 6.5px, transparent 7.2px) 0 0 / 16px 8px repeat-x;
+  }
+  /* Lisière tissée (pagne) : sous le motif, les fils de chaîne — deux fils du
+     fond et un fil d'ocre par période de 72 px — et, sous la bande, trois
+     fils cousus en ombres dures. */
+  .bio-band-selvedge {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0 26px,
+      var(--bio-bg-solid) 26px 28px,
+      transparent 28px 34px,
+      var(--bio-highlight) 34px 37px,
+      transparent 37px 43px,
+      var(--bio-bg-solid) 43px 45px,
+      transparent 45px 72px
+    );
+    background-size: 72px 100%;
+    background-position: 12px 0;
+    box-shadow:
+      0 2px 0 var(--bio-bg-solid),
+      0 4px 0 var(--bio-band-fill),
+      0 6px 0 var(--bio-highlight);
+  }
+
+  /* Séparateur « bordure de pagne » (wax) : une rangée de points, 132 px centrés. */
+  .bio-dots {
+    width: 132px;
+    height: 6px;
+    margin: 20px auto 0;
+    background: radial-gradient(circle at 3px 3px, var(--bio-accent) 2px, transparent 2.6px) 0 0 / 12px 6px repeat-x;
+  }
+
+  /* Rangée de toron (indigo) : les pieux de rônier d'une façade en banco. */
+  .bio-toron {
+    height: 6px;
+    margin: 20px 16px 0;
+    background: radial-gradient(circle at 3px 3px, color-mix(in oklab, var(--bio-surface) 55%, transparent) 2px, transparent 2.6px) center / 12px 6px repeat-x;
+  }
+
+  /* Point de piqûre (pagne) : la couture entre deux lés. */
+  .bio-stitch {
+    height: 1px;
+    margin: 18px 16px 0;
+    background: repeating-linear-gradient(90deg, var(--bio-border) 0 6px, transparent 6px 11px);
+    opacity: 0.55;
+  }
+}

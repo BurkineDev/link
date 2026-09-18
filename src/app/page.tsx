@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MarketingPixels } from "@/components/marketing/marketing-pixels";
-import { BIO_THEME_IDS } from "@/lib/bio-themes";
+import { BIO_THEME_LIST } from "@/lib/bio-themes";
 import {
   Examples,
   FeatureStrip,
@@ -58,8 +58,9 @@ import {
 
 const SITE_URL = "https://www.bio-lien.com";
 
-/** Neuf palettes prêtes, plus `brand` qui dérive des couleurs du vendeur. */
-const READY_THEMES = BIO_THEME_IDS.filter((id) => id !== "brand").length;
+/** Palettes prêtes (Afrique de l'Ouest + classiques), sans `brand` qui dérive des couleurs du vendeur. */
+const READY_THEMES_LIST = BIO_THEME_LIST.filter((t) => t.id !== "brand");
+const READY_THEMES = READY_THEMES_LIST.length;
 /** N'entre dans un texte que caisse allumée : sans caisse, aucune promesse ne dérive du nombre d'opérateurs. */
 const OPERATOR_COUNT = MOBILE_MONEY_PROVIDERS.length;
 
@@ -69,22 +70,22 @@ const NUMBER_WORDS: Record<number, string> = {
   10: "Dix",
   11: "Onze",
   12: "Douze",
+  13: "Treize",
+  14: "Quatorze",
+  15: "Quinze",
 };
 
 const spell = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
-/** Fonds des thèmes prêts, dans l'ordre de BIO_THEME_IDS. */
-const THEME_SWATCHES = [
-  "#FFFFFF",
-  "#0B0B0F",
-  "#2E7D7B",
-  "#FB8C00",
-  "#F4EADB",
-  "#0E3B2E",
-  "#E7F6EF",
-  "#EDE9FE",
-  "#1E1B4B",
-];
+/**
+ * Pastilles des thèmes prêts, dans l'ordre du sélecteur, lues dans
+ * bio-themes.ts plutôt que recopiées : la carte montre ce qu'elle promet, et
+ * un thème ajouté apparaît ici sans qu'on y pense. Pour un thème à bande
+ * d'en-tête (Wax, Pagne tissé), c'est la bande qui signe la page, pas le fond.
+ */
+const THEME_SWATCHES = READY_THEMES_LIST.map((t) =>
+  t.decor?.header?.kind === "band" ? t.decor.header.fill : t.backgroundSolid,
+);
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
 // ---------------------------------------------------------------------------
@@ -196,9 +197,9 @@ function Features() {
           {/* Les vraies couleurs de fond des thèmes, lues dans bio-themes.ts —
               la carte montre donc ce qu'elle promet. */}
           <div className="mt-auto flex flex-wrap gap-2 pt-4" aria-hidden>
-            {THEME_SWATCHES.map((c) => (
+            {THEME_SWATCHES.map((c, i) => (
               <span
-                key={c}
+                key={READY_THEMES_LIST[i].id}
                 className="size-7 rounded-[var(--r-full)]"
                 style={{ background: c, border: "1.5px solid rgb(0 0 0 / 12%)" }}
               />

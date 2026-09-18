@@ -7,17 +7,41 @@
  * than scattered Tailwind classes) means the storefront, the dashboard picker
  * and the live preview all read the exact same values.
  *
+ * Les thèmes « Afrique de l'Ouest » (bogolan, wax, indigo, pagne) portent en
+ * plus un `decor` : motif tuilé, bande ou lavis d'en-tête, couture entre les
+ * réseaux et les onglets, anneau d'avatar, pastille de prix, paire de polices.
+ * Tout ce qui touche au décor est conditionné à ce champ : les dix thèmes
+ * historiques n'en ont pas et rendent donc exactement comme avant.
+ *
  * Framework-free on purpose: pure data + pure functions, so the contrast
  * rules are unit-testable without a DOM.
  */
 
+import type { CSSProperties } from "react";
+import {
+  BIO_DISPLAY_FONTS,
+  DEFAULT_FONT_FAMILY,
+  SHOP_FONTS,
+  WHATSAPP_GREEN,
+  WHATSAPP_INK,
+} from "@/lib/constants";
+import type { ShopFontFamily } from "@/lib/types/database";
+
+/**
+ * L'ordre est celui du sélecteur (réglages et onboarding) : l'Afrique de
+ * l'Ouest en tête, les classiques ensuite, « Mes couleurs » en dernier.
+ */
 export const BIO_THEME_IDS = [
+  "bogolan",
+  "wax",
+  "indigo",
+  "pagne",
+  "sahel",
+  "kente",
   "classic",
   "noir",
   "lagoon",
   "sunset",
-  "sahel",
-  "kente",
   "mint",
   "lavender",
   "midnight",
@@ -29,10 +53,94 @@ export type BioThemeId = (typeof BIO_THEME_IDS)[number];
 /** How link buttons are painted on top of the page background. */
 export type BioButtonVariant = "solid" | "outline" | "shadow" | "glass";
 
+/** Intertitres du sélecteur : chaque preset appartient à un groupe. */
+export type BioThemeGroup = "afrique" | "classique" | "perso";
+
+export const BIO_THEME_GROUPS: Record<BioThemeGroup, string> = {
+  afrique: "Afrique de l'Ouest",
+  classique: "Classiques",
+  perso: "Mes couleurs",
+};
+
+const BIO_THEME_GROUP_ORDER: readonly BioThemeGroup[] = [
+  "afrique",
+  "classique",
+  "perso",
+];
+
+// ---------------------------------------------------------------------------
+// Décor — types
+// ---------------------------------------------------------------------------
+
+/** Tuiles SVG disponibles ; la couleur est cuite dans le SVG à la demande. */
+export type BioPatternId = "bogolan" | "wax" | "thioup" | "pagne";
+
+/** Polices d'affiche (nom, titres de groupe, chiffres du prix). */
+export type BioDisplayFontId = keyof typeof BIO_DISPLAY_FONTS;
+
+/**
+ * Couleur de rehaut — pastille de prix, compteur d'onglet, anneau d'avatar.
+ * `text` s'écrit dessus ; on n'écrit jamais du texte en `bg` ailleurs.
+ */
+export interface BioHighlight {
+  bg: string;
+  text: string;
+}
+
+/** Zone haute de la page quand la boutique n'a pas de bannière. */
+export type BioHeaderDecor =
+  /**
+   * Lavis : la tuile fondue vers le fond avant le nom (Bogolan 220, Indigo
+   * 208). `fade` est la hauteur, en pourcentage, à partir de laquelle le
+   * fondu commence (35 par défaut ; Indigo le repousse à 46 pour que les
+   * anneaux restent visibles sur un LCD).
+   */
+  | { kind: "wash"; height: number; fade?: number }
+  /**
+   * Bande pleine portant le motif, fermée par une lisière : demi-disques
+   * festonnés (Wax) ou trois fils cousus (Pagne tissé).
+   */
+  | { kind: "band"; height: number; fill: string; edge?: "scallop" | "selvedge" };
+
+/** Couture entre les réseaux et les onglets — un seul emplacement, une peau par thème. */
+export type BioDividerKind = "frieze" | "dots" | "toron" | "stitch";
+
+/** Piste des onglets Liens / Boutique. */
+export type BioTabsKind = "outline" | "raised";
+
+/** Anneau d'avatar : remplace le `shadow-lg` flouté dès qu'un décor existe. */
+export type BioAvatarRing = "double" | "highlight" | "raise";
+
+export interface BioDecor {
+  /** Motif tuilé : data-URI de bioPatternDataUri(id, ink), couleur cuite dans le SVG. */
+  pattern?: { image: string; size: string; opacity: number; position?: string };
+  header?: BioHeaderDecor;
+  divider?: BioDividerKind;
+  tabs?: BioTabsKind;
+  /** Bordure marquée 2 px `border` sur boutons, cartes, chips. */
+  buttonBorder?: "bold";
+  /** Lisière de 5 px sur le bord gauche des boutons (désactivée en forme pilule). */
+  selvedge?: boolean;
+  /** Étend l'ombre dure `0 3px 0 0 border` aux cartes, à l'avatar, aux pastilles et à l'onglet actif. */
+  raise?: boolean;
+  avatarRing?: BioAvatarRing;
+  highlight?: BioHighlight;
+  /** Petit texte lisible sur `surface` (sous-titres, « FCFA ») — défaut : `muted`. */
+  surfaceMuted?: string;
+  /** Cartes produit qui ne suivent pas `surface` (Wax : crème plutôt que cobalt). */
+  card?: { bg: string; text: string };
+  /**
+   * Paire de polices du thème — appliquée seulement si le vendeur n'a pas
+   * choisi de police (font_family === "sans"), voir bioFontVars().
+   */
+  fontPreset?: { display: BioDisplayFontId; body: ShopFontFamily };
+}
+
 export interface BioThemePreset {
   id: BioThemeId;
   label: string;
   description: string;
+  group: BioThemeGroup;
   /** Brightness of the *background*, not of the text. Drives icon tints. */
   scheme: "light" | "dark";
   /** Any CSS background value — a flat colour or a gradient. */
@@ -46,82 +154,234 @@ export interface BioThemePreset {
   border: string;
   accent: string;
   buttonVariant: BioButtonVariant;
+  decor?: BioDecor;
 }
 
-export const DEFAULT_BIO_THEME: BioThemeId = "classic";
+/**
+ * Thème des nouvelles boutiques : présélectionné à l'onboarding, posé à la
+ * création et repli d'une valeur inconnue en base. Les boutiques existantes
+ * gardent ce qu'elles ont (le défaut Prisma reste « classic », sans migration).
+ */
+export const DEFAULT_BIO_THEME: BioThemeId = "wax";
+
+// ---------------------------------------------------------------------------
+// Motifs — tuiles SVG cuites en data-URI
+// ---------------------------------------------------------------------------
+
+/**
+ * SVG bruts avec un jeton `{{ink}}` à la place de la couleur. Une seule tuile
+ * par thème, partagée par la page, les aperçus et les stories ; chacune tient
+ * sous 1 Ko une fois encodée, ce qui compte sur une page ouverte en 3G.
+ *
+ * - bogolan : trois registres (zigzag, losanges creux, rangée de points), 48×48.
+ * - wax : grands disques concentriques décalés et craquelures de cire, 96×96.
+ * - thioup : anneaux de teinture à réserve en quinconce, 56×56.
+ * - pagne : fils de chaîne aux bords et losange à gradins inséré en trame, 48×48.
+ */
+export const BIO_PATTERNS: Record<BioPatternId, string> = {
+  bogolan:
+    "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'>" +
+    "<path d='M-6 3l6 9 6-9 6 9 6-9 6 9 6-9 6 9 6-9 6 9 6-9' fill='none' stroke='{{ink}}' stroke-width='2.2' stroke-linejoin='miter' stroke-linecap='square'/>" +
+    "<path d='M12 18l6 6-6 6-6-6zM36 18l6 6-6 6-6-6z' fill='none' stroke='{{ink}}' stroke-width='2'/>" +
+    "<path d='M6 40h0M18 40h0M30 40h0M42 40h0' stroke='{{ink}}' stroke-width='4.4' stroke-linecap='round'/>" +
+    "</svg>",
+  wax:
+    "<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'>" +
+    "<g fill='none' stroke='{{ink}}' stroke-width='1.8'>" +
+    "<circle cx='48' cy='48' r='34'/><circle cx='48' cy='48' r='26'/><circle cx='48' cy='48' r='6'/>" +
+    "<circle cx='0' cy='0' r='14'/><circle cx='96' cy='0' r='14'/><circle cx='0' cy='96' r='14'/><circle cx='96' cy='96' r='14'/>" +
+    "<path d='M18 80l4-3 3-4M71 12l4-3 3-4M10 42l5 2 2 5M81 50l5 2 2 5' stroke-width='1.2'/>" +
+    "</g></svg>",
+  thioup:
+    "<svg xmlns='http://www.w3.org/2000/svg' width='56' height='56'>" +
+    "<g fill='none' stroke='{{ink}}' stroke-width='1.2'>" +
+    "<circle cx='28' cy='28' r='6'/><circle cx='28' cy='28' r='12.7' stroke-dasharray='2.7 3'/>" +
+    "<circle cx='0' cy='0' r='6'/><circle cx='56' cy='0' r='6'/><circle cx='0' cy='56' r='6'/><circle cx='56' cy='56' r='6'/>" +
+    "</g><g fill='{{ink}}'>" +
+    "<circle cx='28' cy='28' r='1.6'/><circle cx='0' cy='0' r='1.6'/><circle cx='56' cy='0' r='1.6'/><circle cx='0' cy='56' r='1.6'/><circle cx='56' cy='56' r='1.6'/>" +
+    "</g></svg>",
+  pagne:
+    "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'>" +
+    "<g fill='{{ink}}' stroke='{{ink}}'>" +
+    "<path d='M2.5 0v48M45.5 0v48M8 24.5h6M34 24.5h6' fill='none' stroke-width='1'/>" +
+    "<path d='M22 14h4v4h4v4h4v4h-4v4h-4v4h-4v-4h-4v-4h-4v-4h4v-4h4zM22 22h4v4h-4z' stroke='none' fill-rule='evenodd'/>" +
+    "</g></svg>",
+};
+
+/**
+ * Tuile prête pour `background-image` : `url("data:image/svg+xml,…")`.
+ *
+ * La couleur est cuite dans le SVG parce qu'une image de fond ne lit ni
+ * `currentColor` ni les variables CSS. Seuls `#`, `<` et `>` sont encodés :
+ * c'est ce qu'exigent les navigateurs, et le reste (guillemets simples,
+ * espaces) passe tel quel dans un `url("…")`, ce qui garde la tuile courte.
+ */
+export function bioPatternDataUri(id: BioPatternId, ink: string): string {
+  const svg = BIO_PATTERNS[id].replace(/\{\{ink\}\}/g, ink);
+  const encoded = svg
+    .replace(/#/g, "%23")
+    .replace(/</g, "%3C")
+    .replace(/>/g, "%3E");
+  return `url("data:image/svg+xml,${encoded}")`;
+}
 
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------
 
+/** La même paire pour les quatre thèmes afrique : Ojuju en titre, Atkinson en corps. */
+const AFRIQUE_FONTS: NonNullable<BioDecor["fontPreset"]> = {
+  display: "ojuju",
+  body: "atkinson",
+};
+
 export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
-  classic: {
-    id: "classic",
-    label: "Classique",
-    description: "Fond blanc, boutons nets — lisible partout, même en plein soleil.",
+  bogolan: {
+    id: "bogolan",
+    label: "Bogolan",
+    description:
+      "Crème coton, noir de boue, ocre cuit — mat, artisanal, très lisible au soleil.",
+    group: "afrique",
     scheme: "light",
-    background: "#FFFFFF",
-    backgroundSolid: "#FFFFFF",
-    text: "#0F172A",
-    muted: "#64748B",
-    surface: "#FFFFFF",
-    surfaceText: "#0F172A",
-    border: "#E2E8F0",
-    accent: "#0F172A",
+    background: "#F3E9D8",
+    backgroundSolid: "#F3E9D8",
+    text: "#1C1714",
+    muted: "#5C4B3E",
+    // Surface et fond sont volontairement proches (même coton) : la
+    // séparation vient du filet d'encre et de l'ombre dure du variant shadow.
+    surface: "#FBF7EF",
+    surfaceText: "#1C1714",
+    border: "#1C1714",
+    accent: "#A3481A",
     buttonVariant: "shadow",
+    decor: {
+      pattern: {
+        image: bioPatternDataUri("bogolan", "#1C1714"),
+        size: "48px 48px",
+        opacity: 0.08,
+      },
+      header: { kind: "wash", height: 220 },
+      divider: "frieze",
+      tabs: "outline",
+      raise: true,
+      avatarRing: "double",
+      highlight: { bg: "#A3481A", text: "#FBF7EF" },
+      surfaceMuted: "#5C4B3E",
+      fontPreset: AFRIQUE_FONTS,
+    },
   },
-  noir: {
-    id: "noir",
-    label: "Noir",
-    description: "Fond sombre, contraste maximal. Économise la batterie sur OLED.",
-    scheme: "dark",
-    background: "#0B0B0F",
-    backgroundSolid: "#0B0B0F",
-    text: "#FAFAFA",
-    muted: "#A1A1AA",
-    surface: "#18181B",
-    surfaceText: "#FAFAFA",
-    border: "#2A2A31",
-    accent: "#FAFAFA",
-    buttonVariant: "solid",
-  },
-  lagoon: {
-    id: "lagoon",
-    label: "Lagune",
-    description: "Turquoise profond, boutons blancs. Le classique des pages bio.",
-    scheme: "dark",
-    background: "#2E7D7B",
-    backgroundSolid: "#2E7D7B",
-    text: "#FFFFFF",
-    muted: "#D3EDEC",
-    surface: "#FFFFFF",
-    surfaceText: "#123C3D",
-    border: "#FFFFFF",
-    accent: "#FFD9D2",
-    buttonVariant: "solid",
-  },
-  sunset: {
-    id: "sunset",
-    label: "Coucher de soleil",
-    description: "Dégradé chaud orange-mangue, très visible en story.",
-    // Light scheme: white body text on a mango gradient never reaches a
-    // readable ratio, so the warm background carries dark ink instead.
+  wax: {
+    id: "wax",
+    label: "Wax",
+    description:
+      "Cobalt et moutarde sur crème, bande imprimée de disques — l'énergie du marché, sans surcharge.",
+    group: "afrique",
     scheme: "light",
-    background:
-      "linear-gradient(165deg, #FFC857 0%, #FB8C00 55%, #F4511E 100%)",
-    backgroundSolid: "#FB8C00",
-    text: "#3A1206",
-    muted: "#6B2E10",
-    surface: "#FFFFFF",
-    surfaceText: "#7C2D12",
-    border: "#FFFFFF",
-    accent: "#7C2D12",
+    background: "#FFFBF2",
+    backgroundSolid: "#FFFBF2",
+    text: "#17171C",
+    muted: "#5A5A64",
+    // Les boutons de liens sont des aplats cobalt ; les cartes produit
+    // repassent en blanc via decor.card pour ne pas faire un mur de bleu.
+    surface: "#1748A8",
+    surfaceText: "#FFFFFF",
+    border: "#1748A8",
+    accent: "#1748A8",
     buttonVariant: "solid",
+    decor: {
+      pattern: {
+        image: bioPatternDataUri("wax", "#FFFBF2"),
+        size: "96px 96px",
+        opacity: 0.2,
+        position: "24px 12px",
+      },
+      header: { kind: "band", height: 172, fill: "#1748A8", edge: "scallop" },
+      divider: "dots",
+      tabs: "outline",
+      buttonBorder: "bold",
+      avatarRing: "highlight",
+      highlight: { bg: "#F2B705", text: "#17171C" },
+      surfaceMuted: "#DCE4F2",
+      card: { bg: "#FFFFFF", text: "#17171C" },
+      fontPreset: AFRIQUE_FONTS,
+    },
+  },
+  indigo: {
+    id: "indigo",
+    label: "Indigo",
+    description:
+      "Nuit indigo, boutons sable et ombres nettes terracotta. Chic, lisible partout.",
+    group: "afrique",
+    scheme: "dark",
+    // Fond plat : un dégradé indigo bande sur les LCD 6 bits des Tecno/Infinix.
+    background: "#141E3D",
+    backgroundSolid: "#141E3D",
+    text: "#F2EBDC",
+    muted: "#C4BBA4",
+    surface: "#EAD9B8",
+    surfaceText: "#141E3D",
+    border: "#C2643A",
+    accent: "#EE9468",
+    buttonVariant: "shadow",
+    decor: {
+      pattern: {
+        image: bioPatternDataUri("thioup", "#EAD9B8"),
+        size: "56px 56px",
+        opacity: 0.14,
+        position: "center top",
+      },
+      header: { kind: "wash", height: 208, fade: 46 },
+      divider: "toron",
+      tabs: "raised",
+      raise: true,
+      avatarRing: "raise",
+      highlight: { bg: "#141E3D", text: "#F2EBDC" },
+      surfaceMuted: "#3E4560",
+      fontPreset: AFRIQUE_FONTS,
+    },
+  },
+  pagne: {
+    id: "pagne",
+    label: "Pagne tissé",
+    description:
+      "Écru, indigo et un fil d'ocre — inspiré du Faso Dan Fani, en bandes très lisibles.",
+    group: "afrique",
+    scheme: "light",
+    background: "#F7F3EA",
+    backgroundSolid: "#F7F3EA",
+    text: "#17181C",
+    muted: "#4E5261",
+    // Boutons blancs sur écru (1,11:1) : ils se détachent par la bordure
+    // indigo 2 px et la lisière, d'où buttonBorder bold + selvedge.
+    surface: "#FFFFFF",
+    surfaceText: "#17181C",
+    border: "#23407A",
+    accent: "#23407A",
+    buttonVariant: "solid",
+    decor: {
+      // Le motif n'apparaît que sur la bande d'en-tête, en écru à 16 %.
+      pattern: {
+        image: bioPatternDataUri("pagne", "#F7F3EA"),
+        size: "48px 48px",
+        opacity: 0.16,
+      },
+      header: { kind: "band", height: 104, fill: "#23407A", edge: "selvedge" },
+      divider: "stitch",
+      tabs: "outline",
+      buttonBorder: "bold",
+      selvedge: true,
+      avatarRing: "double",
+      // Ocre à texte blanc : 4,94:1 (l'écru de la page ne ferait que 4,46).
+      highlight: { bg: "#B5541C", text: "#FFFFFF" },
+      surfaceMuted: "#4E5261",
+      fontPreset: AFRIQUE_FONTS,
+    },
   },
   sahel: {
     id: "sahel",
     label: "Sahel",
     description: "Sable chaud et terre cuite — parfait pour l'artisanat.",
+    group: "afrique",
     scheme: "light",
     background: "#F4EADB",
     backgroundSolid: "#F4EADB",
@@ -137,6 +397,7 @@ export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
     id: "kente",
     label: "Kente",
     description: "Vert profond et or. Un rendu premium, très haut de gamme.",
+    group: "afrique",
     scheme: "dark",
     background: "#0E3B2E",
     backgroundSolid: "#0E3B2E",
@@ -148,10 +409,78 @@ export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
     accent: "#E9B949",
     buttonVariant: "solid",
   },
+  classic: {
+    id: "classic",
+    label: "Classique",
+    description: "Fond blanc, boutons nets — lisible partout, même en plein soleil.",
+    group: "classique",
+    scheme: "light",
+    background: "#FFFFFF",
+    backgroundSolid: "#FFFFFF",
+    text: "#0F172A",
+    muted: "#64748B",
+    surface: "#FFFFFF",
+    surfaceText: "#0F172A",
+    border: "#E2E8F0",
+    accent: "#0F172A",
+    buttonVariant: "shadow",
+  },
+  noir: {
+    id: "noir",
+    label: "Noir",
+    description: "Fond sombre, contraste maximal. Économise la batterie sur OLED.",
+    group: "classique",
+    scheme: "dark",
+    background: "#0B0B0F",
+    backgroundSolid: "#0B0B0F",
+    text: "#FAFAFA",
+    muted: "#A1A1AA",
+    surface: "#18181B",
+    surfaceText: "#FAFAFA",
+    border: "#2A2A31",
+    accent: "#FAFAFA",
+    buttonVariant: "solid",
+  },
+  lagoon: {
+    id: "lagoon",
+    label: "Lagune",
+    description: "Turquoise profond, boutons blancs. Le classique des pages bio.",
+    group: "classique",
+    scheme: "dark",
+    background: "#2E7D7B",
+    backgroundSolid: "#2E7D7B",
+    text: "#FFFFFF",
+    muted: "#D3EDEC",
+    surface: "#FFFFFF",
+    surfaceText: "#123C3D",
+    border: "#FFFFFF",
+    accent: "#FFD9D2",
+    buttonVariant: "solid",
+  },
+  sunset: {
+    id: "sunset",
+    label: "Coucher de soleil",
+    description: "Dégradé chaud orange-mangue, très visible en story.",
+    group: "classique",
+    // Light scheme: white body text on a mango gradient never reaches a
+    // readable ratio, so the warm background carries dark ink instead.
+    scheme: "light",
+    background:
+      "linear-gradient(165deg, #FFC857 0%, #FB8C00 55%, #F4511E 100%)",
+    backgroundSolid: "#FB8C00",
+    text: "#3A1206",
+    muted: "#6B2E10",
+    surface: "#FFFFFF",
+    surfaceText: "#7C2D12",
+    border: "#FFFFFF",
+    accent: "#7C2D12",
+    buttonVariant: "solid",
+  },
   mint: {
     id: "mint",
     label: "Menthe",
     description: "Vert pâle et doux — beauté, soins, bien-être.",
+    group: "classique",
     scheme: "light",
     background: "#E7F6EF",
     backgroundSolid: "#E7F6EF",
@@ -167,6 +496,7 @@ export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
     id: "lavender",
     label: "Lavande",
     description: "Violet clair, féminin et calme. Mode, bijoux, lifestyle.",
+    group: "classique",
     scheme: "light",
     background: "#EDE9FE",
     backgroundSolid: "#EDE9FE",
@@ -182,6 +512,7 @@ export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
     id: "midnight",
     label: "Minuit",
     description: "Dégradé nuit et boutons translucides. Effet verre.",
+    group: "classique",
     scheme: "dark",
     background:
       "linear-gradient(165deg, #0F172A 0%, #1E1B4B 55%, #312E81 100%)",
@@ -199,6 +530,7 @@ export const BIO_THEMES: Record<BioThemeId, BioThemePreset> = {
     label: "Mes couleurs",
     description:
       "Reprend la couleur primaire et la couleur d'accent de ta boutique.",
+    group: "perso",
     scheme: "dark",
     // Placeholder values — resolveBioTheme() replaces them with the shop's own
     // colours. They only ever show up in a preview rendered without a shop.
@@ -223,6 +555,29 @@ export function isBioThemeId(value: unknown): value is BioThemeId {
     typeof value === "string" &&
     (BIO_THEME_IDS as readonly string[]).includes(value)
   );
+}
+
+export interface BioThemeGroupEntry {
+  group: BioThemeGroup;
+  label: string;
+  themes: BioThemePreset[];
+}
+
+/**
+ * Regroupe une liste de presets pour un sélecteur, dans l'ordre des groupes
+ * (Afrique de l'Ouest, Classiques, Mes couleurs) et, à l'intérieur, dans
+ * l'ordre reçu. Les groupes vides disparaissent : l'onboarding, qui retire
+ * « brand », n'affiche pas d'intertitre « Mes couleurs » orphelin.
+ */
+export function groupBioThemes(
+  themes: readonly BioThemePreset[] = BIO_THEME_LIST,
+): BioThemeGroupEntry[] {
+  return BIO_THEME_GROUP_ORDER.flatMap((group) => {
+    const members = themes.filter((theme) => theme.group === group);
+    return members.length
+      ? [{ group, label: BIO_THEME_GROUPS[group], themes: members }]
+      : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +649,25 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`;
 }
 
+/**
+ * Mélange sRGB de deux hex : `t` est la part de `a`, le reste vient de `b`,
+ * comme `color-mix(in srgb, a t%, b)`. Sert de jumeau hexadécimal aux
+ * `color-mix` de la page pour les stories (satori ne connaît pas color-mix)
+ * et pour les tests de contraste. Repli sur la couleur parsable quand l'une
+ * des deux ne l'est pas (dégradé, rgba).
+ */
+export function mixHex(a: string, b: string, t: number): string {
+  const ra = hexToRgb(a);
+  const rb = hexToRgb(b);
+  if (!ra || !rb) return rb ? b : a;
+  const k = Math.min(1, Math.max(0, t));
+  const channel = (from: number, to: number) =>
+    Math.round(to + (from - to) * k)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${channel(ra.r, rb.r)}${channel(ra.g, rb.g)}${channel(ra.b, rb.b)}`.toUpperCase();
+}
+
 // ---------------------------------------------------------------------------
 // Resolution
 // ---------------------------------------------------------------------------
@@ -313,6 +687,7 @@ export interface BioPalette {
   border: string;
   accent: string;
   buttonVariant: BioButtonVariant;
+  decor?: BioDecor;
 }
 
 export interface BioThemeSource {
@@ -375,14 +750,20 @@ export function resolveBioTheme(shop: BioThemeSource): BioPalette {
  * can vanish on the card — pale pink on white, for instance. This walks the
  * candidates in order of brand fidelity and falls back to plain ink, which
  * always reads.
+ *
+ * `surface` vaut la surface de la palette par défaut ; une carte produit qui
+ * ne suit pas `surface` (Wax : `decor.card.bg`) passe la sienne.
  */
-export function primaryActionColor(palette: BioPalette): string {
+export function primaryActionColor(
+  palette: BioPalette,
+  surface: string = palette.surface,
+): string {
   for (const candidate of [palette.backgroundSolid, palette.accent]) {
-    if (hexToRgb(candidate) && contrastRatio(candidate, palette.surface) >= 3) {
+    if (hexToRgb(candidate) && contrastRatio(candidate, surface) >= 3) {
       return withReadableLabel(candidate);
     }
   }
-  return readableTextOn(palette.surface);
+  return readableTextOn(surface);
 }
 
 /** AA threshold for the 16px semibold label sitting on a button. */
@@ -419,11 +800,457 @@ function shift(hex: string, target: number, ratio: number): string {
   return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`.toUpperCase();
 }
 
+// ---------------------------------------------------------------------------
+// Styles partagés — une seule implémentation pour la page, les aperçus et
+// les miniatures, sinon l'aperçu ment au vendeur.
+// ---------------------------------------------------------------------------
+
+/** L'ombre dure du variant shadow, réutilisée partout où un élément est « en relief ». */
+const hardShadow = (color: string) => `0 3px 0 0 ${color}`;
+
+/**
+ * Épaisseur du filet d'un thème : 2 px quand ses boutons sont bordés
+ * (`buttonBorder: "bold"` — Wax, Pagne tissé), 1 px sinon. Un seul endroit
+ * en décide pour les cartes, la piste des onglets, les puces et les cercles
+ * des réseaux ; les boutons eux-mêmes passent par bioButtonStyle().
+ */
+export function bioBorderWidth(palette: BioPalette): 1 | 2 {
+  return palette.decor?.buttonBorder === "bold" ? 2 : 1;
+}
+
+/**
+ * Style d'un bouton de lien. Les quatre variants historiques sont repris tels
+ * quels ; un décor peut ajouter la bordure marquée (2 px `border`) et la
+ * lisière gauche de 5 px, cette dernière retirée en forme pilule où elle
+ * mordrait sur l'arrondi.
+ */
+export function bioButtonStyle(
+  palette: BioPalette,
+  options: { pill?: boolean } = {},
+): CSSProperties {
+  const decor = palette.decor;
+  switch (palette.buttonVariant) {
+    case "outline":
+      return {
+        backgroundColor: "transparent",
+        color: palette.text,
+        border: `2px solid ${palette.text}`,
+      };
+    case "shadow":
+      return {
+        backgroundColor: palette.surface,
+        color: palette.surfaceText,
+        border: `1px solid ${palette.border}`,
+        boxShadow: hardShadow(palette.border),
+      };
+    case "glass":
+      return {
+        backgroundColor: palette.surface,
+        color: palette.surfaceText,
+        border: `1px solid ${palette.border}`,
+        backdropFilter: "blur(12px)",
+      };
+    default: {
+      const style: CSSProperties = {
+        backgroundColor: palette.surface,
+        color: palette.surfaceText,
+        border:
+          decor?.buttonBorder === "bold"
+            ? `2px solid ${palette.border}`
+            : "1px solid transparent",
+      };
+      if (decor?.selvedge && !options.pill) {
+        style.boxShadow = `inset 5px 0 0 ${palette.border}`;
+      }
+      return style;
+    }
+  }
+}
+
+/**
+ * Ombre dure étendue aux cartes, à l'avatar, aux pastilles et à l'onglet
+ * actif — la règle « tout ce qui est en relief porte la même ombre nette ».
+ *
+ * Réservée aux thèmes à décor : sans `decor`, renvoie `undefined` même pour
+ * un variant shadow, sinon les cartes de Classique ou Sahel gagneraient une
+ * ombre qu'elles n'ont jamais eue.
+ */
+export function bioRaise(palette: BioPalette): string | undefined {
+  const decor = palette.decor;
+  if (!decor) return undefined;
+  return decor.raise || palette.buttonVariant === "shadow"
+    ? hardShadow(palette.border)
+    : undefined;
+}
+
+/**
+ * Style d'une carte produit. Sans décor, exactement ce que la carte peignait
+ * déjà (surface, filet 1 px, flou du variant glass). Avec décor : fond
+ * `decor.card` s'il existe, bordure 2 px si `buttonBorder: "bold"`, ombre
+ * dure via bioRaise().
+ */
+export function bioCardStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  const style: CSSProperties = {
+    backgroundColor: decor?.card?.bg ?? palette.surface,
+    color: decor?.card?.text ?? palette.surfaceText,
+    border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
+    backdropFilter: palette.buttonVariant === "glass" ? "blur(12px)" : undefined,
+  };
+  const raise = bioRaise(palette);
+  if (raise) style.boxShadow = raise;
+  return style;
+}
+
+/**
+ * Puce de surface (réseaux d'un bloc SOCIAL) : surface, texte de surface,
+ * filet à l'épaisseur du thème et ombre dure quand il est en relief. Sans
+ * décor, exactement la puce historique (filet 1 px, sans ombre).
+ */
+export function bioChipStyle(palette: BioPalette): CSSProperties {
+  const style: CSSProperties = {
+    backgroundColor: palette.surface,
+    color: palette.surfaceText,
+    border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
+  };
+  const raise = bioRaise(palette);
+  if (raise) style.boxShadow = raise;
+  return style;
+}
+
+/**
+ * Cercle d'un réseau sous la bio, sur un thème à décor : de petits tampons
+ * à filet, en accord avec les pastilles de la barre haute. Filet 1 px
+ * `border` pour les thèmes à ombre dure (Bogolan, Indigo), 2 px `accent`
+ * quand les boutons sont eux-mêmes bordés (Wax, Pagne tissé). Sans décor :
+ * `undefined`, les icônes restent nues comme avant.
+ */
+export function bioSocialRingStyle(
+  palette: BioPalette,
+): CSSProperties | undefined {
+  const decor = palette.decor;
+  if (!decor) return undefined;
+  const bold = decor.buttonBorder === "bold";
+  const ink = bold ? palette.accent : palette.border;
+  return {
+    color: bold ? palette.accent : palette.text,
+    border: `${bioBorderWidth(palette)}px solid ${ink}`,
+  };
+}
+
+/**
+ * Tuile d'icône d'un bouton de lien. Sur un thème à décor dont les boutons
+ * sont un aplat franc sur page claire (Wax : cobalt sur crème), la tuile
+ * s'inverse en disque du fond de page avec l'icône couleur bouton ; sur des
+ * boutons clairs bordés (Pagne tissé : blanc sur écru), elle se teinte de
+ * l'accent ; partout ailleurs, le rendu historique — 10 % de la couleur
+ * courante, ou rien sur un bouton contour. Une seule règle pour la page et
+ * les deux aperçus du tableau de bord.
+ */
+export function bioIconTileStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  if (
+    decor &&
+    palette.scheme === "light" &&
+    contrastRatio(palette.surface, palette.backgroundSolid) >= 3
+  ) {
+    return { backgroundColor: palette.backgroundSolid, color: palette.surface };
+  }
+  if (decor?.buttonBorder === "bold") {
+    return {
+      backgroundColor: `color-mix(in oklab, ${palette.accent} 10%, transparent)`,
+      color: palette.accent,
+    };
+  }
+  return {
+    backgroundColor:
+      palette.buttonVariant === "outline"
+        ? "transparent"
+        : "color-mix(in oklab, currentColor 10%, transparent)",
+  };
+}
+
+/** AA pour le petit texte (sous-titres, « FCFA ») posé sur une surface. */
+const MIN_SMALL_TEXT_CONTRAST = 4.5;
+
+/**
+ * Couleur du petit texte posé sur `surface` (sous-titre de lien, « FCFA »,
+ * ligne de confiance). `decor.surfaceMuted` est choisie pour la surface des
+ * boutons ; une carte qui ne la suit pas (Wax : carte blanche sous des
+ * boutons cobalt) recevrait un gris bleuté illisible, d'où le choix par
+ * contraste parmi les candidates, de la plus discrète à la plus franche.
+ * Sans décor, `muted` puis le texte de surface, selon ce qui lit.
+ */
+export function bioSurfaceMutedOn(
+  palette: BioPalette,
+  surface: string = palette.surface,
+): string {
+  const decor = palette.decor;
+  const candidates = [
+    decor?.surfaceMuted,
+    palette.muted,
+    decor?.card?.text,
+    palette.surfaceText,
+  ].filter((c): c is string => Boolean(c));
+  if (hexToRgb(surface)) {
+    for (const candidate of candidates) {
+      if (
+        hexToRgb(candidate) &&
+        contrastRatio(candidate, surface) >= MIN_SMALL_TEXT_CONTRAST
+      ) {
+        return candidate;
+      }
+    }
+  }
+  return decor?.surfaceMuted ?? palette.muted;
+}
+
+/**
+ * Pastille de prix d'un thème à décor (ocre/crème, moutarde/encre…), chiffres
+ * en police d'affiche ; `undefined` sans `decor.highlight`, la carte garde
+ * alors son prix historique. Le « FCFA » s'écrit en `highlight.text` : c'est
+ * la seule couleur garantie ≥ 4,5:1 sur la pastille.
+ */
+export function bioPriceBadgeStyle(
+  palette: BioPalette,
+): CSSProperties | undefined {
+  const highlight = palette.decor?.highlight;
+  if (!highlight) return undefined;
+  return {
+    backgroundColor: highlight.bg,
+    color: highlight.text,
+    fontFamily: "var(--bio-font-display, inherit)",
+    fontVariantNumeric: "tabular-nums",
+  };
+}
+
+/**
+ * Anneau d'avatar d'un thème à décor ; `undefined` sinon, pour que le
+ * composant garde son rendu historique (bordure 2 px + shadow-lg).
+ */
+export function bioAvatarRingStyle(
+  palette: BioPalette,
+): CSSProperties | undefined {
+  const decor = palette.decor;
+  switch (decor?.avatarRing) {
+    case "double":
+      // Le lé cousu : un filet du fond puis un filet d'encre.
+      return {
+        boxShadow: `0 0 0 3px ${palette.backgroundSolid}, 0 0 0 5px ${palette.border}`,
+      };
+    case "highlight":
+      // Le disque du wax : anneau crème puis anneau moutarde.
+      return {
+        boxShadow: `0 0 0 4px ${palette.backgroundSolid}, 0 0 0 9px ${decor?.highlight?.bg ?? palette.accent}`,
+      };
+    case "raise":
+      // La même règle que les boutons : filet 1 px + ombre dure.
+      return {
+        border: `1px solid ${palette.border}`,
+        boxShadow: hardShadow(palette.border),
+      };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Disque d'initiales de l'avatar. Sur une bande d'en-tête (Wax, Pagne
+ * tissé), un disque `surface` se fondrait dans la bande de la même couleur :
+ * il prend alors le fond de page avec les initiales en `accent`, comme les
+ * pastilles de la barre haute. Ailleurs, la surface et son texte. Avec un
+ * décor, le filet 2 px d'encre (sauf sous les anneaux moutarde de Wax) et
+ * l'anneau du thème viennent avec ; sans décor, les couleurs seules — chaque
+ * rendu historique (page, story, aperçus) garde son propre filet.
+ */
+export function bioAvatarInitialsStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  const style: CSSProperties =
+    decor?.header?.kind === "band"
+      ? { backgroundColor: palette.backgroundSolid, color: palette.accent }
+      : { backgroundColor: palette.surface, color: palette.surfaceText };
+  if (!decor) return style;
+  if (decor.avatarRing !== "highlight") {
+    style.border = `2px solid ${palette.border}`;
+  }
+  // L'anneau « raise » apporte son propre filet, qui l'emporte.
+  return { ...style, ...bioAvatarRingStyle(palette) };
+}
+
+/**
+ * Pastilles de la barre haute (logo, partage). Sans décor : surface, texte
+ * de surface, filet 1 px — le rendu historique. Avec décor, l'ombre dure
+ * de bioRaise() ; et quand elles flottent sur une bande ou une bannière
+ * (`overHeader`), fond de page + texte `accent`, sinon une pastille cobalt
+ * disparaît sur la bande cobalt de Wax.
+ */
+export function bioTopBarPillStyle(
+  palette: BioPalette,
+  options: { overHeader?: boolean } = {},
+): CSSProperties {
+  const decor = palette.decor;
+  const style: CSSProperties = {
+    backgroundColor: palette.surface,
+    color: palette.surfaceText,
+    border: `1px solid ${palette.border}`,
+  };
+  if (!decor) return style;
+  if (options.overHeader) {
+    style.backgroundColor = palette.backgroundSolid;
+    style.color = palette.accent;
+  }
+  const raise = bioRaise(palette);
+  if (raise) style.boxShadow = raise;
+  return style;
+}
+
+/**
+ * Les boutons WhatsApp, identiques sur tous les thèmes : le vert officiel
+ * n'est jamais thémé (le visiteur doit le reconnaître en une demi-seconde)
+ * et l'encre sombre lit dessus à 7,46:1 là où le blanc ne faisait que
+ * 1,98:1. `fab` = bouton flottant (filet 2 px + ombre dure), `inline` =
+ * « Commander » sur une carte produit ou une fiche (filet 1 px).
+ */
+export function whatsappButtonStyle(kind: "fab" | "inline"): CSSProperties {
+  const style: CSSProperties = {
+    backgroundColor: WHATSAPP_GREEN,
+    color: WHATSAPP_INK,
+    border: `${kind === "fab" ? 2 : 1}px solid ${WHATSAPP_INK}`,
+  };
+  if (kind === "fab") style.boxShadow = hardShadow(WHATSAPP_INK);
+  return style;
+}
+
+/** Libellé inactif d'onglet : il doit rester lisible sur la piste. */
+const MIN_TAB_CONTRAST = 4.5;
+
+/**
+ * Piste des onglets telle que le code la peignait avant : la couleur de la
+ * bordure pour le variant shadow, sinon le texte à 16 % sur le fond. `hex`
+ * est l'équivalent mesurable de `css` (les stories et les tests n'ont pas
+ * color-mix).
+ */
+function legacyTabTrack(palette: BioPalette): { css: string; hex: string } {
+  if (palette.buttonVariant === "shadow") {
+    return {
+      css: palette.border,
+      hex: hexToRgb(palette.border) ? palette.border : palette.backgroundSolid,
+    };
+  }
+  return {
+    css: `color-mix(in oklab, ${palette.text} 16%, transparent)`,
+    hex: mixHex(palette.text, palette.backgroundSolid, 0.16),
+  };
+}
+
+/**
+ * Garde-fou : quand le libellé inactif ne lit plus sur la piste (Lagune :
+ * blanc sur turquoise éclairci), on écarte la piste du texte — plus sombre
+ * pour un texte clair, plus claire pour un texte sombre — jusqu'à repasser
+ * 4,5:1. Le résultat est un hex, identique en CSS et en story.
+ */
+function contrastSafeTabTrack(palette: BioPalette): string {
+  const away =
+    relativeLuminance(palette.text) > relativeLuminance(palette.backgroundSolid)
+      ? "#000000"
+      : "#FFFFFF";
+  for (const t of [0.16, 0.24, 0.32, 0.4, 0.48]) {
+    const candidate = mixHex(away, palette.backgroundSolid, t);
+    if (contrastRatio(palette.text, candidate) >= MIN_TAB_CONTRAST) {
+      return candidate;
+    }
+  }
+  return palette.backgroundSolid;
+}
+
+function tabTrack(palette: BioPalette): { css: string; hex: string } {
+  const decor = palette.decor;
+  if (decor?.tabs === "outline") {
+    return { css: palette.backgroundSolid, hex: palette.backgroundSolid };
+  }
+  if (decor?.tabs === "raised") {
+    const hex = mixHex(palette.text, palette.backgroundSolid, 0.08);
+    return { css: hex, hex };
+  }
+  const legacy = legacyTabTrack(palette);
+  if (contrastRatio(palette.text, legacy.hex) >= MIN_TAB_CONTRAST) {
+    return legacy;
+  }
+  const safe = contrastSafeTabTrack(palette);
+  return { css: safe, hex: safe };
+}
+
+/**
+ * Style de la piste des onglets Liens / Boutique : `outline` = fond de page
+ * + filet `border` (2 px si les boutons sont bordés), `raised` = fond relevé
+ * de 8 % de texte, sinon le rendu historique protégé par le garde-fou de
+ * contraste.
+ */
+export function bioTabTrackStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  const track = tabTrack(palette);
+  if (decor?.tabs === "outline") {
+    return {
+      backgroundColor: track.css,
+      border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
+    };
+  }
+  return { backgroundColor: track.css };
+}
+
+/** Couleur hex de la piste des onglets — pour les stories et les tests de contraste. */
+export function bioTabTrackColor(palette: BioPalette): string {
+  return tabTrack(palette).hex;
+}
+
+/**
+ * Style d'un onglet. Sans décor : le rendu historique (surface + ombre
+ * douce quand il est sélectionné). `outline` : onglet actif en aplat
+ * `border` à libellé fond de page (le tampon). `raised` : surface + ombre
+ * dure de 2 px qui tient lieu de soulignement.
+ */
+export function bioTabStyle(
+  palette: BioPalette,
+  selected: boolean,
+): CSSProperties {
+  const decor = palette.decor;
+  if (!selected) {
+    return { backgroundColor: "transparent", color: palette.text };
+  }
+  if (decor?.tabs === "outline") {
+    return { backgroundColor: palette.border, color: palette.backgroundSolid };
+  }
+  if (decor?.tabs === "raised") {
+    return {
+      backgroundColor: palette.surface,
+      color: palette.surfaceText,
+      boxShadow: `0 2px 0 0 ${palette.border}`,
+    };
+  }
+  return {
+    backgroundColor: palette.surface,
+    color: palette.surfaceText,
+    boxShadow: "0 1px 3px rgba(0,0,0,.12)",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Variables CSS
+// ---------------------------------------------------------------------------
+
 /**
  * CSS custom properties consumed by every bio-page component. Set once on the
  * page root so children stay plain Tailwind + `var(--bio-*)`.
+ *
+ * Les variables de décor ont une valeur neutre sans décor (`none`, `0 0`,
+ * `0`) : les utilitaires .bio-wash / .bio-band peuvent être posés sans
+ * condition, ils ne dessinent rien. Les variables de police sont posées à
+ * part (bioFontVars) car elles dépendent du choix du vendeur.
  */
 export function bioThemeCssVars(palette: BioPalette): Record<string, string> {
+  const decor = palette.decor;
+  const pattern = decor?.pattern;
+  const header = decor?.header;
   return {
     "--bio-bg": palette.background,
     "--bio-bg-solid": palette.backgroundSolid,
@@ -433,5 +1260,44 @@ export function bioThemeCssVars(palette: BioPalette): Record<string, string> {
     "--bio-surface-text": palette.surfaceText,
     "--bio-border": palette.border,
     "--bio-accent": palette.accent,
+    "--bio-pattern": pattern?.image ?? "none",
+    "--bio-pattern-size": pattern?.size ?? "0 0",
+    "--bio-pattern-position": pattern?.position ?? "0 0",
+    "--bio-pattern-opacity": pattern ? String(pattern.opacity) : "0",
+    "--bio-band-fill":
+      header?.kind === "band" ? header.fill : palette.backgroundSolid,
+    "--bio-highlight": decor?.highlight?.bg ?? palette.accent,
+    // Repli : l'encre qui lit sur l'accent, jamais l'accent sur lui-même.
+    "--bio-highlight-text":
+      decor?.highlight?.text ??
+      (hexToRgb(palette.accent)
+        ? readableTextOn(palette.accent)
+        : palette.surfaceText),
   };
+}
+
+/**
+ * Polices du thème, posées sur la racine à côté de bioThemeCssVars.
+ *
+ * Règle « tout ou rien » : la paire du thème (Ojuju + Atkinson) ne s'applique
+ * que si le vendeur n'a pas choisi de police (font_family « sans », le
+ * défaut). Toute autre valeur gagne partout — pas de mélange Playfair +
+ * Ojuju. Sans paire ou avec une police choisie, l'objet est vide : les
+ * composants lisent `var(--bio-font-display, inherit)` et retombent sur la
+ * police de la page.
+ */
+export function bioFontVars(
+  palette: BioPalette,
+  fontFamily: string | null | undefined,
+): Record<string, string> {
+  const preset = palette.decor?.fontPreset;
+  if (!preset || (fontFamily ?? DEFAULT_FONT_FAMILY) !== DEFAULT_FONT_FAMILY) {
+    return {};
+  }
+  const vars: Record<string, string> = {
+    "--bio-font-display": BIO_DISPLAY_FONTS[preset.display],
+  };
+  const body = SHOP_FONTS.find((font) => font.value === preset.body)?.cssVar;
+  if (body) vars["--bio-font-body"] = body;
+  return vars;
 }

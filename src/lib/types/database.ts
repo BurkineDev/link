@@ -234,7 +234,7 @@ export type CreatorSubscriptionUpdate = Partial<
   Omit<CreatorSubscriptionRow, "id" | "user_id" | "created_at">
 >;
 
-export type ShopFontFamily = "sans" | "serif" | "mono" | "display";
+export type ShopFontFamily = "sans" | "serif" | "mono" | "display" | "atkinson";
 export type ShopBorderRadius = "none" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type ShopCardStyle = "flat" | "bordered" | "elevated" | "glass";
 export type ShopCtaShape = "pill" | "rounded" | "square";

@@ -19,6 +19,13 @@ interface VariantSelectorProps {
   currency: Currency;
   /** Palette of the surface this selector sits on — it is never on app chrome. */
   palette: BioPalette;
+  /**
+   * Couleurs réelles de la carte qui porte le sélecteur quand elle ne suit
+   * pas `palette.surface` (Wax : carte blanche sous des boutons cobalt).
+   * Par défaut, la surface de la palette et son texte.
+   */
+  surface?: string;
+  surfaceText?: string;
   className?: string;
 }
 
@@ -33,13 +40,17 @@ export function VariantSelector({
   basePrice,
   currency,
   palette,
+  surface = palette.surface,
+  surfaceText = palette.surfaceText,
   className,
 }: VariantSelectorProps) {
   if (!variants.length) return null;
 
-  const selectedFill = primaryActionColor(palette);
+  // Tout est choisi contre la vraie couleur de la carte : le remplissage
+  // de la puce active, le texte et le filet des puces inactives.
+  const selectedFill = primaryActionColor(palette, surface);
   const selectedInk = readableTextOn(selectedFill);
-  const idleBorder = withAlpha(palette.surfaceText, 0.25);
+  const idleBorder = withAlpha(surfaceText, 0.25);
 
   // Detect if variants share a common option axis (e.g. all have a "Taille" option)
   // We group by distinct option.name values across all variants.
@@ -111,7 +122,7 @@ export function VariantSelector({
                   style={
                     {
                       backgroundColor: isSelected ? selectedFill : "transparent",
-                      color: isSelected ? selectedInk : palette.surfaceText,
+                      color: isSelected ? selectedInk : surfaceText,
                       borderColor: isSelected ? selectedFill : idleBorder,
                       "--tw-ring-color": selectedFill,
                     } as React.CSSProperties

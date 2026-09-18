@@ -231,7 +231,26 @@ export const SHOP_FONTS = [
     description: "DM Serif — luxe, mode",
     cssVar: "var(--font-dm-serif)",
   },
+  {
+    value: "atkinson",
+    label: "Hyperlisible",
+    sample: "Aa",
+    description: "Atkinson — dessinée pour le plein soleil",
+    cssVar: "var(--font-atkinson)",
+  },
 ] as const;
+
+/** Valeurs acceptées pour `font_family`, dans l'ordre du sélecteur (pour zod). */
+export const SHOP_FONT_VALUES = SHOP_FONTS.map((font) => font.value);
+
+/**
+ * Polices d'affiche des thèmes de page bio (nom, titres, chiffres du prix).
+ * Ojuju n'a qu'un poids (700) : elle n'est pas proposée comme police de
+ * corps, elle vit ici et s'applique via `--bio-font-display`.
+ */
+export const BIO_DISPLAY_FONTS = {
+  ojuju: "var(--font-ojuju)",
+} as const;
 
 export const SHOP_BORDER_RADIUS = [
   { value: "none", label: "Carré",     pxHint: "0px" },
@@ -298,7 +317,21 @@ export const FONT_FAMILY_CLASS: Record<string, string> = {
   serif:   "font-[family-name:var(--font-playfair)]",
   mono:    "font-[family-name:var(--font-jetbrains-mono)]",
   display: "font-[family-name:var(--font-dm-serif)]",
+  atkinson: "font-[family-name:var(--font-atkinson)]",
 };
+
+// ---------------------------------------------------------------------------
+// WhatsApp — le vert n'est jamais thémé, l'encre qui lit dessus non plus
+// ---------------------------------------------------------------------------
+
+/** Le vert officiel, identique sur tous les thèmes pour être reconnu en une demi-seconde. */
+export const WHATSAPP_GREEN = "#25D366";
+
+/**
+ * Encre des libellés et glyphes posés sur le vert : 7,46:1, là où le blanc
+ * ne fait que 1,98:1 — illisible en plein soleil.
+ */
+export const WHATSAPP_INK = "#062E20";
 
 // ---------------------------------------------------------------------------
 // Order statuses

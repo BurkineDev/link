@@ -11,7 +11,12 @@ import {
 } from "@/components/shop/brand-icons";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { cn } from "@/lib/utils";
-import type { BioPalette } from "@/lib/bio-themes";
+import {
+  bioAvatarInitialsStyle,
+  bioAvatarRingStyle,
+  bioSocialRingStyle,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import type { ShopRow, SocialLinks } from "@/lib/types/database";
 
 // ---------------------------------------------------------------------------
@@ -88,10 +93,18 @@ export function BioSocials({
 
   if (active.length === 0) return null;
 
+  // Cercles bordés sur un thème à décor, icônes nues sinon.
+  const ring = bioSocialRingStyle(palette);
+
   return (
     <nav
       aria-label="Réseaux sociaux"
-      className={cn("flex flex-wrap items-center justify-center gap-1", className)}
+      className={cn(
+        "flex flex-wrap items-center justify-center",
+        // Des cercles bordés respirent mieux que des icônes nues.
+        ring ? "gap-2.5" : "gap-1",
+        className,
+      )}
     >
       {active.map((social) => {
         const Icon = social.icon;
@@ -110,6 +123,7 @@ export function BioSocials({
             style={
               {
                 color: palette.text,
+                ...ring,
                 "--tw-ring-color": palette.text,
               } as React.CSSProperties
             }
@@ -134,19 +148,48 @@ function isFeatured(featuredUntil: string | null): boolean {
 export function BioProfile({
   shop,
   palette,
+  className,
+  style,
 }: {
   shop: ShopRow;
   palette: BioPalette;
+  /**
+   * La page décide de la géométrie : avec une bande ou une bannière, elle
+   * remonte ou descend le profil pour que l'avatar chevauche la lisière.
+   */
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   const featured = isFeatured(shop.featured_until);
+  const decor = palette.decor;
+  // L'anneau du décor remplace l'ombre floue historique ; sans décor,
+  // `undefined` et l'avatar garde sa bordure 2 px et son shadow-lg.
+  const ring = bioAvatarRingStyle(palette);
 
   return (
-    <header className="flex flex-col items-center px-4 text-center">
+    <header
+      className={cn(
+        "flex flex-col items-center px-4 text-center",
+        className,
+      )}
+      style={style}
+    >
       {/* Avatar */}
       {shop.logo_url ? (
         <div
-          className="relative size-24 overflow-hidden rounded-full shadow-lg"
-          style={{ border: `2px solid ${palette.border}` }}
+          className={cn(
+            "relative size-24 overflow-hidden rounded-full",
+            !ring && "shadow-lg",
+          )}
+          style={{
+            // Le double filet garde sa bordure d'encre (le lé cousu) ; les
+            // anneaux moutarde de Wax se passent de bordure ; « raise »
+            // apporte la sienne.
+            ...(decor?.avatarRing === "highlight"
+              ? {}
+              : { border: `2px solid ${palette.border}` }),
+            ...ring,
+          }}
         >
           <Image
             src={shop.logo_url}
@@ -159,22 +202,41 @@ export function BioProfile({
         </div>
       ) : (
         <div
-          className="flex size-24 items-center justify-center rounded-full text-3xl font-bold shadow-lg"
-          style={{
-            backgroundColor: palette.surface,
-            color: palette.surfaceText,
-            border: `1px solid ${palette.border}`,
-          }}
+          // Initiales en police de corps, jamais en police d'affiche : le
+          // contraste inversé d'Ojuju rend un « C » ou un « O » seul étrange.
+          className={cn(
+            "flex size-24 items-center justify-center rounded-full text-3xl font-bold",
+            !ring && "shadow-lg",
+          )}
+          // Couleurs, filet et anneau partagés avec la story et les
+          // aperçus ; sans décor, le filet 1 px historique.
+          style={
+            decor
+              ? bioAvatarInitialsStyle(palette)
+              : {
+                  ...bioAvatarInitialsStyle(palette),
+                  border: `1px solid ${palette.border}`,
+                }
+          }
           aria-hidden
         >
           {shop.name.charAt(0).toUpperCase()}
         </div>
       )}
 
-      {/* Name + handle */}
+      {/* Name + handle — en police d'affiche quand le thème en apporte une
+          et que le vendeur n'a pas choisi la sienne (var absente → inherit). */}
       <h1
-        className="mt-4 flex items-center gap-1.5 text-xl font-bold tracking-tight sm:text-2xl"
-        style={{ color: palette.accent }}
+        className={cn(
+          "mt-4 flex items-center gap-1.5 font-bold",
+          decor
+            ? "text-[26px] leading-tight"
+            : "text-xl tracking-tight sm:text-2xl",
+        )}
+        style={{
+          color: palette.accent,
+          fontFamily: "var(--bio-font-display, inherit)",
+        }}
       >
         {shop.name}
         {featured && (
@@ -189,10 +251,16 @@ export function BioProfile({
         @{shop.slug}
       </p>
 
-      {/* Bio */}
+      {/* Bio — 16 px/500 avec décor (interligne 1,5 des maquettes), rendu
+          historique sinon. L'interligne s'écrit APRÈS la taille : pour
+          tailwind-merge, `text-sm` posé après `leading-relaxed` l'annule
+          (les utilitaires de taille portent leur propre interligne). */}
       {shop.description && (
         <p
-          className="mt-3 max-w-md text-sm leading-relaxed"
+          className={cn(
+            "mt-3 max-w-md",
+            decor ? "text-base font-medium" : "text-sm leading-relaxed",
+          )}
           style={{ color: palette.text }}
         >
           {shop.description}

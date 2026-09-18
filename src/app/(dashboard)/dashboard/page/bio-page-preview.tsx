@@ -1,9 +1,25 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Globe, Link2, MessageCircle, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CTA_SHAPE_CLASS, FONT_FAMILY_CLASS } from "@/lib/constants";
-import type { BioPalette } from "@/lib/bio-themes";
+import {
+  bioAvatarInitialsStyle,
+  bioFontVars,
+  bioIconTileStyle,
+  bioThemeCssVars,
+  whatsappButtonStyle,
+  type BioPalette,
+} from "@/lib/bio-themes";
+import { BioDivider } from "@/components/shop/bio-theme-decor";
+import {
+  PreviewBanner,
+  PreviewHeaderDecor,
+  previewButtonStyle,
+  previewCardStyle,
+  previewProfileOffset,
+} from "@/components/dashboard/bio-preview-decor";
 import type { ResolvedBlock } from "@/lib/blocks/types";
 import type { ShopRow } from "@/lib/types/database";
 
@@ -12,8 +28,11 @@ import type { ShopRow } from "@/lib/types/database";
  *
  * Reprend la palette et les formes de la vraie page (mêmes résolveur et
  * classes) pour que ce que le vendeur voit corresponde à ce que le visiteur
- * recevra. Les blocs masqués apparaissent estompés et marqués — dans
- * l'éditeur, ils doivent rester visibles pour être réactivés.
+ * recevra. Le décor des thèmes « Afrique de l'Ouest » (lavis ou bande de
+ * tête, anneau d'avatar, couture, boutons bordés, cartes crème) passe par
+ * les mêmes composants et fonctions de style que la page. Les blocs masqués
+ * apparaissent estompés et marqués — dans l'éditeur, ils doivent rester
+ * visibles pour être réactivés.
  */
 
 interface BioPagePreviewProps {
@@ -22,15 +41,23 @@ interface BioPagePreviewProps {
   blocks: ResolvedBlock[];
 }
 
+/** Avatar de l'aperçu : 64 px, le `size-16` ci-dessous. */
+const AVATAR_SIZE = 64;
+
+/** Haut de la colonne : `py-5` (20 px). */
+const CONTENT_TOP = 20;
+
 export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
   const fontClass = FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
   const shapeClass = CTA_SHAPE_CLASS[shop.cta_shape] ?? CTA_SHAPE_CLASS.rounded;
-
-  const surfaceStyle: React.CSSProperties = {
-    backgroundColor: palette.surface,
-    color: palette.surfaceText,
-    border: `1px solid ${palette.border}`,
-  };
+  const fontVars = bioFontVars(palette, shop.font_family);
+  const hasBanner = Boolean(shop.banner_url);
+  // Le profil descend sur la lisière d'une bande ; rien sinon.
+  const marginTop = previewProfileOffset(palette, {
+    hasBanner,
+    avatarSize: AVATAR_SIZE,
+    contentTop: CONTENT_TOP,
+  });
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
@@ -45,14 +72,40 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
       </div>
 
       <div
-        className={cn("h-[520px] overflow-y-auto px-4 py-5", fontClass)}
-        style={{ background: palette.background, color: palette.text }}
+        className={cn("relative h-[520px] overflow-y-auto px-4 py-5", fontClass)}
+        style={
+          {
+            background: palette.background,
+            color: palette.text,
+            colorScheme: palette.scheme,
+            ...bioThemeCssVars(palette),
+            ...fontVars,
+            fontFamily: fontVars["--bio-font-body"] ? "var(--bio-font-body)" : undefined,
+          } as CSSProperties
+        }
       >
+        {/* Décor de tête (lavis ou bande), le composant de la page réduit,
+            ou la bannière fondue dans le fond, comme sur la page. */}
+        <PreviewHeaderDecor palette={palette} hasBanner={hasBanner} />
+        {shop.banner_url && <PreviewBanner url={shop.banner_url} palette={palette} />}
+
         {/* Profil */}
-        <div className="flex flex-col items-center text-center">
+        <div
+          className="relative flex flex-col items-center text-center"
+          style={marginTop === undefined ? undefined : { marginTop }}
+        >
           <div
             className="flex size-16 items-center justify-center overflow-hidden rounded-full text-xl font-bold"
-            style={surfaceStyle}
+            // Le disque de la page (couleurs, filet, anneau) ; sans décor, le
+            // filet 1 px de l'aperçu historique.
+            style={
+              palette.decor
+                ? bioAvatarInitialsStyle(palette)
+                : {
+                    ...bioAvatarInitialsStyle(palette),
+                    border: `1px solid ${palette.border}`,
+                  }
+            }
           >
             {shop.logo_url ? (
               // Aperçu local : pas d'optimisation d'image nécessaire.
@@ -62,7 +115,13 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
               shop.name.charAt(0).toUpperCase()
             )}
           </div>
-          <p className="mt-2 text-sm font-bold" style={{ color: palette.accent }}>
+          <p
+            className="mt-2 text-sm font-bold"
+            style={{
+              color: palette.accent,
+              fontFamily: "var(--bio-font-display, inherit)",
+            }}
+          >
             {shop.name}
           </p>
           <p className="text-[10px]" style={{ color: palette.muted }}>
@@ -75,8 +134,11 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
           )}
         </div>
 
+        {/* La couture entre le profil et les blocs (thèmes à décor). */}
+        <BioDivider palette={palette} className="relative" />
+
         {/* Blocs */}
-        <div className="mt-4 space-y-2">
+        <div className="relative mt-4 space-y-2">
           {blocks.length === 0 && (
             <p
               className="rounded-lg border border-dashed px-3 py-6 text-center text-[11px]"
@@ -103,12 +165,20 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
               {block.title && (
                 <p
                   className="mb-1 px-1 text-[11px] font-semibold"
-                  style={{ color: palette.text }}
+                  style={{
+                    color: palette.text,
+                    fontFamily: "var(--bio-font-display, inherit)",
+                  }}
                 >
                   {block.title}
                 </p>
               )}
-              <BlockPreview block={block} palette={palette} shapeClass={shapeClass} />
+              <BlockPreview
+                block={block}
+                palette={palette}
+                shapeClass={shapeClass}
+                pill={shop.cta_shape === "pill"}
+              />
             </div>
           ))}
         </div>
@@ -121,13 +191,19 @@ function BlockPreview({
   block,
   palette,
   shapeClass,
+  pill,
 }: {
   block: ResolvedBlock;
   palette: BioPalette;
   shapeClass: string;
+  pill: boolean;
 }) {
   const config = block.config as Record<string, unknown>;
-  const surfaceStyle: React.CSSProperties = {
+  const decor = palette.decor;
+  // Les mêmes styles que la page, sans le flou du variant verre.
+  const buttonStyle = previewButtonStyle(palette, { pill });
+  const cardStyle = previewCardStyle(palette);
+  const surfaceStyle: CSSProperties = {
     backgroundColor: palette.surface,
     color: palette.surfaceText,
     border: `1px solid ${palette.border}`,
@@ -137,12 +213,17 @@ function BlockPreview({
     case "LINK":
       return (
         <div
-          className={cn("flex items-center gap-2 p-1.5 text-[11px] font-semibold", shapeClass)}
-          style={surfaceStyle}
+          className={cn(
+            "flex items-center gap-2 p-1.5 text-[11px] font-semibold",
+            // La lisière de 5 px du Pagne tissé mordrait sur la tuile.
+            decor?.selvedge && !pill && "pl-3",
+            shapeClass,
+          )}
+          style={buttonStyle}
         >
           <span
             className={cn("flex size-7 items-center justify-center", shapeClass)}
-            style={{ backgroundColor: "color-mix(in oklab, currentColor 10%, transparent)" }}
+            style={bioIconTileStyle(palette)}
           >
             <Link2 className="size-3" />
           </span>
@@ -154,13 +235,14 @@ function BlockPreview({
       );
 
     case "WHATSAPP":
+      // Encre sombre sur le vert : le blanc ne lisait pas en plein soleil.
       return (
         <div
           className={cn(
-            "flex items-center justify-center gap-1.5 p-2 text-[11px] font-semibold text-white",
+            "flex items-center justify-center gap-1.5 p-2 text-[11px] font-semibold",
             shapeClass,
           )}
-          style={{ backgroundColor: "#25D366" }}
+          style={whatsappButtonStyle("inline")}
         >
           <MessageCircle className="size-3" />
           {String(config.label ?? "WhatsApp")}
@@ -204,9 +286,12 @@ function BlockPreview({
             <div
               key={i}
               className={cn("overflow-hidden", shapeClass)}
-              style={surfaceStyle}
+              style={cardStyle}
             >
-              <div className="flex aspect-square w-full items-center justify-center">
+              <div
+                className="flex aspect-square w-full items-center justify-center"
+                style={decor ? { borderBottom: `1px solid ${palette.border}` } : undefined}
+              >
                 <ShoppingBag className="size-5 opacity-40" />
               </div>
               <div className="space-y-1 p-1.5">
@@ -214,10 +299,23 @@ function BlockPreview({
                   className="h-1.5 w-3/4 rounded-full"
                   style={{ backgroundColor: "currentColor", opacity: 0.25 }}
                 />
+                {/* Le prix : une pastille de rehaut sur les thèmes à décor. */}
                 <div
-                  className="h-1.5 w-1/2 rounded-full"
-                  style={{ backgroundColor: "currentColor", opacity: 0.4 }}
+                  className="h-2 w-1/2 rounded-sm"
+                  style={
+                    decor?.highlight
+                      ? { backgroundColor: decor.highlight.bg }
+                      : { backgroundColor: "currentColor", opacity: 0.4 }
+                  }
                 />
+                {/* « Commander » pleine largeur, encre sur vert : sur tous les thèmes. */}
+                <div
+                  className="flex h-4 items-center justify-center gap-0.5 rounded text-[8px] font-bold"
+                  style={whatsappButtonStyle("inline")}
+                >
+                  <MessageCircle className="size-2" />
+                  Commander
+                </div>
               </div>
             </div>
           ))}

@@ -30,8 +30,8 @@ import {
 import {
   BIO_THEME_LIST,
   DEFAULT_BIO_THEME,
+  groupBioThemes,
   isBioThemeId,
-  resolveBioTheme,
   type BioThemeId,
 } from "@/lib/bio-themes";
 import {
@@ -42,6 +42,7 @@ import {
   DEFAULT_THEME_COLOR,
 } from "@/lib/constants";
 import { ThemePreview } from "@/components/dashboard/theme-preview";
+import { BioThemeSwatch } from "@/components/dashboard/bio-theme-swatch";
 import {
   INTENTION_META,
   INTENTIONS,
@@ -127,6 +128,13 @@ function step2Schema(onlineCheckout: boolean) {
 
 type Step1Values = z.infer<typeof step1Schema>;
 type Step2Values = z.infer<ReturnType<typeof step2Schema>>;
+
+/**
+ * Thèmes proposés à l'inscription : tous sauf « Mes couleurs », qui reprend
+ * des couleurs que la boutique n'a pas encore. L'ordre et les groupes sont
+ * ceux de BIO_THEME_LIST ; Wax est présélectionné (DEFAULT_BIO_THEME).
+ */
+const ONBOARDING_THEMES = BIO_THEME_LIST.filter((theme) => theme.id !== "brand");
 
 // ─── Live preview ────────────────────────────────────────────
 // The page the seller is building, rendered while they type. Same resolver
@@ -1163,68 +1171,65 @@ function OnboardingWizard({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {BIO_THEME_LIST.filter((t) => t.id !== "brand").map((theme) => {
-                    const palette = resolveBioTheme({
-                      bio_theme: theme.id,
-                      theme_color: DEFAULT_THEME_COLOR,
-                      accent_color: DEFAULT_ACCENT_COLOR,
-                    });
-                    const selected = bioTheme === theme.id;
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => setBioTheme(theme.id)}
-                        aria-pressed={selected}
-                        title={theme.description}
-                        className={cn(
-                          "relative overflow-hidden rounded-xl border-2 text-left transition-all",
-                          selected
-                            ? "border-primary ring-2 ring-primary/30"
-                            : "border-border hover:border-primary/50",
-                        )}
-                      >
-                        {/* Miniature of the page the buyer will land on */}
-                        <div
-                          className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 p-3"
-                          style={{ background: palette.background }}
-                        >
-                          <span
-                            className="size-5 rounded-full"
-                            style={{ backgroundColor: palette.surface }}
-                          />
-                          <span
-                            className="h-1 w-8 rounded-full"
-                            style={{ backgroundColor: palette.accent }}
-                          />
-                          <span
-                            className="h-3 w-full rounded-full"
-                            style={{
-                              backgroundColor: palette.surface,
-                              border: `1px solid ${palette.border}`,
-                            }}
-                          />
-                          <span
-                            className="h-3 w-full rounded-full"
-                            style={{
-                              backgroundColor: palette.surface,
-                              border: `1px solid ${palette.border}`,
-                            }}
-                          />
-                        </div>
-                        <p className="px-2.5 py-2 text-xs font-semibold">
-                          {theme.label}
-                        </p>
-                        {selected && (
-                          <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary">
-                            <Check className="size-3 text-primary-foreground" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Les thèmes par groupe, l'Afrique de l'Ouest en tête.
+                    « Mes couleurs » attend que la boutique ait ses couleurs :
+                    il n'est pas proposé ici. */}
+                {groupBioThemes(ONBOARDING_THEMES).map((group) => (
+                  <div key={group.group} className="space-y-2">
+                    <h2
+                      id={`onboarding-theme-group-${group.group}`}
+                      className="text-sm font-semibold"
+                    >
+                      {group.label}
+                    </h2>
+                    {group.group === "afrique" && (
+                      <p className="text-xs text-muted-foreground">
+                        Pensés pour le plein soleil et les petits écrans.
+                      </p>
+                    )}
+                    <div
+                      role="group"
+                      aria-labelledby={`onboarding-theme-group-${group.group}`}
+                      className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+                    >
+                      {group.themes.map((theme) => {
+                        const selected = bioTheme === theme.id;
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            onClick={() => setBioTheme(theme.id)}
+                            aria-pressed={selected}
+                            title={theme.description}
+                            className={cn(
+                              "relative overflow-hidden rounded-xl border-2 text-left transition-all",
+                              selected
+                                ? "border-primary ring-2 ring-primary/30"
+                                : "border-border hover:border-primary/50",
+                            )}
+                          >
+                            {/* Miniature of the page the buyer will land on */}
+                            <div className="aspect-[4/3] overflow-hidden">
+                              <BioThemeSwatch
+                                themeId={theme.id}
+                                primaryColor={DEFAULT_THEME_COLOR}
+                                accentColor={DEFAULT_ACCENT_COLOR}
+                              />
+                            </div>
+                            <p className="px-2.5 py-2 text-xs font-semibold">
+                              {theme.label}
+                            </p>
+                            {selected && (
+                              <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary">
+                                <Check className="size-3 text-primary-foreground" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
 
                 <OnboardingPreview
                   shopName={step2Data?.shopName ?? ""}

@@ -22,7 +22,13 @@ import {
   YoutubeIcon,
 } from "@/components/shop/brand-icons";
 import { cn } from "@/lib/utils";
-import type { BioPalette } from "@/lib/bio-themes";
+import { CTA_SHAPE_CLASS } from "@/lib/constants";
+import {
+  bioButtonStyle,
+  bioIconTileStyle,
+  bioSurfaceMutedOn,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { blockGoHref } from "@/lib/blocks/ids";
 import { linkSubtitle } from "@/lib/links/subtitle";
@@ -117,36 +123,26 @@ export function BioLinkButton({
   // comptés côté serveur). Une fois hydraté, tout se passe ici.
   const viaGo = /^https?:/i.test(link.url);
 
-  const surfaceStyle: React.CSSProperties = (() => {
-    switch (palette.buttonVariant) {
-      case "outline":
-        return {
-          backgroundColor: "transparent",
-          color: palette.text,
-          border: `2px solid ${palette.text}`,
-        };
-      case "shadow":
-        return {
-          backgroundColor: palette.surface,
-          color: palette.surfaceText,
-          border: `1px solid ${palette.border}`,
-          boxShadow: `0 3px 0 0 ${palette.border}`,
-        };
-      case "glass":
-        return {
-          backgroundColor: palette.surface,
-          color: palette.surfaceText,
-          border: `1px solid ${palette.border}`,
-          backdropFilter: "blur(12px)",
-        };
-      default:
-        return {
-          backgroundColor: palette.surface,
-          color: palette.surfaceText,
-          border: "1px solid transparent",
-        };
-    }
-  })();
+  const decor = palette.decor;
+  // Une seule implémentation du style de bouton, partagée avec les aperçus
+  // du tableau de bord ; la lisière du Pagne tissé s'efface en forme pilule.
+  const surfaceStyle = bioButtonStyle(palette, {
+    pill: radiusClass === CTA_SHAPE_CLASS.pill,
+  });
+  // Ce sur quoi le sous-titre est posé : la page pour un bouton contour,
+  // la surface pour les autres.
+  const subtitleOn =
+    palette.buttonVariant === "outline"
+      ? palette.backgroundSolid
+      : palette.surface;
+  // Tuile d'icône : la même règle que les aperçus du tableau de bord
+  // (inversée sur Wax, teintée d'accent sur Pagne tissé, historique ailleurs).
+  const tileStyle = bioIconTileStyle(palette);
+  // Le glyphe du bouton « … » est choisi pour lire sur la surface du
+  // bouton ; l'anneau de focus suit cette couleur sur un thème à décor
+  // (le texte de page — crème — était invisible sur le sable d'Indigo).
+  const glyphColor =
+    palette.buttonVariant === "outline" ? palette.text : palette.surfaceText;
 
   const body = (
     <>
@@ -170,12 +166,7 @@ export function BioLinkButton({
             "flex size-12 shrink-0 items-center justify-center",
             radiusClass,
           )}
-          style={{
-            backgroundColor:
-              palette.buttonVariant === "outline"
-                ? "transparent"
-                : `color-mix(in oklab, currentColor 10%, transparent)`,
-          }}
+          style={tileStyle}
           aria-hidden
         >
           <Icon className="size-5" />
@@ -183,9 +174,27 @@ export function BioLinkButton({
       )}
 
       <span className="flex min-w-0 flex-1 flex-col items-center px-1 text-center">
-        <span className="w-full truncate text-[15px] font-semibold">{link.label}</span>
+        {/* Avec décor, le titre tient sur deux lignes (« Prendre rendez-vous
+            à l'atelier » était tronqué) et le sous-titre s'écrit en couleur
+            plutôt qu'en opacité, qui tombait sous 4,5:1 au soleil. */}
+        <span
+          className={cn(
+            "w-full text-[15px] font-semibold",
+            decor ? "line-clamp-2 leading-snug" : "truncate",
+          )}
+        >
+          {link.label}
+        </span>
         {subtitle && (
-          <span className="w-full truncate text-xs font-medium opacity-60">{subtitle}</span>
+          <span
+            className={cn(
+              "w-full truncate font-medium",
+              decor ? "text-[13px]" : "text-xs opacity-60",
+            )}
+            style={decor ? { color: bioSurfaceMutedOn(palette, subtitleOn) } : undefined}
+          >
+            {subtitle}
+          </span>
         )}
       </span>
 
@@ -196,6 +205,8 @@ export function BioLinkButton({
 
   const sharedClasses = cn(
     "flex min-h-16 w-full items-center gap-2 p-2",
+    // La lisière de 5 px du Pagne tissé mordrait sur la tuile d'icône.
+    decor?.selvedge && radiusClass !== CTA_SHAPE_CLASS.pill && "pl-3",
     "transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
     radiusClass,
@@ -249,11 +260,8 @@ export function BioLinkButton({
           "focus-visible:outline-none focus-visible:ring-2",
         )}
         style={{
-          color:
-            palette.buttonVariant === "outline"
-              ? palette.text
-              : palette.surfaceText,
-          ["--tw-ring-color" as string]: palette.text,
+          color: glyphColor,
+          ["--tw-ring-color" as string]: decor ? glyphColor : palette.text,
         } as React.CSSProperties}
       >
         <MoreVertical className="size-5" />

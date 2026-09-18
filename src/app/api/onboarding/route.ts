@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { RESERVED_SLUGS } from "@/lib/constants";
+import { isBioThemeId } from "@/lib/bio-themes";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { Prisma } from "../../../../prisma/generated/client/client";
 
@@ -51,7 +52,11 @@ const bodySchema = z.object({
       .refine((v) => !v || isValidE164(v), {
         message: "Numéro WhatsApp incomplet : indicatif du pays requis.",
       }),
-    bioTheme: z.string().min(1).max(50),
+    // Fermé sur le catalogue, comme le PATCH de la boutique : un id inconnu
+    // était stocké tel quel puis replié en silence sur le thème par défaut.
+    bioTheme: z.string().min(1).max(50).refine(isBioThemeId, {
+      message: "Thème de page inconnu.",
+    }),
     intentions: z.array(z.string().max(50)).max(20).default([]),
   }),
   blocks: z
