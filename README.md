@@ -217,15 +217,49 @@ The public page a seller pastes in their TikTok / Instagram bio is a centred
 link-in-bio page with a **Liens / Boutique** switch — link buttons on one side,
 the product catalogue on the other. `/{slug}#boutique` deep-links the shop tab.
 
-Its whole look comes from `shops.bio_theme`, one of the presets in
-`src/lib/bio-themes.ts` (`classic`, `noir`, `lagoon`, `sunset`, `sahel`,
-`kente`, `mint`, `lavender`, `midnight`, or `brand` — which derives the palette
-from the shop's own `theme_color` / `accent_color`). Sellers pick it under
-**Réglages → Apparence**, next to a live preview.
+Its whole look comes from `shops.bio_theme`, one of the fourteen presets in
+`src/lib/bio-themes.ts`, listed in the picker's own order and groups:
 
-Every palette is contrast-checked in `src/__tests__/bio-themes.test.ts`: body
-text clears 3:1 on its background and button text clears 4.5:1 on its surface,
-including the seller-derived `brand` theme.
+- **Afrique de l'Ouest** — `bogolan`, `wax`, `indigo`, `pagne` (the four
+  themes with a `decor`), then `sahel` and `kente`.
+- **Classiques** — `classic`, `noir`, `lagoon`, `sunset`, `mint`, `lavender`,
+  `midnight`.
+- **Mes couleurs** — `brand`, which derives the palette from the shop's own
+  `theme_color` / `accent_color`.
+
+Sellers pick it under **Réglages → Apparence** and at onboarding, next to a
+live preview (`ThemePreview`, `BioPagePreview`) and a shared thumbnail
+(`BioThemeSwatch`), all painted by the same helpers as the page.
+
+`decor` is an additive field on a preset: a tiled SVG pattern baked as a
+data-URI, a wash or a band as the header, a divider between the socials and
+the tabs, bold borders / selvedge / hard shadow, an avatar ring, a highlight
+colour for the price badge, optional card colours and a font pair. Everything
+decor-related in the components is conditioned on that field — the ten
+historical presets and `brand` have none and render exactly as before, apart
+from the global fixes shipped with the themes (dark ink on WhatsApp green,
+"Commander" spelled out on every card, "12 500 FCFA" formatting).
+
+New shops start on `DEFAULT_BIO_THEME` (`wax`): the onboarding preselects it
+and `POST /api/shops` writes it. The Prisma default stays `classic`, so
+existing rows keep their theme with no migration. `resolveBioTheme()` falls
+back to the default for an unknown id, and `PATCH /api/shops/{id}` /
+`POST /api/onboarding` now reject ids outside the catalogue.
+
+Fonts: `bioFontVars()` applies the theme pair (Ojuju 700 for the shop name,
+group titles and price digits; Atkinson Hyperlegible Next for the body) only
+when `font_family` is `sans`, the default — any seller-chosen font wins
+everywhere. "Hyperlisible" (`atkinson`) is also the fifth standalone font.
+
+Tests in `src/__tests__/bio-themes.test.ts` guard the contrast rules: body
+text clears 3:1 on its background and button text 4.5:1 on its surface for
+every preset including `brand`; the four Afrique themes clear 4.5:1
+("readable in full sun") everywhere text is placed; the tab track keeps its
+inactive label readable (`bioTabTrackStyle`'s guard, which also fixes
+Lagune); WhatsApp buttons carry the dark ink. `bio-page-render.test.tsx`,
+`bio-theme-swatch.test.tsx` and `story-images.test.ts` check that the page,
+the dashboard previews and the story images wire those helpers in the same
+places, and that the historical themes receive no decor.
 
 The product page `/{slug}/{product}` is painted in the same palette: content
 sits on a surface card (which is what keeps text readable under every theme),

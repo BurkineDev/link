@@ -5,16 +5,21 @@ import { Globe, Link2, MessageCircle, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CTA_SHAPE_CLASS, FONT_FAMILY_CLASS } from "@/lib/constants";
 import {
-  bioAvatarRingStyle,
-  bioButtonStyle,
-  bioCardStyle,
+  bioAvatarInitialsStyle,
   bioFontVars,
+  bioIconTileStyle,
   bioThemeCssVars,
-  contrastRatio,
   whatsappButtonStyle,
   type BioPalette,
 } from "@/lib/bio-themes";
-import { BioDivider, BioHeaderDecor } from "@/components/shop/bio-theme-decor";
+import { BioDivider } from "@/components/shop/bio-theme-decor";
+import {
+  PreviewBanner,
+  PreviewHeaderDecor,
+  previewButtonStyle,
+  previewCardStyle,
+  previewProfileOffset,
+} from "@/components/dashboard/bio-preview-decor";
 import type { ResolvedBlock } from "@/lib/blocks/types";
 import type { ShopRow } from "@/lib/types/database";
 
@@ -36,55 +41,23 @@ interface BioPagePreviewProps {
   blocks: ResolvedBlock[];
 }
 
-/**
- * L'aperçu est une page réduite (avatar 64 px au lieu de 96) : le décor de
- * tête est rendu par le composant de la page, à ses hauteurs réelles, puis
- * réduit d'un facteur unique.
- */
-const DECOR_SCALE = 0.6;
-
 /** Avatar de l'aperçu : 64 px, le `size-16` ci-dessous. */
 const AVATAR_SIZE = 64;
 
 /** Haut de la colonne : `py-5` (20 px). */
 const CONTENT_TOP = 20;
 
-/**
- * Sur la page, l'avatar chevauche la lisière de la bande (−48 px) : ici le
- * profil descend pour que le centre de l'avatar tombe sur la lisière de la
- * bande réduite. Sans bande (lavis, bannière, thème historique), rien.
- */
-function profileOffset(palette: BioPalette, hasBanner: boolean): number | undefined {
-  const header = palette.decor?.header;
-  if (hasBanner || header?.kind !== "band") return undefined;
-  return Math.max(0, header.height * DECOR_SCALE - AVATAR_SIZE / 2 - CONTENT_TOP);
-}
-
-/**
- * Tuile d'icône d'un bouton de lien, la règle de bio-link-button : sur un
- * thème à décor dont les boutons sont un aplat franc sur page claire (Wax :
- * cobalt sur crème), la tuile s'inverse en disque du fond de page avec
- * l'icône couleur bouton ; partout ailleurs, la teinte du texte courant à
- * 10 %, comme aujourd'hui.
- */
-function iconTileStyle(palette: BioPalette): CSSProperties {
-  if (
-    palette.decor &&
-    palette.scheme === "light" &&
-    contrastRatio(palette.surface, palette.backgroundSolid) >= 3
-  ) {
-    return { backgroundColor: palette.backgroundSolid, color: palette.surface };
-  }
-  return { backgroundColor: "color-mix(in oklab, currentColor 10%, transparent)" };
-}
-
 export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
   const fontClass = FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
   const shapeClass = CTA_SHAPE_CLASS[shop.cta_shape] ?? CTA_SHAPE_CLASS.rounded;
   const fontVars = bioFontVars(palette, shop.font_family);
   const hasBanner = Boolean(shop.banner_url);
-  const ring = bioAvatarRingStyle(palette);
-  const marginTop = profileOffset(palette, hasBanner);
+  // Le profil descend sur la lisière d'une bande ; rien sinon.
+  const marginTop = previewProfileOffset(palette, {
+    hasBanner,
+    avatarSize: AVATAR_SIZE,
+    contentTop: CONTENT_TOP,
+  });
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
@@ -111,32 +84,10 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
           } as CSSProperties
         }
       >
-        {/* Décor de tête (lavis ou bande), le composant de la page réduit. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-0 origin-top-left"
-          style={{
-            width: `${100 / DECOR_SCALE}%`,
-            transform: `scale(${DECOR_SCALE})`,
-          }}
-        >
-          <BioHeaderDecor palette={palette} hasBanner={hasBanner} />
-        </div>
-
-        {/* Bannière fondue dans le fond, comme sur la page */}
-        {shop.banner_url && (
-          <div className="absolute inset-x-0 top-0 h-24 overflow-hidden">
-            {/* Aperçu local : pas d'optimisation d'image nécessaire. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={shop.banner_url} alt="" className="size-full object-cover" />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `linear-gradient(to bottom, ${palette.backgroundSolid}40, ${palette.backgroundSolid})`,
-              }}
-            />
-          </div>
-        )}
+        {/* Décor de tête (lavis ou bande), le composant de la page réduit,
+            ou la bannière fondue dans le fond, comme sur la page. */}
+        <PreviewHeaderDecor palette={palette} hasBanner={hasBanner} />
+        {shop.banner_url && <PreviewBanner url={shop.banner_url} palette={palette} />}
 
         {/* Profil */}
         <div
@@ -145,12 +96,16 @@ export function BioPagePreview({ shop, palette, blocks }: BioPagePreviewProps) {
         >
           <div
             className="flex size-16 items-center justify-center overflow-hidden rounded-full text-xl font-bold"
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              border: `1px solid ${palette.border}`,
-              ...ring,
-            }}
+            // Le disque de la page (couleurs, filet, anneau) ; sans décor, le
+            // filet 1 px de l'aperçu historique.
+            style={
+              palette.decor
+                ? bioAvatarInitialsStyle(palette)
+                : {
+                    ...bioAvatarInitialsStyle(palette),
+                    border: `1px solid ${palette.border}`,
+                  }
+            }
           >
             {shop.logo_url ? (
               // Aperçu local : pas d'optimisation d'image nécessaire.
@@ -245,11 +200,9 @@ function BlockPreview({
 }) {
   const config = block.config as Record<string, unknown>;
   const decor = palette.decor;
-  const buttonStyle = bioButtonStyle(palette, { pill });
-  const cardStyle: CSSProperties = { ...bioCardStyle(palette) };
-  // Un flou dans un aperçu de 300 px ne montre rien de plus et coûte une
-  // couche de composition par carte : on le laisse à la page.
-  delete cardStyle.backdropFilter;
+  // Les mêmes styles que la page, sans le flou du variant verre.
+  const buttonStyle = previewButtonStyle(palette, { pill });
+  const cardStyle = previewCardStyle(palette);
   const surfaceStyle: CSSProperties = {
     backgroundColor: palette.surface,
     color: palette.surfaceText,
@@ -270,7 +223,7 @@ function BlockPreview({
         >
           <span
             className={cn("flex size-7 items-center justify-center", shapeClass)}
-            style={iconTileStyle(palette)}
+            style={bioIconTileStyle(palette)}
           >
             <Link2 className="size-3" />
           </span>

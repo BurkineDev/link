@@ -809,6 +809,16 @@ function shift(hex: string, target: number, ratio: number): string {
 const hardShadow = (color: string) => `0 3px 0 0 ${color}`;
 
 /**
+ * Épaisseur du filet d'un thème : 2 px quand ses boutons sont bordés
+ * (`buttonBorder: "bold"` — Wax, Pagne tissé), 1 px sinon. Un seul endroit
+ * en décide pour les cartes, la piste des onglets, les puces et les cercles
+ * des réseaux ; les boutons eux-mêmes passent par bioButtonStyle().
+ */
+export function bioBorderWidth(palette: BioPalette): 1 | 2 {
+  return palette.decor?.buttonBorder === "bold" ? 2 : 1;
+}
+
+/**
  * Style d'un bouton de lien. Les quatre variants historiques sont repris tels
  * quels ; un décor peut ajouter la bordure marquée (2 px `border`) et la
  * lisière gauche de 5 px, cette dernière retirée en forme pilule où elle
@@ -884,12 +894,80 @@ export function bioCardStyle(palette: BioPalette): CSSProperties {
   const style: CSSProperties = {
     backgroundColor: decor?.card?.bg ?? palette.surface,
     color: decor?.card?.text ?? palette.surfaceText,
-    border: `${decor?.buttonBorder === "bold" ? 2 : 1}px solid ${palette.border}`,
+    border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
     backdropFilter: palette.buttonVariant === "glass" ? "blur(12px)" : undefined,
   };
   const raise = bioRaise(palette);
   if (raise) style.boxShadow = raise;
   return style;
+}
+
+/**
+ * Puce de surface (réseaux d'un bloc SOCIAL) : surface, texte de surface,
+ * filet à l'épaisseur du thème et ombre dure quand il est en relief. Sans
+ * décor, exactement la puce historique (filet 1 px, sans ombre).
+ */
+export function bioChipStyle(palette: BioPalette): CSSProperties {
+  const style: CSSProperties = {
+    backgroundColor: palette.surface,
+    color: palette.surfaceText,
+    border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
+  };
+  const raise = bioRaise(palette);
+  if (raise) style.boxShadow = raise;
+  return style;
+}
+
+/**
+ * Cercle d'un réseau sous la bio, sur un thème à décor : de petits tampons
+ * à filet, en accord avec les pastilles de la barre haute. Filet 1 px
+ * `border` pour les thèmes à ombre dure (Bogolan, Indigo), 2 px `accent`
+ * quand les boutons sont eux-mêmes bordés (Wax, Pagne tissé). Sans décor :
+ * `undefined`, les icônes restent nues comme avant.
+ */
+export function bioSocialRingStyle(
+  palette: BioPalette,
+): CSSProperties | undefined {
+  const decor = palette.decor;
+  if (!decor) return undefined;
+  const bold = decor.buttonBorder === "bold";
+  const ink = bold ? palette.accent : palette.border;
+  return {
+    color: bold ? palette.accent : palette.text,
+    border: `${bioBorderWidth(palette)}px solid ${ink}`,
+  };
+}
+
+/**
+ * Tuile d'icône d'un bouton de lien. Sur un thème à décor dont les boutons
+ * sont un aplat franc sur page claire (Wax : cobalt sur crème), la tuile
+ * s'inverse en disque du fond de page avec l'icône couleur bouton ; sur des
+ * boutons clairs bordés (Pagne tissé : blanc sur écru), elle se teinte de
+ * l'accent ; partout ailleurs, le rendu historique — 10 % de la couleur
+ * courante, ou rien sur un bouton contour. Une seule règle pour la page et
+ * les deux aperçus du tableau de bord.
+ */
+export function bioIconTileStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  if (
+    decor &&
+    palette.scheme === "light" &&
+    contrastRatio(palette.surface, palette.backgroundSolid) >= 3
+  ) {
+    return { backgroundColor: palette.backgroundSolid, color: palette.surface };
+  }
+  if (decor?.buttonBorder === "bold") {
+    return {
+      backgroundColor: `color-mix(in oklab, ${palette.accent} 10%, transparent)`,
+      color: palette.accent,
+    };
+  }
+  return {
+    backgroundColor:
+      palette.buttonVariant === "outline"
+        ? "transparent"
+        : "color-mix(in oklab, currentColor 10%, transparent)",
+  };
 }
 
 /** AA pour le petit texte (sous-titres, « FCFA ») posé sur une surface. */
@@ -974,6 +1052,29 @@ export function bioAvatarRingStyle(
     default:
       return undefined;
   }
+}
+
+/**
+ * Disque d'initiales de l'avatar. Sur une bande d'en-tête (Wax, Pagne
+ * tissé), un disque `surface` se fondrait dans la bande de la même couleur :
+ * il prend alors le fond de page avec les initiales en `accent`, comme les
+ * pastilles de la barre haute. Ailleurs, la surface et son texte. Avec un
+ * décor, le filet 2 px d'encre (sauf sous les anneaux moutarde de Wax) et
+ * l'anneau du thème viennent avec ; sans décor, les couleurs seules — chaque
+ * rendu historique (page, story, aperçus) garde son propre filet.
+ */
+export function bioAvatarInitialsStyle(palette: BioPalette): CSSProperties {
+  const decor = palette.decor;
+  const style: CSSProperties =
+    decor?.header?.kind === "band"
+      ? { backgroundColor: palette.backgroundSolid, color: palette.accent }
+      : { backgroundColor: palette.surface, color: palette.surfaceText };
+  if (!decor) return style;
+  if (decor.avatarRing !== "highlight") {
+    style.border = `2px solid ${palette.border}`;
+  }
+  // L'anneau « raise » apporte son propre filet, qui l'emporte.
+  return { ...style, ...bioAvatarRingStyle(palette) };
 }
 
 /**
@@ -1091,7 +1192,7 @@ export function bioTabTrackStyle(palette: BioPalette): CSSProperties {
   if (decor?.tabs === "outline") {
     return {
       backgroundColor: track.css,
-      border: `${decor.buttonBorder === "bold" ? 2 : 1}px solid ${palette.border}`,
+      border: `${bioBorderWidth(palette)}px solid ${palette.border}`,
     };
   }
   return { backgroundColor: track.css };

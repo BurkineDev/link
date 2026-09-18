@@ -16,21 +16,19 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { VariantSelector } from "@/components/shop/variant-selector";
-import {
-  BioProductCard,
-  splitPriceSymbol,
-} from "@/components/shop/bio-product-card";
+import { BioProductCard } from "@/components/shop/bio-product-card";
 import { BioHeaderDecor } from "@/components/shop/bio-theme-decor";
 import { BioShareSheet } from "@/components/shop/bio-share-sheet";
 import { ProductVectorIllustration } from "@/components/shop/product-vector-illustration";
 import { CartDrawer } from "@/components/shop/cart-drawer";
 import { useCart } from "@/hooks/use-cart";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, splitPriceSymbol } from "@/lib/utils/format";
 import { BORDER_RADIUS_CLASS, FONT_FAMILY_CLASS } from "@/lib/constants";
 import {
   bioCardStyle,
   bioFontVars,
   bioPriceBadgeStyle,
+  bioSurfaceMutedOn,
   bioThemeCssVars,
   bioTopBarPillStyle,
   primaryActionColor,
@@ -102,6 +100,10 @@ export function ProductPage({
   const actionInk = readableTextOn(actionFill);
   const hairline = withAlpha(cardText, 0.15);
   const priceBadge = bioPriceBadgeStyle(palette);
+  // Petit texte de la carte (prix barré, « Description ») : en couleur
+  // plutôt qu'en opacité sur un thème à décor — l'encre à 60 % tombait à
+  // 3,92:1 sur le sable d'Indigo.
+  const smallText = decor ? bioSurfaceMutedOn(palette, cardBg) : undefined;
   // Polices du thème, seulement si le vendeur n'a pas choisi la sienne.
   const fontVars = bioFontVars(palette, shop.font_family);
   const bodyFont = fontVars["--bio-font-body"];
@@ -315,12 +317,15 @@ export function ProductPage({
             className={cn("flex flex-col gap-5 p-5 sm:p-6", radiusClass)}
             style={surfaceStyle}
           >
+            {/* Nom du produit en police de corps, jamais en police d'affiche :
+                le « l » d'Ojuju se lit « 1 » (« Robe wax 1ongue »). Ojuju
+                reste au nom de la boutique, aux titres de groupe et aux
+                chiffres du prix. */}
             <h1
               className={cn(
                 "text-2xl font-bold leading-tight sm:text-3xl",
                 !decor && "tracking-tight",
               )}
-              style={{ fontFamily: "var(--bio-font-display, inherit)" }}
             >
               {product.name}
             </h1>
@@ -361,7 +366,10 @@ export function ProductPage({
               )}
               {isOnSale && (
                 <>
-                  <span className="text-lg line-through opacity-60">
+                  <span
+                    className={cn("text-lg line-through", !decor && "opacity-60")}
+                    style={smallText ? { color: smallText } : undefined}
+                  >
                     {formatPrice(product.compare_price!, product.currency)}
                   </span>
                   <span
@@ -398,6 +406,10 @@ export function ProductPage({
                 basePrice={product.price}
                 currency={product.currency}
                 palette={palette}
+                // La vraie couleur de la carte (blanche pour Wax), sinon les
+                // puces se peignaient en blanc sur blanc.
+                surface={cardBg}
+                surfaceText={cardText}
               />
             )}
 
@@ -513,7 +525,13 @@ export function ProductPage({
             {/* Description */}
             {product.description && (
               <div className="pt-2" style={{ borderTop: `1px solid ${hairline}` }}>
-                <h2 className="mb-2 mt-3 text-sm font-semibold uppercase tracking-wide opacity-70">
+                <h2
+                  className={cn(
+                    "mb-2 mt-3 text-sm font-semibold uppercase tracking-wide",
+                    !decor && "opacity-70",
+                  )}
+                  style={smallText ? { color: smallText } : undefined}
+                >
                   Description
                 </h2>
                 <p className="whitespace-pre-line text-sm leading-relaxed">
@@ -527,12 +545,7 @@ export function ProductPage({
         {/* ── Related ── */}
         {related.length > 0 && (
           <section className="mt-12">
-            <h2
-              className="mb-4 text-lg font-bold"
-              style={{ fontFamily: "var(--bio-font-display, inherit)" }}
-            >
-              Ça pourrait aussi te plaire
-            </h2>
+            <h2 className="mb-4 text-lg font-bold">Ça pourrait aussi te plaire</h2>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {related.map((item) => (
                 <BioProductCard

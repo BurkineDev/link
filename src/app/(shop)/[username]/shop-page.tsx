@@ -348,8 +348,12 @@ export function ShopPage({
                   aria-selected={selected}
                   onClick={() => selectTab(entry.value)}
                   className={cn(
-                    "flex items-center justify-center rounded-full py-2.5 text-sm font-semibold transition-all duration-200",
+                    "flex items-center justify-center rounded-full text-sm font-semibold transition-all duration-200",
                     "focus-visible:outline-none focus-visible:ring-2",
+                    // 44 px de haut sur un thème à décor (le premier contrôle
+                    // qu'on tape après la bio) ; les dix historiques gardent
+                    // leurs 40 px au pixel près.
+                    decor ? "py-3" : "py-2.5",
                     // Sur un thème à décor, l'onglet inactif lit à pleine
                     // opacité (tampon d'encre ou cobalt sur crème).
                     !selected && !decor && "opacity-70 hover:opacity-100",
@@ -373,6 +377,11 @@ export function ShopPage({
                       }}
                     >
                       {shopProducts.length}
+                      {/* Le nom accessible dit l'unité : « Boutique, 3
+                          articles », pas « Boutique 3 ». */}
+                      <span className="sr-only">
+                        {` article${shopProducts.length > 1 ? "s" : ""}`}
+                      </span>
                     </span>
                   )}
                 </button>
@@ -419,7 +428,10 @@ export function ShopPage({
                       className={cn(
                         "shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium",
                         "transition-opacity duration-150 focus-visible:outline-none focus-visible:ring-2",
-                        !selected && "opacity-70 hover:opacity-100",
+                        // Même règle que les onglets : avec décor, la puce
+                        // inactive reste en texte plein sur la piste à 12 %
+                        // (couleur, pas opacité — 11,6 à 13,5:1 au soleil).
+                        !selected && !decor && "opacity-70 hover:opacity-100",
                       )}
                       style={
                         {

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { BioPalette } from "@/lib/bio-themes";
+import type { BioDividerKind, BioPalette } from "@/lib/bio-themes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -59,10 +59,7 @@ export function BioHeaderDecor({ palette, hasBanner }: BioHeaderDecorProps) {
   );
 }
 
-const DIVIDER_CLASS: Record<
-  NonNullable<NonNullable<BioPalette["decor"]>["divider"]>,
-  string
-> = {
+const DIVIDER_CLASS: Record<BioDividerKind, string> = {
   // La frise court sur toute la largeur de la colonne, d'où le débord.
   frieze: "bio-frieze -mx-4",
   dots: "bio-dots",

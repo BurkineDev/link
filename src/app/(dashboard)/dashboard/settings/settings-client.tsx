@@ -16,8 +16,10 @@ import type {
 import {
   CURRENCIES,
   CURRENCY_META,
+  DEFAULT_FONT_FAMILY,
   SHOP_THEME_COLORS,
   SHOP_FONTS,
+  SHOP_FONT_VALUES,
   SHOP_BORDER_RADIUS,
   SHOP_CTA_SHAPES,
   FONT_FAMILY_CLASS,
@@ -77,7 +79,9 @@ import { ThemePreview } from "@/components/dashboard/theme-preview";
 import { BioThemeSwatch } from "@/components/dashboard/bio-theme-swatch";
 import {
   BIO_THEMES,
+  DEFAULT_BIO_THEME,
   groupBioThemes,
+  isBioThemeId,
   type BioThemeId,
 } from "@/lib/bio-themes";
 import { LinksSection } from "@/components/dashboard/links-section";
@@ -103,6 +107,27 @@ interface SettingsClientProps {
   onlineCheckout: boolean;
   /** Onglet ouvert à l'arrivée (?tab=…), « general » par défaut. */
   initialTab?: "general" | "appearance" | "links" | "contact" | "payments" | "shipping" | "danger";
+}
+
+// ---------------------------------------------------------------------------
+// Valeurs héritées
+// ---------------------------------------------------------------------------
+
+/**
+ * Le PATCH est fermé sur le catalogue (polices, thèmes), mais il acceptait
+ * n'importe quelle chaîne avant : une ligne héritée peut porter un
+ * `font_family` ou un `bio_theme` inconnus. On part alors du repli que la
+ * page publique rend déjà, sinon `BIO_THEMES[bioTheme]` planterait la page
+ * et chaque « Enregistrer » d'Apparence tomberait en 400.
+ */
+function knownFontFamily(value: string): ShopFontFamily {
+  return (SHOP_FONT_VALUES as readonly string[]).includes(value)
+    ? (value as ShopFontFamily)
+    : DEFAULT_FONT_FAMILY;
+}
+
+function knownBioTheme(value: string): BioThemeId {
+  return isBioThemeId(value) ? value : DEFAULT_BIO_THEME;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,13 +407,19 @@ export function SettingsClient({
   // ---- Appearance ----
   const [themeColor, setThemeColor] = useState(shop.theme_color);
   const [accentColor, setAccentColor] = useState(shop.accent_color);
-  const [fontFamily, setFontFamily] = useState<ShopFontFamily>(shop.font_family);
+  const [fontFamily, setFontFamily] = useState<ShopFontFamily>(() =>
+    knownFontFamily(shop.font_family),
+  );
   const [borderRadius, setBorderRadius] = useState<ShopBorderRadius>(
     shop.border_radius,
   );
   const [ctaShape, setCtaShape] = useState<ShopCtaShape>(shop.cta_shape);
-  const [bioTheme, setBioTheme] = useState<BioThemeId>(shop.bio_theme);
+  const [bioTheme, setBioTheme] = useState<BioThemeId>(() =>
+    knownBioTheme(shop.bio_theme),
+  );
   const [showBadge, setShowBadge] = useState<boolean>(shop.show_biolien_badge);
+  // La paire de polices du thème choisi (Ojuju + Atkinson), s'il en a une.
+  const themeFonts = BIO_THEMES[bioTheme].decor?.fontPreset;
 
   // ---- Contact ----
   const [contactEmail, setContactEmail] = useState(shop.contact_email ?? "");
@@ -498,10 +529,10 @@ export function SettingsClient({
   const resetAppearance = () => {
     setThemeColor(shop.theme_color);
     setAccentColor(shop.accent_color);
-    setFontFamily(shop.font_family);
+    setFontFamily(knownFontFamily(shop.font_family));
     setBorderRadius(shop.border_radius);
     setCtaShape(shop.cta_shape);
-    setBioTheme(shop.bio_theme);
+    setBioTheme(knownBioTheme(shop.bio_theme));
     setShowBadge(shop.show_biolien_badge);
   };
 
@@ -912,7 +943,10 @@ export function SettingsClient({
                             </div>
                             <div className="p-2.5">
                               <p className="text-xs font-semibold">{theme.label}</p>
-                              <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                              {/* Trois lignes : les descriptions afrique font
+                                  jusqu'à 92 caractères, deux lignes coupaient
+                                  « très lisible au soleil ». */}
+                              <p className="mt-0.5 line-clamp-3 text-[10px] text-muted-foreground">
                                 {theme.description}
                               </p>
                             </div>
@@ -1004,16 +1038,21 @@ export function SettingsClient({
                     Typographie
                   </h3>
                 </header>
-                {BIO_THEMES[bioTheme].decor?.fontPreset && (
+                {themeFonts && (
                   <p className="text-[11px] text-muted-foreground">
                     Ce thème apporte ses polices (Ojuju pour les titres,
-                    Atkinson pour le texte). Choisis une police ici pour les
-                    remplacer.
+                    Atkinson pour le texte) : c&apos;est l&apos;option
+                    « Du thème ». Choisis une autre police pour les remplacer
+                    partout.
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {SHOP_FONTS.map((f) => {
                     const selected = fontFamily === f.value;
+                    // « Sans » est la valeur qui laisse la paire du thème :
+                    // la carte le dit, et son échantillon est en Atkinson.
+                    const themeCard =
+                      themeFonts && f.value === DEFAULT_FONT_FAMILY ? themeFonts : null;
                     return (
                       <button
                         key={f.value}
@@ -1021,7 +1060,9 @@ export function SettingsClient({
                         onClick={() => setFontFamily(f.value)}
                         className={cn(
                           "flex flex-col items-center gap-1 rounded-xl border p-3 transition-all",
-                          FONT_FAMILY_CLASS[f.value],
+                          themeCard
+                            ? FONT_FAMILY_CLASS[themeCard.body]
+                            : FONT_FAMILY_CLASS[f.value],
                           selected
                             ? "border-foreground bg-foreground/5 ring-2 ring-foreground"
                             : "border-border hover:border-foreground/40",
@@ -1030,9 +1071,11 @@ export function SettingsClient({
                         <span className="text-3xl leading-none">
                           {f.sample}
                         </span>
-                        <span className="text-xs font-semibold">{f.label}</span>
+                        <span className="text-xs font-semibold">
+                          {themeCard ? "Du thème" : f.label}
+                        </span>
                         <span className="text-[10px] text-muted-foreground line-clamp-1 font-sans">
-                          {f.description}
+                          {themeCard ? "Ojuju + Atkinson, la paire du thème" : f.description}
                         </span>
                       </button>
                     );

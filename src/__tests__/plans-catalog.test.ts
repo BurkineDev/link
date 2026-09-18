@@ -19,7 +19,7 @@ import {
   planTagline,
 } from "@/lib/plans/catalog";
 import { canHideBadge, showBioLienBadge } from "@/lib/plans/badge";
-import { PLAN_LIMITS, PLAN_PRICES, PREPAID_PRICES, formatPlanPrice } from "@/lib/subscription";
+import { PLAN_LIMITS, PLAN_PRICES, formatPlanPrice } from "@/lib/subscription";
 
 const PLANS = ["free", "starter", "pro"] as const;
 
@@ -172,11 +172,11 @@ test("le prix carte affiché est celui que Stripe facture", () => {
   expect(cardPriceLabel("pro", "year")).toBe("99 $CA");
   expect(cardPriceLabel("starter", "month")).toBe("4,99 $CA");
   const pro = planPricing("pro");
-  expect(pro.prepaid.months1).toBe(`${PREPAID_PRICES.pro[1].toLocaleString("fr-FR")}\u00a0FCFA`);
+  // Insécable ordinaire (U+00A0) entre les milliers comme avant FCFA, quel
+  // que soit l'ICU (Node écrit U+202F) — le contrat de formatPrice.
+  expect(pro.prepaid.months1).toBe("4\u00a0000\u00a0FCFA");
   expect(pro.prepaid.yearlySavingsPercent).toBeGreaterThan(0);
-  // Espace fine insécable (U+202F) entre les milliers et insécable (U+00A0)
-  // avant FCFA, comme partout ailleurs (formatPrice).
-  expect(planPriceSummary("starter")).toBe("2\u202f000\u00a0FCFA / mois, 5\u202f000\u00a0FCFA / 3 mois ou 18\u202f000\u00a0FCFA / an ; par carte 4,99 $CA / mois ou 49 $CA / an");
+  expect(planPriceSummary("starter")).toBe("2\u00a0000\u00a0FCFA / mois, 5\u00a0000\u00a0FCFA / 3 mois ou 18\u00a0000\u00a0FCFA / an ; par carte 4,99 $CA / mois ou 49 $CA / an");
   expect(planPriceSummary("free")).toBe("gratuit");
   expect(planLabel("free")).toBe("Découverte");
 });

@@ -6,7 +6,7 @@ import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { blockClickEndpoint } from "@/lib/blocks/ids";
 import type { ResolvedBlock } from "@/lib/blocks/types";
 import {
-  bioRaise,
+  bioChipStyle,
   whatsappButtonStyle,
   withAlpha,
   type BioPalette,
@@ -234,16 +234,9 @@ function renderBlock({
             );
       if (networks.length === 0) return null;
 
-      // Les puces suivent la bordure des boutons du thème : 2 px quand les
-      // boutons sont bordés, et l'ombre dure quand ils sont en relief.
-      const bold = palette.decor?.buttonBorder === "bold";
-      const chipStyle: React.CSSProperties = {
-        backgroundColor: palette.surface,
-        color: palette.surfaceText,
-        border: `${bold ? 2 : 1}px solid ${palette.border}`,
-      };
-      const raise = bioRaise(palette);
-      if (raise) chipStyle.boxShadow = raise;
+      // Les puces suivent la bordure des boutons du thème (2 px quand ils
+      // sont bordés) et leur ombre dure quand ils sont en relief.
+      const chipStyle = bioChipStyle(palette);
 
       return (
         <ul className="flex flex-wrap justify-center gap-2">

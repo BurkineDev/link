@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { ProductVectorIllustration } from "@/components/shop/product-vector-illustration";
 import { useCart } from "@/hooks/use-cart";
 import { cn } from "@/lib/utils";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, splitPriceSymbol } from "@/lib/utils/format";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
 import { useWhatsAppOrder } from "@/components/shop/whatsapp-order-button";
 import {
@@ -40,19 +40,6 @@ interface BioProductCardProps {
    * `true` par défaut pour ne rien changer aux appelants existants.
    */
   cartEnabled?: boolean;
-}
-
-/**
- * Sépare le montant de son symbole quand celui-ci suit le nombre après une
- * insécable (« 12 500 FCFA » → « 12 500 » + « FCFA ») pour que la pastille
- * écrive les chiffres en police d'affiche et le symbole en petit. Un prix
- * dont le symbole précède le nombre (« ₦2,500.00 ») reste d'un seul tenant.
- */
-export function splitPriceSymbol(
-  formatted: string,
-): { amount: string; symbol?: string } {
-  const match = /^(.+)\u00A0([A-Za-z]+)$/.exec(formatted);
-  return match ? { amount: match[1], symbol: match[2] } : { amount: formatted };
 }
 
 export function BioProductCard({
@@ -206,13 +193,17 @@ export function BioProductCard({
         </p>
 
         <div className="mt-auto flex items-end justify-between gap-2">
-          <div className="flex min-w-0 flex-col items-start gap-1">
+          {/* `gap-1` n'aère que la pastille : sans décor, la colonne garde
+              son espacement historique entre le prix et le prix barré. */}
+          <div className={cn("flex min-w-0 flex-col items-start", decor && "gap-1")}>
             {priceBadge ? (
               // La pastille de prix : chiffres en police d'affiche et
               // tabulaires, « FCFA » en petit — un objet typographique qui
-              // se lit en plein soleil.
+              // se lit en plein soleil. Elle peut se replier : quand le « + »
+              // du panier lui prend la place, « FCFA » passe à la ligne DANS
+              // la pastille plutôt que d'en sortir en crème sur crème.
               <span
-                className="inline-flex max-w-full items-baseline gap-1 whitespace-nowrap rounded-md px-2 py-1 leading-none"
+                className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 gap-y-0.5 rounded-md px-2 py-1 leading-none"
                 style={priceBadge}
               >
                 <span className="text-[17px] font-bold">{price.amount}</span>
@@ -294,8 +285,10 @@ export function BioProductCard({
                 ? "Ouverture de WhatsApp…"
                 : `Commander ${product.name} sur WhatsApp`
             }
+            // 44 px de haut : le bouton est emboîté dans le Link de la carte,
+            // un pouce qui tape à côté ouvrirait la fiche au lieu de WhatsApp.
             className={cn(
-              "flex h-10 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-bold",
+              "flex h-11 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-bold",
               "transition-transform active:scale-[0.98]",
               whatsappOrder.busy && "cursor-wait opacity-70",
             )}

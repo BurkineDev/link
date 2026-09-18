@@ -39,11 +39,23 @@ jest.mock("@/components/shop/tracking-pixels", () => ({ TrackingPixels: () => nu
 
 import { ShopPage } from "@/app/(shop)/[username]/shop-page";
 import { ProductPage } from "@/app/(shop)/[username]/[productSlug]/product-page";
-import { splitPriceSymbol } from "@/components/shop/bio-product-card";
-import { BIO_THEME_IDS, BIO_THEMES, type BioThemeId } from "@/lib/bio-themes";
+import {
+  BIO_THEME_IDS,
+  BIO_THEMES,
+  bioSurfaceMutedOn,
+  primaryActionColor,
+  resolveBioTheme,
+  withAlpha,
+  type BioThemeId,
+} from "@/lib/bio-themes";
 import { WHATSAPP_GREEN, WHATSAPP_INK } from "@/lib/constants";
 import type { ResolvedBlock } from "@/lib/blocks/types";
-import type { CategoryRow, ProductRow, ShopRow } from "@/lib/types/database";
+import type {
+  CategoryRow,
+  ProductRow,
+  ProductVariantRow,
+  ShopRow,
+} from "@/lib/types/database";
 
 const AFRIQUE: BioThemeId[] = ["bogolan", "wax", "indigo", "pagne"];
 const HISTORIQUES = BIO_THEME_IDS.filter(
@@ -139,18 +151,35 @@ function renderShop(theme: BioThemeId, overrides: Partial<ShopRow> = {}, pageBlo
   );
 }
 
-function renderProduct(theme: BioThemeId) {
+function renderProduct(
+  theme: BioThemeId,
+  options: { product?: ProductRow; variants?: ProductVariantRow[] } = {},
+) {
   return renderToStaticMarkup(
     <ProductPage
       shop={shop(theme)}
-      product={products[0]}
-      variants={[]}
+      product={options.product ?? products[0]}
+      variants={options.variants ?? []}
       related={[products[1]]}
       pageUrl="https://bio-lien.com/awa-couture/robe"
       shopUrl="https://bio-lien.com/awa-couture"
     />,
   );
 }
+
+/** Un produit en promo, pour le prix barré. */
+const onSale: ProductRow = { ...products[0], compare_price: 15000 };
+
+const variant = (id: string, value: string): ProductVariantRow => ({
+  id,
+  product_id: products[0].id,
+  name: value,
+  options: [{ name: "Taille", value }],
+  price: null,
+  compare_price: null,
+  stock_quantity: null,
+  sku: null,
+});
 
 /** Ce que React écrit pour `backgroundColor: WHATSAPP_GREEN; color: WHATSAPP_INK`. */
 const WHATSAPP_STYLE = `background-color:${WHATSAPP_GREEN};color:${WHATSAPP_INK}`;
@@ -221,10 +250,44 @@ describe("page publique — décor des thèmes afrique", () => {
     expect(share).toContain(`box-shadow:0 3px 0 0 ${BIO_THEMES.bogolan.border}`);
   });
 
-  it.each(AFRIQUE)("%s : compteur d'articles en rehaut sur l'onglet Boutique", (theme) => {
+  it.each(AFRIQUE)("%s : compteur d'articles en rehaut sur l'onglet Boutique, avec son unité", (theme) => {
     const html = renderShop(theme);
     expect(html).toContain("background-color:var(--bio-highlight)");
-    expect(html).toMatch(/Boutique<span[^>]*>2<\/span>/);
+    // Le nom accessible dit « Boutique, 2 articles », pas « Boutique 2 ».
+    expect(html).toMatch(/Boutique<span[^>]*>2<span class="sr-only"> articles<\/span><\/span>/);
+  });
+
+  it.each(AFRIQUE)("%s : onglets à 44 px, puces de catégorie inactives sans opacité", (theme) => {
+    const html = renderShop(theme);
+    const tabs = html.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) expect(tab).toContain("py-3");
+    const withCategories = renderToStaticMarkup(
+      <ShopPage
+        shop={shop(theme)}
+        products={products}
+        categories={[{ id: "c1", shop_id: "shop-1", name: "Robes", slug: "robes", position: 0 } as CategoryRow]}
+        blocks={blocks.filter((b) => b.type === "PRODUCT_COLLECTION")}
+        pageUrl="https://bio-lien.com/awa-couture"
+      />,
+    );
+    const chip = /<button[^>]*aria-selected="false"[^>]*>Robes<\/button>/.exec(withCategories);
+    expect(chip).not.toBeNull();
+    expect(chip![0]).not.toContain("opacity-70");
+  });
+
+  it.each(AFRIQUE)("%s : l'anneau de focus du bouton de partage d'un lien suit son glyphe", (theme) => {
+    const html = renderShop(theme);
+    const share = /<button[^>]*aria-label="Partager le lien Instagram"[^>]*>/.exec(html)![0];
+    const p = resolveBioTheme(shop(theme));
+    const glyph = p.buttonVariant === "outline" ? p.text : p.surfaceText;
+    expect(share).toContain(`color:${glyph};--tw-ring-color:${glyph}`);
+  });
+
+  it.each(AFRIQUE)("%s : la pastille de prix peut se replier, « FCFA » reste dedans", (theme) => {
+    const html = renderShop(theme, {}, blocks.filter((b) => b.type === "PRODUCT_COLLECTION"));
+    expect(html).toContain("inline-flex max-w-full flex-wrap items-baseline");
+    expect(html).not.toContain("whitespace-nowrap rounded-md");
   });
 
   it.each(AFRIQUE)("%s : pastille de prix en police d'affiche, « FCFA » à part", (theme) => {
@@ -232,7 +295,7 @@ describe("page publique — décor des thèmes afrique", () => {
     const html = renderShop(theme, {}, blocks.filter((b) => b.type === "PRODUCT_COLLECTION"));
     expect(html).toContain(`background-color:${highlight.bg};color:${highlight.text}`);
     expect(html).toContain("var(--bio-font-display, inherit)");
-    expect(html).toMatch(/12 500<\/span><span[^>]*>FCFA<\/span>/);
+    expect(html).toMatch(/12 500<\/span><span[^>]*>FCFA<\/span>/);
   });
 
   it.each(AFRIQUE)("%s : la fiche produit pose les variables du thème et son décor", (theme) => {
@@ -241,6 +304,49 @@ describe("page publique — décor des thèmes afrique", () => {
     expect(html).toContain("--bio-font-display:var(--font-ojuju)");
     const klass = BIO_THEMES[theme].decor!.header!.kind === "band" ? "bio-band" : "bio-wash";
     expect(hasDecorClass(html, klass)).toBe(true);
+  });
+
+  it.each(AFRIQUE)("%s : le nom du produit et les produits liés restent en police de corps", (theme) => {
+    const html = renderProduct(theme);
+    const h1 = /<h1[^>]*>/.exec(html)![0];
+    expect(h1).not.toContain("--bio-font-display");
+    const related = /<h2[^>]*>Ça pourrait aussi te plaire<\/h2>/.exec(html)![0];
+    expect(related).not.toContain("--bio-font-display");
+    // Ojuju reste sur les chiffres de la pastille prix.
+    expect(html).toContain("var(--bio-font-display, inherit);font-variant-numeric:tabular-nums");
+  });
+
+  it.each(AFRIQUE)("%s : prix barré et « Description » en couleur lisible sur la carte, pas en opacité", (theme) => {
+    const html = renderProduct(theme, {
+      product: { ...onSale, description: "Coton wax, coupe longue." },
+    });
+    const p = resolveBioTheme(shop(theme));
+    const cardBg = p.decor?.card?.bg ?? p.surface;
+    const ink = bioSurfaceMutedOn(p, cardBg);
+    const struck = /<span class="text-lg line-through"[^>]*>/.exec(html);
+    expect(struck).not.toBeNull();
+    expect(struck![0]).toContain(`color:${ink}`);
+    const description = /<h2[^>]*>Description<\/h2>/.exec(html)![0];
+    expect(description).toContain(`color:${ink}`);
+    expect(description).not.toContain("opacity-70");
+  });
+
+  it("wax : les puces de variantes se peignent contre la carte blanche, pas contre le cobalt", () => {
+    const html = renderProduct("wax", {
+      product: { ...products[0], has_variants: true },
+      variants: [variant("v1", "M"), variant("v2", "L")],
+    });
+    const p = resolveBioTheme(shop("wax"));
+    const card = p.decor!.card!;
+    const idle = /<button[^>]*aria-label="Taille: M"[^>]*>/.exec(html)![0];
+    // Inactive : encre de la carte et filet d'encre à 25 %, jamais du blanc sur blanc.
+    expect(idle).toContain(`color:${card.text}`);
+    expect(idle).toContain(`border-color:${withAlpha(card.text, 0.25)}`);
+    expect(idle).not.toContain(`color:${p.surfaceText};`);
+    // Le remplissage actif (et l'anneau de focus) lisent sur la carte blanche.
+    const fill = primaryActionColor(p, card.bg);
+    expect(idle).toContain(`--tw-ring-color:${fill}`);
+    expect(fill).not.toBe(p.backgroundSolid);
   });
 
   it("la police du vendeur gagne sur la paire du thème", () => {
@@ -276,9 +382,24 @@ describe("page publique — les dix thèmes historiques rendent comme avant", ()
     expect(classes).not.toContain("text-base");
   });
 
-  it("garde le prix historique sur la carte, sans pastille", () => {
+  it("garde le prix historique sur la carte, sans pastille ni interligne ajouté", () => {
     const html = renderShop("classic", {}, blocks.filter((b) => b.type === "PRODUCT_COLLECTION"));
-    expect(html).toContain("text-sm font-bold\">12 500 FCFA<");
+    expect(html).toContain("text-sm font-bold\">12\u00a0500\u00a0FCFA<");
+    // La colonne prix n'a pas gagné 4 px entre le prix et le prix barré.
+    expect(html).toContain('class="flex min-w-0 flex-col items-start"');
+    expect(html).not.toContain("flex-col items-start gap-1");
+  });
+
+  it.each(HISTORIQUES)("%s : onglets, puces et anneau de focus comme avant", (theme) => {
+    const html = renderShop(theme);
+    const tabs = html.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) expect(tab).toContain("py-2.5");
+    expect(tabs.some((tab) => tab.includes("opacity-70 hover:opacity-100"))).toBe(true);
+    const share = /<button[^>]*aria-label="Partager le lien Instagram"[^>]*>/.exec(html)![0];
+    expect(share).toContain(`--tw-ring-color:${BIO_THEMES[theme].text}`);
+    const product = renderProduct(theme, { product: onSale });
+    expect(product).toContain('class="text-lg line-through opacity-60"');
   });
 });
 
@@ -296,7 +417,8 @@ describe("page publique — corrections globales", () => {
       // Une carte par produit, chacune avec le mot et pleine largeur.
       const orders = html.match(/aria-label="Commander [^"]+ sur WhatsApp"/g) ?? [];
       expect(orders).toHaveLength(products.length);
-      expect(html).toContain(`h-10 w-full`);
+      // 44 px : le bouton est emboîté dans le Link de la carte.
+      expect(html).toContain(`h-11 w-full`);
       expect(html).toMatch(new RegExp(`${WHATSAPP_STYLE};border:1px solid ${WHATSAPP_INK}[^>]*>.*?Commander</button>`));
     },
   );
@@ -312,17 +434,5 @@ describe("page publique — corrections globales", () => {
     ]);
     expect(html).not.toContain('aria-label="Écrire sur WhatsApp"');
     expect(html).toMatch(new RegExp(`${WHATSAPP_STYLE};border:1px solid ${WHATSAPP_INK}[^>]*>.*?Écris-moi`));
-  });
-});
-
-describe("splitPriceSymbol", () => {
-  it("détache un symbole qui suit le nombre après une insécable", () => {
-    expect(splitPriceSymbol("12 500 FCFA")).toEqual({ amount: "12 500", symbol: "FCFA" });
-    expect(splitPriceSymbol("2 500 DH")).toEqual({ amount: "2 500", symbol: "DH" });
-  });
-
-  it("laisse entier un prix dont le symbole précède le nombre", () => {
-    expect(splitPriceSymbol("₦2,500.00")).toEqual({ amount: "₦2,500.00" });
-    expect(splitPriceSymbol("$9.99")).toEqual({ amount: "$9.99" });
   });
 });

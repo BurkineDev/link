@@ -548,7 +548,7 @@ describe("GET /api/story/[slug]/[productSlug]", () => {
     const res = await productStory("awa-couture", "ensemble-pagne");
     expect(res.status).toBe(200);
     const tree = root();
-    const price = find(tree, (n) => n.children.includes("28 500 FCFA"))!;
+    const price = find(tree, (n) => n.children.includes("28 500 FCFA"))!;
     expect(price.style).toMatchObject({ fontSize: 84, color: BIO_THEMES.classic.accent });
     const sale = find(tree, (n) => n.children.includes("−") && n.children.includes("19"))!;
     expect(sale.style).toMatchObject({ backgroundColor: "#F43F5E", color: "#FFFFFF" });
@@ -560,11 +560,11 @@ describe("GET /api/story/[slug]/[productSlug]", () => {
   test("?theme=wax : pastille moutarde « 28 500 » + « FCFA », badge promo moutarde, carte blanche bordée sur la bande", async () => {
     await productStory("awa-couture", "ensemble-pagne", "?theme=wax");
     const tree = root();
-    const badge = find(tree, (n) => n.children.includes("28 500"))!;
+    const badge = find(tree, (n) => n.children.includes("28 500"))!;
     expect(badge.style).toMatchObject({ backgroundColor: "#F2B705", color: "#17171C", borderRadius: 999 });
-    expect(texts(badge)).toEqual(["28 500", "FCFA"]);
+    expect(texts(badge)).toEqual(["28 500", "FCFA"]);
     const struck = find(tree, (n) => n.style.textDecoration === "line-through")!;
-    expect(struck.children).toEqual(["35 000 FCFA"]);
+    expect(struck.children).toEqual(["35 000 FCFA"]);
     const sale = find(tree, (n) => n.children.includes("−") && n.children.includes("19"))!;
     expect(sale.style).toMatchObject({ backgroundColor: "#F2B705", color: "#17171C" });
     const card = find(tree, (n) => n.style.width === 820)!;
@@ -575,7 +575,7 @@ describe("GET /api/story/[slug]/[productSlug]", () => {
   test("?theme=indigo : prix en pastille sable relevée, carte sable à ombre terracotta", async () => {
     await productStory("awa-couture", "ensemble-pagne", "?theme=indigo");
     const tree = root();
-    const badge = find(tree, (n) => n.children.includes("28 500"))!;
+    const badge = find(tree, (n) => n.children.includes("28 500"))!;
     expect(badge.style).toMatchObject({ backgroundColor: "#EAD9B8", color: "#141E3D", boxShadow: "0 6px 0 0 #C2643A" });
     const card = find(tree, (n) => n.style.width === 820)!;
     expect(card.style).toMatchObject({ backgroundColor: "#EAD9B8", border: "2px solid #C2643A", boxShadow: "0 6px 0 0 #C2643A" });

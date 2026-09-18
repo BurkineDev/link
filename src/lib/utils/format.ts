@@ -8,10 +8,14 @@ import type { Currency } from "@/lib/types/database";
 // Price formatting
 // ---------------------------------------------------------------------------
 
-/** Espace insécable : le symbole ne descend jamais seul à la ligne (« 12 500 FCFA »). */
+/**
+ * Espace insécable ordinaire : entre les milliers et avant le symbole
+ * (« 12 500 FCFA »). Pas l'espace fine U+202F du français typographique :
+ * elle fait 2,6 px en Ojuju 17 px (« 12 500 » se lisait « 12500 » sur la
+ * pastille de prix) et manque à la Geist des stories, que satori complétait
+ * alors par trois requêtes Google Fonts au premier rendu.
+ */
 const NBSP = "\u00A0";
-/** Espace fine insécable : le séparateur des milliers en français. */
-const NARROW_NBSP = "\u202F";
 
 const CURRENCY_FORMAT: Record<
   Currency,
@@ -29,9 +33,9 @@ const CURRENCY_FORMAT: Record<
 /**
  * Formats a price amount with the correct currency symbol and locale.
  *
- * Le prix FCFA est un objet typographique : « 12 500 FCFA », espace fine
- * insécable entre les milliers, insécable avant le symbole, jamais de
- * décimales, jamais « XOF » — c'est ce qu'une acheteuse lit en plein soleil.
+ * Le prix FCFA est un objet typographique : « 12 500 FCFA », insécable
+ * ordinaire entre les milliers comme avant le symbole, jamais de décimales,
+ * jamais « XOF » — c'est ce qu'une acheteuse lit en plein soleil.
  *
  * @example
  * formatPrice(5000, "XOF") // "5 000 FCFA"
@@ -53,9 +57,9 @@ export function formatPrice(amount: number, currency: Currency | string): string
 
   // Les moteurs ICU ne s'accordent pas sur l'espace des milliers en français
   // (U+202F sur Node et Chrome récents, U+00A0 sur d'anciens WebView) : on
-  // impose l'espace fine insécable pour que le même prix s'écrive partout pareil.
+  // impose l'insécable ordinaire pour que le même prix s'écrive partout pareil.
   if (fmt.locale.startsWith("fr")) {
-    formatted = formatted.replace(/[\u00A0\u202F ]/g, NARROW_NBSP);
+    formatted = formatted.replace(/[\u00A0\u202F ]/g, NBSP);
   }
 
   if (fmt.position === "before") {
@@ -63,6 +67,20 @@ export function formatPrice(amount: number, currency: Currency | string): string
   }
 
   return `${formatted}${fmt.separator ?? ""}${fmt.symbol}`;
+}
+
+/**
+ * Sépare le montant de son symbole quand celui-ci suit le nombre après une
+ * insécable (« 12 500 FCFA » → « 12 500 » + « FCFA ») pour que la pastille
+ * de prix écrive les chiffres en police d'affiche et le symbole en petit.
+ * Un prix dont le symbole précède le nombre (« ₦2,500.00 ») reste d'un seul
+ * tenant. Une seule implémentation pour la carte, la fiche et la story.
+ */
+export function splitPriceSymbol(
+  formatted: string,
+): { amount: string; symbol?: string } {
+  const match = /^(.+)\u00A0([A-Za-z]+)$/.exec(formatted);
+  return match ? { amount: match[1], symbol: match[2] } : { amount: formatted };
 }
 
 // ---------------------------------------------------------------------------

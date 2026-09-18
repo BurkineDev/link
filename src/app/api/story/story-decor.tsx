@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import {
+  bioAvatarInitialsStyle,
   bioAvatarRingStyle,
   bioButtonStyle,
   bioCardStyle,
@@ -486,10 +487,11 @@ export function storyRaise(palette: BioPalette): string | undefined {
 
 /**
  * Avatar de la story de page. Sans décor : le cadre historique (6 px de
- * surface autour d'une photo, filet 2 px autour des initiales). Avec : les
- * couleurs du disque d'initiales suivent la page (fond de page + accent sur
- * une bande, sinon surface), le filet 2 px de la page devient 4 px sauf pour
- * les anneaux moutarde de Wax, et l'anneau du thème est doublé.
+ * surface autour d'une photo, filet 2 px autour des initiales). Avec : le
+ * disque d'initiales est celui de la page (bioAvatarInitialsStyle — fond de
+ * page + accent sur une bande, sinon surface, filet 2 px sauf sous les
+ * anneaux moutarde de Wax, anneau du thème), passé à l'échelle ; la photo
+ * garde le même filet et le même anneau, sans couleurs.
  */
 export function storyAvatarStyle(
   palette: BioPalette,
@@ -505,15 +507,9 @@ export function storyAvatarStyle(
           border: `2px solid ${palette.border}`,
         };
   }
+  if (kind === "initials") return toStoryStyle(bioAvatarInitialsStyle(palette));
   const ring = bioAvatarRingStyle(palette);
-  const colors: CSSProperties =
-    kind === "image"
-      ? {}
-      : storyHasBand(palette)
-        ? { backgroundColor: palette.backgroundSolid, color: palette.accent }
-        : { backgroundColor: palette.surface, color: palette.surfaceText };
   return {
-    ...colors,
     ...(decor.avatarRing === "highlight"
       ? {}
       : { border: `${2 * SCALE}px solid ${palette.border}` }),

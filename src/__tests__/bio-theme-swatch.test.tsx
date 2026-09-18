@@ -14,9 +14,12 @@ import {
   BIO_THEME_IDS,
   BIO_THEME_LIST,
   DEFAULT_BIO_THEME,
+  bioAvatarInitialsStyle,
   bioButtonStyle,
+  bioIconTileStyle,
   bioTabTrackColor,
   bioTabTrackStyle,
+  bioTopBarPillStyle,
   groupBioThemes,
   resolveBioTheme,
   type BioThemeId,
@@ -120,6 +123,24 @@ describe("BioThemeSwatch", () => {
     }
   });
 
+  it("garde un filet visible aux barres des boutons pleins (Noir se fondait dans le fond)", () => {
+    // Sur la page, un bouton plein n'a pas de filet ; sur 14 px de vignette,
+    // les anciennes miniatures peignaient `border` sur toutes les barres.
+    expect(bioButtonStyle(palette("noir")).border).toBe("1px solid transparent");
+    expect(swatch("noir")).toContain("border:1px solid #2A2A31");
+    expect(swatch("noir")).not.toContain("solid transparent");
+    // Le verre de Minuit et les boutons bordés de Wax gardent le leur.
+    expect(swatch("midnight")).toContain("border:1px solid rgba(255, 255, 255, 0.22)");
+    expect(swatch("wax")).toContain("border:2px solid #1748A8");
+  });
+
+  it("peint l'avatar comme la page : crème à initiales cobalt sur la bande de Wax", () => {
+    expect(swatch("wax")).toContain("background-color:#FFFBF2;color:#1748A8");
+    expect(swatch("bogolan")).toContain("background-color:#FBF7EF;color:#1C1714;border:2px solid #1C1714");
+    // Sans décor, le disque de surface d'avant, sans filet.
+    expect(swatch("classic")).toContain('style="background-color:#FFFFFF;color:#0F172A"');
+  });
+
   it("« Mes couleurs » montre les couleurs de la boutique, pas un substitut", () => {
     const html = swatch("brand", "#B45309", "#FFFFFF");
     expect(html).toContain("background:#B45309");
@@ -212,7 +233,7 @@ describe("ThemePreview", () => {
 
   it("écrit le prix en pastille de rehaut et « Commander » en encre sur vert", () => {
     const html = preview("wax");
-    expect(html).toContain("12 000 FCFA");
+    expect(html).toContain("12 000 FCFA");
     expect(html).toContain("background-color:#F2B705;color:#17171C");
     expect(html).toContain(`background-color:${WHATSAPP_GREEN};color:${WHATSAPP_INK}`);
     // Le prix historique reste un simple texte sur les thèmes sans décor.
@@ -233,6 +254,24 @@ describe("ThemePreview", () => {
     // Pagne tissé : bande de 104 px → l'avatar part juste sous la barre haute.
     expect(preview("pagne")).toContain("margin-top:0");
     expect(preview("bogolan")).not.toContain("margin-top:");
+  });
+
+  it("peint l'avatar, la tuile d'icône et le badge avec les helpers de la page", () => {
+    // Wax : disque crème à initiales cobalt, comme sur la bande de la page.
+    expect(preview("wax")).toContain(css("background-color", "#FFFBF2") + ";color:#1748A8;box-shadow");
+    // Pagne tissé : la tuile teintée d'accent que les aperçus oubliaient.
+    const pagneTile = bioIconTileStyle(palette("pagne"));
+    expect(preview("pagne")).toContain(`color-mix(in oklab, #23407A 10%, transparent);color:${pagneTile.color}`);
+    // Bogolan : le badge « Crée ta page » porte l'ombre dure de la page.
+    const pill = bioTopBarPillStyle(palette("bogolan"));
+    expect(preview("bogolan")).toContain(`${css("border", pill.border as string)};${css("box-shadow", pill.boxShadow as string)}`);
+    // Sans décor : l'avatar de surface, sans filet, comme avant.
+    expect(preview("classic")).toContain('style="background-color:#FFFFFF;color:#0F172A"');
+  });
+
+  it("n'embarque pas le flou du variant verre sur les faux boutons", () => {
+    expect(bioButtonStyle(palette("midnight")).backdropFilter).toBe("blur(12px)");
+    expect(preview("midnight")).not.toContain("backdrop-filter");
   });
 });
 
@@ -302,5 +341,17 @@ describe("BioPagePreview", () => {
     const html = builderPreview(shopRow({ banner_url: "https://cdn.example/b.jpg" }));
     expect(html).not.toContain('class="bio-band');
     expect(html).toContain('src="https://cdn.example/b.jpg"');
+  });
+
+  it("peint l'avatar et la tuile d'icône comme la page, sans flou de verre", () => {
+    const wax = builderPreview(shopRow());
+    const avatar = bioAvatarInitialsStyle(palette("wax"));
+    expect(wax).toContain(`background-color:${avatar.backgroundColor};color:${avatar.color};box-shadow:${avatar.boxShadow}`);
+    // Wax : tuile inversée (disque crème, icône cobalt) ; Pagne : teintée d'accent.
+    expect(wax).toContain("background-color:#FFFBF2;color:#1748A8\"");
+    expect(builderPreview(shopRow({ bio_theme: "pagne" }))).toContain("color-mix(in oklab, #23407A 10%, transparent);color:#23407A");
+    // Sans décor, l'avatar garde le filet 1 px de l'aperçu historique.
+    expect(builderPreview(shopRow({ bio_theme: "classic" }))).toContain("background-color:#FFFFFF;color:#0F172A;border:1px solid #E2E8F0");
+    expect(builderPreview(shopRow({ bio_theme: "midnight" }))).not.toContain("backdrop-filter");
   });
 });

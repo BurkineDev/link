@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 import { isBioThemeId, resolveBioTheme } from "@/lib/bio-themes";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, splitPriceSymbol } from "@/lib/utils/format";
 import type { ProductImage, ProductRow, ShopRow } from "@/lib/types/database";
 import {
   STORY_GUTTER,
@@ -38,17 +38,6 @@ const HEIGHT = STORY_HEIGHT;
 const CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400";
 
 const SLUG_RE = /^[a-z0-9_-]{1,80}$/;
-
-/**
- * Sépare le montant de son symbole quand celui-ci suit le nombre après une
- * insécable (« 12 500 FCFA » → « 12 500 » + « FCFA ») pour que la pastille
- * écrive le symbole en plus petit. Un prix dont le symbole précède le nombre
- * (« ₦2,500.00 ») reste d'un seul tenant.
- */
-function splitPriceSymbol(formatted: string): { amount: string; symbol?: string } {
-  const match = /^(.+)\u00A0([A-Za-z]+)$/.exec(formatted);
-  return match ? { amount: match[1], symbol: match[2] } : { amount: formatted };
-}
 
 type Ctx = { params: Promise<{ slug: string; productSlug: string }> };
 

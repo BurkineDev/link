@@ -16,13 +16,18 @@ import {
   BIO_THEME_LIST,
   BIO_THEMES,
   DEFAULT_BIO_THEME,
+  bioAvatarInitialsStyle,
   bioAvatarRingStyle,
+  bioBorderWidth,
   bioButtonStyle,
   bioCardStyle,
+  bioChipStyle,
   bioFontVars,
+  bioIconTileStyle,
   bioPatternDataUri,
   bioPriceBadgeStyle,
   bioRaise,
+  bioSocialRingStyle,
   bioSurfaceMutedOn,
   bioTabStyle,
   bioTabTrackColor,
@@ -569,6 +574,147 @@ describe("bioRaise / bioCardStyle / bioAvatarRingStyle", () => {
       border: "1px solid #C2643A",
       boxShadow: "0 3px 0 0 #C2643A",
     });
+  });
+});
+
+describe("bioAvatarInitialsStyle — le même disque pour la page, la story et les aperçus", () => {
+  it("sans décor : la surface et son texte, rien d'autre (chaque rendu garde son filet)", () => {
+    for (const id of BIO_THEME_IDS) {
+      if ((AFRIQUE_IDS as readonly string[]).includes(id)) continue;
+      const p = palette(id);
+      expect(bioAvatarInitialsStyle(p)).toEqual({
+        backgroundColor: p.surface,
+        color: p.surfaceText,
+      });
+    }
+  });
+
+  it("sur une bande, fond de page + accent, sinon surface ; filet 2 px sauf sous les anneaux de Wax", () => {
+    expect(bioAvatarInitialsStyle(palette("wax"))).toEqual({
+      backgroundColor: "#FFFBF2",
+      color: "#1748A8",
+      boxShadow: "0 0 0 4px #FFFBF2, 0 0 0 9px #F2B705",
+    });
+    expect(bioAvatarInitialsStyle(palette("pagne"))).toEqual({
+      backgroundColor: "#F7F3EA",
+      color: "#23407A",
+      border: "2px solid #23407A",
+      boxShadow: "0 0 0 3px #F7F3EA, 0 0 0 5px #23407A",
+    });
+    expect(bioAvatarInitialsStyle(palette("bogolan"))).toEqual({
+      backgroundColor: "#FBF7EF",
+      color: "#1C1714",
+      border: "2px solid #1C1714",
+      boxShadow: "0 0 0 3px #F3E9D8, 0 0 0 5px #1C1714",
+    });
+    // L'anneau « raise » apporte son propre filet, qui l'emporte.
+    expect(bioAvatarInitialsStyle(palette("indigo"))).toEqual({
+      backgroundColor: "#EAD9B8",
+      color: "#141E3D",
+      border: "1px solid #C2643A",
+      boxShadow: "0 3px 0 0 #C2643A",
+    });
+  });
+
+  it("les initiales lisent sur le disque (≥ 4,5:1) sur les quatre thèmes", () => {
+    for (const id of AFRIQUE_IDS) {
+      const style = bioAvatarInitialsStyle(palette(id));
+      expect(contrastRatio(String(style.color), String(style.backgroundColor))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+describe("bioIconTileStyle — une seule règle pour la page et les aperçus", () => {
+  it("s'inverse sur Wax, se teinte d'accent sur Pagne tissé, reste historique ailleurs", () => {
+    expect(bioIconTileStyle(palette("wax"))).toEqual({
+      backgroundColor: "#FFFBF2",
+      color: "#1748A8",
+    });
+    expect(bioIconTileStyle(palette("pagne"))).toEqual({
+      backgroundColor: "color-mix(in oklab, #23407A 10%, transparent)",
+      color: "#23407A",
+    });
+    const legacy = { backgroundColor: "color-mix(in oklab, currentColor 10%, transparent)" };
+    expect(bioIconTileStyle(palette("bogolan"))).toEqual(legacy);
+    expect(bioIconTileStyle(palette("indigo"))).toEqual(legacy);
+    for (const id of BIO_THEME_IDS) {
+      if ((AFRIQUE_IDS as readonly string[]).includes(id)) continue;
+      expect(bioIconTileStyle(palette(id))).toEqual(legacy);
+    }
+  });
+
+  it("laisse la tuile transparente sur un bouton contour", () => {
+    expect(bioIconTileStyle({ ...palette("classic"), buttonVariant: "outline" })).toEqual({
+      backgroundColor: "transparent",
+    });
+  });
+
+  it("l'icône lit sur la tuile là où elle est colorée", () => {
+    const wax = bioIconTileStyle(palette("wax"));
+    expect(contrastRatio(String(wax.color), String(wax.backgroundColor))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("bioBorderWidth / bioChipStyle / bioSocialRingStyle", () => {
+  it("2 px seulement quand les boutons sont bordés (Wax, Pagne tissé)", () => {
+    expect(bioBorderWidth(palette("wax"))).toBe(2);
+    expect(bioBorderWidth(palette("pagne"))).toBe(2);
+    expect(bioBorderWidth(palette("bogolan"))).toBe(1);
+    expect(bioBorderWidth(palette("indigo"))).toBe(1);
+    expect(bioBorderWidth(palette("classic"))).toBe(1);
+    // La même épaisseur partout : cartes, piste des onglets, puces.
+    for (const id of AFRIQUE_IDS) {
+      const p = palette(id);
+      const width = `${bioBorderWidth(p)}px solid ${p.border}`;
+      expect(bioCardStyle(p).border).toBe(width);
+      expect(bioChipStyle(p).border).toBe(width);
+      if (p.decor?.tabs === "outline") expect(bioTabTrackStyle(p).border).toBe(width);
+    }
+  });
+
+  it("puces SOCIAL : la puce historique sans décor, bordée ou en relief avec", () => {
+    expect(bioChipStyle(palette("classic"))).toEqual({
+      backgroundColor: "#FFFFFF",
+      color: "#0F172A",
+      border: "1px solid #E2E8F0",
+    });
+    expect(bioChipStyle(palette("wax"))).toEqual({
+      backgroundColor: "#1748A8",
+      color: "#FFFFFF",
+      border: "2px solid #1748A8",
+    });
+    expect(bioChipStyle(palette("bogolan"))).toEqual({
+      backgroundColor: "#FBF7EF",
+      color: "#1C1714",
+      border: "1px solid #1C1714",
+      boxShadow: "0 3px 0 0 #1C1714",
+    });
+  });
+
+  it("cercles des réseaux : rien sans décor, filet d'encre ou d'accent avec", () => {
+    expect(bioSocialRingStyle(palette("classic"))).toBeUndefined();
+    expect(bioSocialRingStyle(palette("bogolan"))).toEqual({
+      color: "#1C1714",
+      border: "1px solid #1C1714",
+    });
+    expect(bioSocialRingStyle(palette("indigo"))).toEqual({
+      color: "#F2EBDC",
+      border: "1px solid #C2643A",
+    });
+    expect(bioSocialRingStyle(palette("wax"))).toEqual({
+      color: "#1748A8",
+      border: "2px solid #1748A8",
+    });
+    expect(bioSocialRingStyle(palette("pagne"))).toEqual({
+      color: "#23407A",
+      border: "2px solid #23407A",
+    });
+    // L'icône lit sur le fond de page sur les quatre thèmes.
+    for (const id of AFRIQUE_IDS) {
+      const p = palette(id);
+      const ring = bioSocialRingStyle(p)!;
+      expect(contrastRatio(String(ring.color), p.backgroundSolid)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 

@@ -11,7 +11,12 @@ import {
 } from "@/components/shop/brand-icons";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { cn } from "@/lib/utils";
-import { bioAvatarRingStyle, type BioPalette } from "@/lib/bio-themes";
+import {
+  bioAvatarInitialsStyle,
+  bioAvatarRingStyle,
+  bioSocialRingStyle,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import type { ShopRow, SocialLinks } from "@/lib/types/database";
 
 // ---------------------------------------------------------------------------
@@ -71,23 +76,6 @@ const SOCIALS: Array<{
   },
 ];
 
-/**
- * Cercle d'un réseau sur un thème à décor : de petits tampons à filet, en
- * accord avec les pastilles de la barre haute. Filet 1 px `border` pour les
- * thèmes à ombre dure (Bogolan, Indigo), 2 px `accent` quand les boutons
- * sont eux-mêmes bordés (Wax, Pagne tissé). Sans décor : `undefined`, les
- * icônes restent nues comme avant.
- */
-function socialRingStyle(palette: BioPalette): React.CSSProperties | undefined {
-  const decor = palette.decor;
-  if (!decor) return undefined;
-  const bold = decor.buttonBorder === "bold";
-  return {
-    color: bold ? palette.accent : palette.text,
-    border: `${bold ? 2 : 1}px solid ${bold ? palette.accent : palette.border}`,
-  };
-}
-
 export function BioSocials({
   socialLinks,
   palette,
@@ -105,7 +93,8 @@ export function BioSocials({
 
   if (active.length === 0) return null;
 
-  const ring = socialRingStyle(palette);
+  // Cercles bordés sur un thème à décor, icônes nues sinon.
+  const ring = bioSocialRingStyle(palette);
 
   return (
     <nav
@@ -154,22 +143,6 @@ export function BioSocials({
 function isFeatured(featuredUntil: string | null): boolean {
   if (!featuredUntil) return false;
   return new Date(featuredUntil).getTime() > Date.now();
-}
-
-/**
- * Couleurs du disque d'initiales. Sur une bande d'en-tête (Wax, Pagne
- * tissé), un disque `surface` se fondrait dans la bande de la même couleur :
- * il prend alors le fond de page avec les initiales en `accent`, comme les
- * pastilles de la barre haute. Ailleurs, la surface et son texte.
- */
-function initialsColors(palette: BioPalette): {
-  backgroundColor: string;
-  color: string;
-} {
-  if (palette.decor?.header?.kind === "band") {
-    return { backgroundColor: palette.backgroundSolid, color: palette.accent };
-  }
-  return { backgroundColor: palette.surface, color: palette.surfaceText };
 }
 
 export function BioProfile({
@@ -235,13 +208,16 @@ export function BioProfile({
             "flex size-24 items-center justify-center rounded-full text-3xl font-bold",
             !ring && "shadow-lg",
           )}
-          style={{
-            ...initialsColors(palette),
-            ...(decor?.avatarRing === "highlight"
-              ? {}
-              : { border: `${decor ? 2 : 1}px solid ${palette.border}` }),
-            ...ring,
-          }}
+          // Couleurs, filet et anneau partagés avec la story et les
+          // aperçus ; sans décor, le filet 1 px historique.
+          style={
+            decor
+              ? bioAvatarInitialsStyle(palette)
+              : {
+                  ...bioAvatarInitialsStyle(palette),
+                  border: `1px solid ${palette.border}`,
+                }
+          }
           aria-hidden
         >
           {shop.name.charAt(0).toUpperCase()}

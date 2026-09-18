@@ -70,7 +70,12 @@ const inter = Inter({
 // Polices optionnelles du vendeur : sans `preload: false`, chaque woff2
 // déclaré dans le layout racine serait préchargé sur toutes les routes — trois
 // fichiers de plus à la première visite en 3G, même pour une boutique en Inter.
-// Le navigateur ne les télécharge que sur une page qui les utilise.
+// Le navigateur ne les télécharge que sur une page qui les utilise. Le prix :
+// sur une boutique en Playfair, JetBrains ou DM Serif, la requête part après
+// le CSS plutôt que dès le HTML, et `display: swap` montre le repli ajusté une
+// demi-seconde à une seconde de plus en 3G. Compromis assumé : le poids en
+// moins pour tout le monde vaut ce FOUT pour les vendeuses qui ont choisi une
+// police (le repli est calibré sur les mêmes métriques, la page ne saute pas).
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],

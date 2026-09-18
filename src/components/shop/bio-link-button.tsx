@@ -25,8 +25,8 @@ import { cn } from "@/lib/utils";
 import { CTA_SHAPE_CLASS } from "@/lib/constants";
 import {
   bioButtonStyle,
+  bioIconTileStyle,
   bioSurfaceMutedOn,
-  contrastRatio,
   type BioPalette,
 } from "@/lib/bio-themes";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
@@ -135,16 +135,14 @@ export function BioLinkButton({
     palette.buttonVariant === "outline"
       ? palette.backgroundSolid
       : palette.surface;
-  // Tuile d'icône : sur un thème à décor dont les boutons sont un aplat
-  // franc sur page claire (Wax : cobalt sur crème), la tuile s'inverse en
-  // disque du fond de page avec l'icône couleur bouton ; sur des boutons
-  // clairs bordés (Pagne tissé), elle se teinte de l'accent ; partout
-  // ailleurs, le rendu historique (10 % de la couleur courante).
-  const invertedTile =
-    Boolean(decor) &&
-    palette.scheme === "light" &&
-    contrastRatio(palette.surface, palette.backgroundSolid) >= 3;
-  const accentTile = !invertedTile && decor?.buttonBorder === "bold";
+  // Tuile d'icône : la même règle que les aperçus du tableau de bord
+  // (inversée sur Wax, teintée d'accent sur Pagne tissé, historique ailleurs).
+  const tileStyle = bioIconTileStyle(palette);
+  // Le glyphe du bouton « … » est choisi pour lire sur la surface du
+  // bouton ; l'anneau de focus suit cette couleur sur un thème à décor
+  // (le texte de page — crème — était invisible sur le sable d'Indigo).
+  const glyphColor =
+    palette.buttonVariant === "outline" ? palette.text : palette.surfaceText;
 
   const body = (
     <>
@@ -168,24 +166,7 @@ export function BioLinkButton({
             "flex size-12 shrink-0 items-center justify-center",
             radiusClass,
           )}
-          style={
-            invertedTile
-              ? {
-                  backgroundColor: palette.backgroundSolid,
-                  color: palette.surface,
-                }
-              : accentTile
-                ? {
-                    backgroundColor: `color-mix(in oklab, ${palette.accent} 10%, transparent)`,
-                    color: palette.accent,
-                  }
-                : {
-                    backgroundColor:
-                      palette.buttonVariant === "outline"
-                        ? "transparent"
-                        : `color-mix(in oklab, currentColor 10%, transparent)`,
-                  }
-          }
+          style={tileStyle}
           aria-hidden
         >
           <Icon className="size-5" />
@@ -279,11 +260,8 @@ export function BioLinkButton({
           "focus-visible:outline-none focus-visible:ring-2",
         )}
         style={{
-          color:
-            palette.buttonVariant === "outline"
-              ? palette.text
-              : palette.surfaceText,
-          ["--tw-ring-color" as string]: palette.text,
+          color: glyphColor,
+          ["--tw-ring-color" as string]: decor ? glyphColor : palette.text,
         } as React.CSSProperties}
       >
         <MoreVertical className="size-5" />

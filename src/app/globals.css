@@ -454,11 +454,12 @@ input[type="submit"] {
 @layer components {
   /* Lavis de tête : la tuile du thème sur la zone haute, fondue vers le fond
      avant le nom. Deux calques (motif, puis dégradé) plutôt qu'un mask-image :
-     la story reprend la même construction avec deux div. */
+     la story reprend la même construction avec deux div. La hauteur vient
+     toujours d'un style inline (decor.header.height dans bio-themes.ts est la
+     seule source) : rien ici. */
   .bio-wash {
     position: absolute;
     inset: 0 0 auto 0;
-    height: 220px;
     pointer-events: none;
     background-image: var(--bio-pattern);
     background-size: var(--bio-pattern-size);
@@ -469,7 +470,6 @@ input[type="submit"] {
   .bio-wash-fade {
     position: absolute;
     inset: 0 0 auto 0;
-    height: 220px;
     pointer-events: none;
     background: linear-gradient(to bottom, transparent var(--bio-wash-fade, 35%), var(--bio-bg-solid) 100%);
   }
@@ -489,11 +489,11 @@ input[type="submit"] {
   }
 
   /* Bande imprimée : remplace la bannière quand banner_url est vide. Le
-     motif ne vit qu'ici, jamais sous du texte. */
+     motif ne vit qu'ici, jamais sous du texte. Hauteur en inline, comme le
+     lavis. */
   .bio-band {
     position: absolute;
     inset: 0 0 auto 0;
-    height: 172px;
     background-color: var(--bio-band-fill);
   }
   .bio-band::before {

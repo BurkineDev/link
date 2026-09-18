@@ -16,22 +16,27 @@ import {
   FONT_FAMILY_CLASS,
 } from "@/lib/constants";
 import {
+  bioAvatarInitialsStyle,
   bioAvatarRingStyle,
-  bioButtonStyle,
-  bioCardStyle,
   bioFontVars,
+  bioIconTileStyle,
   bioPriceBadgeStyle,
   bioTabStyle,
   bioTabTrackStyle,
   bioThemeCssVars,
   bioTopBarPillStyle,
-  contrastRatio,
   resolveBioTheme,
   whatsappButtonStyle,
-  type BioPalette,
   type BioThemeId,
 } from "@/lib/bio-themes";
-import { BioDivider, BioHeaderDecor } from "@/components/shop/bio-theme-decor";
+import { BioDivider } from "@/components/shop/bio-theme-decor";
+import {
+  PreviewBanner,
+  PreviewHeaderDecor,
+  previewButtonStyle,
+  previewCardStyle,
+  previewProfileOffset,
+} from "@/components/dashboard/bio-preview-decor";
 import { formatPrice } from "@/lib/utils/format";
 import type {
   ShopBorderRadius,
@@ -76,48 +81,11 @@ const SAMPLE_PRODUCTS = [
   { name: "Sac en raphia", price: 8500, emoji: "👜" },
 ];
 
-/**
- * L'aperçu est une page réduite : texte à 10–11 px, avatar de 56 px au lieu
- * de 96. Le décor de tête est rendu par le composant de la page, à ses
- * hauteurs réelles, puis réduit d'un facteur unique — même code, même
- * proportion, aucune valeur de thème recopiée ici.
- */
-const DECOR_SCALE = 0.6;
-
 /** Avatar de l'aperçu : 56 px, le `size-14` ci-dessous. */
 const AVATAR_SIZE = 56;
 
 /** Bas de la barre haute : `pt-3` (12 px) + pastilles `size-6` (24 px). */
 const TOP_BAR_BOTTOM = 36;
-
-/**
- * Sur la page, l'avatar chevauche la lisière de la bande (−48 px). Ici on
- * décale le profil pour que le centre de l'avatar tombe sur la lisière de
- * la bande réduite ; sans bande, on garde le `mt-2` historique.
- */
-function profileOffset(palette: BioPalette, hasBanner: boolean): number | undefined {
-  const header = palette.decor?.header;
-  if (hasBanner || header?.kind !== "band") return undefined;
-  return Math.max(0, header.height * DECOR_SCALE - AVATAR_SIZE / 2 - TOP_BAR_BOTTOM);
-}
-
-/**
- * Tuile d'icône d'un bouton de lien, la règle de bio-link-button : sur un
- * thème à décor dont les boutons sont un aplat franc sur page claire (Wax :
- * cobalt sur crème), la tuile s'inverse en disque du fond de page avec
- * l'icône couleur bouton ; partout ailleurs, la teinte du texte courant à
- * 10 %, comme aujourd'hui.
- */
-function iconTileStyle(palette: BioPalette): CSSProperties {
-  if (
-    palette.decor &&
-    palette.scheme === "light" &&
-    contrastRatio(palette.surface, palette.backgroundSolid) >= 3
-  ) {
-    return { backgroundColor: palette.backgroundSolid, color: palette.surface };
-  }
-  return { backgroundColor: "color-mix(in oklab, currentColor 10%, transparent)" };
-}
 
 export function ThemePreview({
   shopName,
@@ -148,15 +116,18 @@ export function ThemePreview({
 
   const handle = slug || shopName.toLowerCase().replace(/\s+/g, "-") || "ma-boutique";
 
-  const buttonStyle = bioButtonStyle(palette, { pill: ctaShape === "pill" });
-  const cardStyle: CSSProperties = { ...bioCardStyle(palette) };
-  // Un flou dans un aperçu de 300 px ne montre rien de plus et coûte une
-  // couche de composition par carte : on le laisse à la page.
-  delete cardStyle.backdropFilter;
+  // Les mêmes styles que la page, sans le flou du variant verre.
+  const buttonStyle = previewButtonStyle(palette, { pill: ctaShape === "pill" });
+  const cardStyle = previewCardStyle(palette);
   const ring = bioAvatarRingStyle(palette);
   const priceBadge = bioPriceBadgeStyle(palette);
-  const tile = iconTileStyle(palette);
-  const marginTop = profileOffset(palette, hasBanner);
+  const tile = bioIconTileStyle(palette);
+  // Sans bande, le `mt-2` historique du profil.
+  const marginTop = previewProfileOffset(palette, {
+    hasBanner,
+    avatarSize: AVATAR_SIZE,
+    contentTop: TOP_BAR_BOTTOM,
+  });
 
   return (
     <div
@@ -190,32 +161,10 @@ export function ThemePreview({
           } as CSSProperties
         }
       >
-        {/* Décor de tête (lavis ou bande), le composant de la page réduit. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-0 origin-top-left"
-          style={{
-            width: `${100 / DECOR_SCALE}%`,
-            transform: `scale(${DECOR_SCALE})`,
-          }}
-        >
-          <BioHeaderDecor palette={palette} hasBanner={hasBanner} />
-        </div>
-
-        {/* Bannière fondue dans le fond, comme sur la page */}
-        {bannerUrl && (
-          <div className="absolute inset-x-0 top-0 h-24 overflow-hidden">
-            {/* Aperçu local : pas d'optimisation d'image nécessaire. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerUrl} alt="" className="size-full object-cover" />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `linear-gradient(to bottom, ${palette.backgroundSolid}40, ${palette.backgroundSolid})`,
-              }}
-            />
-          </div>
-        )}
+        {/* Décor de tête (lavis ou bande), le composant de la page réduit,
+            ou la bannière fondue dans le fond, comme sur la page. */}
+        <PreviewHeaderDecor palette={palette} hasBanner={hasBanner} />
+        {bannerUrl && <PreviewBanner url={bannerUrl} palette={palette} />}
 
         {/* Top bar */}
         <div className="relative flex items-center justify-between">
@@ -247,11 +196,9 @@ export function ThemePreview({
               // L'anneau du décor remplace l'ombre floue.
               !ring && "shadow-sm",
             )}
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              ...ring,
-            }}
+            // Les couleurs du disque, son filet et son anneau sont ceux de la
+            // page (crème à initiales cobalt sur la bande de Wax).
+            style={bioAvatarInitialsStyle(palette)}
           >
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -381,11 +328,8 @@ export function ThemePreview({
           <div className="relative mt-4 flex justify-center">
             <span
               className="rounded-full px-3 py-1.5 text-[9px] font-semibold"
-              style={{
-                backgroundColor: palette.surface,
-                color: palette.surfaceText,
-                border: `1px solid ${palette.border}`,
-              }}
+              // La même pastille que sur la page (ombre dure comprise).
+              style={bioTopBarPillStyle(palette)}
             >
               Crée ta page sur Bio-Lien
             </span>

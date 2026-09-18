@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import {
-  bioAvatarRingStyle,
+  bioAvatarInitialsStyle,
   bioButtonStyle,
   bioThemeCssVars,
   resolveBioTheme,
@@ -77,8 +77,13 @@ export function BioThemeSwatch({
   // Un flou sur une barre de 14 px ne montre rien et coûte une couche de
   // composition par carte : la vignette s'en passe (seul Minuit en a un).
   delete bar.backdropFilter;
-
-  const ring = bioAvatarRingStyle(palette);
+  // Les boutons pleins n'ont pas de filet sur la page (« 1px solid
+  // transparent ») ; sur une vignette de 14 px, une barre Noir se fondrait
+  // dans le fond. La vignette garde le filet `border` que les anciennes
+  // miniatures peignaient sur toutes les barres.
+  if (typeof bar.border === "string" && bar.border.endsWith("transparent")) {
+    bar.border = `1px solid ${palette.border}`;
+  }
 
   return (
     <div
@@ -118,9 +123,10 @@ export function BioThemeSwatch({
         </>
       )}
 
+      {/* L'avatar : le disque d'initiales de la page, anneau compris. */}
       <span
         className="relative size-5 shrink-0 rounded-full"
-        style={{ backgroundColor: palette.surface, ...ring }}
+        style={bioAvatarInitialsStyle(palette)}
       />
       <span
         className="relative h-1 w-8 shrink-0 rounded-full"
