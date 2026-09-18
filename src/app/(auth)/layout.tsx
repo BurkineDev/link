@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MarketingPixels } from "@/components/marketing/marketing-pixels";
 import { BrandBackdrop, Wordmark } from "@/components/brand/brand-shell";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 
@@ -29,6 +30,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       className="relative flex min-h-screen flex-col items-center justify-center px-5 py-10 font-[family-name:var(--font-brand)]"
       style={{ background: "var(--b-canvas)", color: "var(--b-ink)" }}
     >
+      <MarketingPixels />
       <BrandBackdrop />
 
       <div className="relative z-10 flex w-full flex-col items-center">

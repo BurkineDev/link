@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MarketingPixels } from "@/components/marketing/marketing-pixels";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEffectivePlan } from "@/lib/subscription";
@@ -50,10 +51,13 @@ export default async function PricingPage() {
   }
 
   return (
-    <PricingClient
-      isAuthenticated={!!user}
-      currentPlan={currentPlan}
-      mobileMoneyBlockedCountry={mobileMoneyBlockedCountry}
-    />
+    <>
+      <MarketingPixels />
+      <PricingClient
+        isAuthenticated={!!user}
+        currentPlan={currentPlan}
+        mobileMoneyBlockedCountry={mobileMoneyBlockedCountry}
+      />
+    </>
   );
 }

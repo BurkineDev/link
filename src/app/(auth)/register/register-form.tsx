@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { signIn, signUp } from "@/lib/auth-client";
+import { trackMarketingEvent } from "@/components/marketing/marketing-pixels";
 import { StarterOffer, type RegisterInvite } from "@/components/auth/starter-offer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -244,6 +245,12 @@ export function RegisterForm({
       // encodé dedans pour être rejoué à la fin.
       callbackURL: onboardingPath,
     });
+
+    if (!error) {
+      // L'inscription a réussi : l'événement que lit une campagne. Le
+      // vendeur, lui, part lire son e-mail de confirmation.
+      trackMarketingEvent("CompleteRegistration");
+    }
 
     if (error) {
       // Better Auth limite le nombre de requêtes par fenêtre. Sans ce cas

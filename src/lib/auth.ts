@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { after } from "next/server";
+import { ACQUISITION_COOKIE, decodeAcquisition } from "@/lib/acquisition";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -125,7 +126,7 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        after: async (user) => {
+        after: async (user, context) => {
           await prisma.profile.upsert({
             where: { id: user.id },
             create: {
@@ -137,6 +138,16 @@ export const auth = betterAuth({
             },
             update: {},
           });
+          // D'où vient ce compte : le cookie posé par le proxy à la première
+          // visite venue d'une campagne. Une écriture qui échoue ne doit pas
+          // empêcher l'inscription — la mesure passe après le vendeur.
+          const acquisition = decodeAcquisition(context?.getCookie(ACQUISITION_COOKIE));
+          if (acquisition) {
+            await prisma.user
+              // Prisma veut un objet JSON « ouvert » : l'interface, elle, est fermée.
+              .update({ where: { id: user.id }, data: { acquisition: { ...acquisition } } })
+              .catch((error) => console.error("[auth] acquisition non enregistrée", error));
+          }
         },
       },
     },

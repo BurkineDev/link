@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { supportHref } from "@/lib/support";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -201,10 +202,7 @@ export function PricingClient({
             paiement resterait bloqué « en attente ». Ton numéro WhatsApp est de ce pays, donc
             les plans se paient <b>par carte bancaire</b> (bouton sous chaque plan). Tu as un
             compte Wave ou Orange Money dans un pays couvert ?{" "}
-            <a
-              href="mailto:support@bio-lien.com?subject=Mobile%20Money%20hors%20couverture"
-              className="underline font-medium"
-            >
+            <a href={supportHref("Mobile Money hors couverture")} className="underline font-medium">
               Écris-nous
             </a>
             .
