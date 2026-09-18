@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { RegisterServiceWorker } from "@/components/pwa/register-service-worker";
 import {
   Geist,
   Geist_Mono,
@@ -240,6 +241,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster richColors position="top-center" />
+          <RegisterServiceWorker />
         </ThemeProvider>
       </body>
     </html>
