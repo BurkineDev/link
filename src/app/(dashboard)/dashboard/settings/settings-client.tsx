@@ -74,9 +74,10 @@ import {
 } from "lucide-react";
 
 import { ThemePreview } from "@/components/dashboard/theme-preview";
+import { BioThemeSwatch } from "@/components/dashboard/bio-theme-swatch";
 import {
-  BIO_THEME_LIST,
-  resolveBioTheme,
+  BIO_THEMES,
+  groupBioThemes,
   type BioThemeId,
 } from "@/lib/bio-themes";
 import { LinksSection } from "@/components/dashboard/links-section";
@@ -320,54 +321,6 @@ function OptionGrid<T extends string>({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/**
- * Miniature of a bio-page theme: background, avatar, two buttons. Uses the
- * live palette resolver so the 'Mes couleurs' card previews the seller's own
- * colours rather than a placeholder.
- */
-function BioThemeSwatch({
-  themeId,
-  primaryColor,
-  accentColor,
-}: {
-  themeId: BioThemeId;
-  primaryColor: string;
-  accentColor: string;
-}) {
-  const palette = resolveBioTheme({
-    bio_theme: themeId,
-    theme_color: primaryColor,
-    accent_color: accentColor,
-  });
-
-  const buttonStyle: React.CSSProperties = {
-    backgroundColor:
-      palette.buttonVariant === "outline" ? "transparent" : palette.surface,
-    border:
-      palette.buttonVariant === "outline"
-        ? `1px solid ${palette.text}`
-        : `1px solid ${palette.border}`,
-  };
-
-  return (
-    <div
-      className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-3"
-      style={{ background: palette.background }}
-    >
-      <span
-        className="size-5 rounded-full"
-        style={{ backgroundColor: palette.surface }}
-      />
-      <span
-        className="h-1 w-8 rounded-full"
-        style={{ backgroundColor: palette.accent }}
-      />
-      <span className="h-3.5 w-full rounded-full" style={buttonStyle} />
-      <span className="h-3.5 w-full rounded-full" style={buttonStyle} />
     </div>
   );
 }
@@ -909,45 +862,66 @@ export function SettingsClient({
                   C&apos;est le fond et le style des boutons que voient tes
                   visiteurs quand ils cliquent sur ton lien en bio.
                 </p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {BIO_THEME_LIST.map((theme) => {
-                    const selected = bioTheme === theme.id;
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => setBioTheme(theme.id)}
-                        aria-pressed={selected}
-                        title={theme.description}
-                        className={cn(
-                          "group cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-200",
-                          selected
-                            ? "border-foreground ring-2 ring-foreground"
-                            : "border-border hover:border-foreground/40 hover:shadow-sm",
-                        )}
-                      >
-                        <div className="relative aspect-[4/3] overflow-hidden">
-                          <BioThemeSwatch
-                            themeId={theme.id}
-                            primaryColor={themeColor}
-                            accentColor={accentColor}
-                          />
-                          {selected && (
-                            <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
-                              <Check className="size-3" />
+                {/* Les thèmes par groupe : l'Afrique de l'Ouest en tête,
+                    les classiques ensuite, « Mes couleurs » en dernier. */}
+                {groupBioThemes().map((group) => (
+                  <div key={group.group} className="space-y-2">
+                    <h4
+                      id={`bio-theme-group-${group.group}`}
+                      className="text-xs font-semibold text-foreground"
+                    >
+                      {group.label}
+                    </h4>
+                    {group.group === "afrique" && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Pensés pour le plein soleil et les petits écrans.
+                      </p>
+                    )}
+                    <div
+                      role="group"
+                      aria-labelledby={`bio-theme-group-${group.group}`}
+                      className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+                    >
+                      {group.themes.map((theme) => {
+                        const selected = bioTheme === theme.id;
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            onClick={() => setBioTheme(theme.id)}
+                            aria-pressed={selected}
+                            title={theme.description}
+                            className={cn(
+                              "group cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-200",
+                              selected
+                                ? "border-foreground ring-2 ring-foreground"
+                                : "border-border hover:border-foreground/40 hover:shadow-sm",
+                            )}
+                          >
+                            <div className="relative aspect-[4/3] overflow-hidden">
+                              <BioThemeSwatch
+                                themeId={theme.id}
+                                primaryColor={themeColor}
+                                accentColor={accentColor}
+                              />
+                              {selected && (
+                                <div className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
+                                  <Check className="size-3" />
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="p-2.5">
-                          <p className="text-xs font-semibold">{theme.label}</p>
-                          <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                            {theme.description}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                            <div className="p-2.5">
+                              <p className="text-xs font-semibold">{theme.label}</p>
+                              <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                                {theme.description}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </section>
 
 
@@ -1030,7 +1004,14 @@ export function SettingsClient({
                     Typographie
                   </h3>
                 </header>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {BIO_THEMES[bioTheme].decor?.fontPreset && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Ce thème apporte ses polices (Ojuju pour les titres,
+                    Atkinson pour le texte). Choisis une police ici pour les
+                    remplacer.
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {SHOP_FONTS.map((f) => {
                     const selected = fontFamily === f.value;
                     return (
@@ -1188,6 +1169,7 @@ export function SettingsClient({
                       shopName={name || "Ma boutique"}
                       slug={slug}
                       logoUrl={logoUrl}
+                      bannerUrl={bannerUrl}
                       bioTheme={bioTheme}
                       primaryColor={themeColor}
                       accentColor={accentColor}
@@ -1215,6 +1197,7 @@ export function SettingsClient({
                     shopName={name || "Ma boutique"}
                     slug={slug}
                     logoUrl={logoUrl}
+                    bannerUrl={bannerUrl}
                     bioTheme={bioTheme}
                     primaryColor={themeColor}
                     accentColor={accentColor}

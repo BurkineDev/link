@@ -16,7 +16,11 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { VariantSelector } from "@/components/shop/variant-selector";
-import { BioProductCard } from "@/components/shop/bio-product-card";
+import {
+  BioProductCard,
+  splitPriceSymbol,
+} from "@/components/shop/bio-product-card";
+import { BioHeaderDecor } from "@/components/shop/bio-theme-decor";
 import { BioShareSheet } from "@/components/shop/bio-share-sheet";
 import { ProductVectorIllustration } from "@/components/shop/product-vector-illustration";
 import { CartDrawer } from "@/components/shop/cart-drawer";
@@ -24,9 +28,15 @@ import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils/format";
 import { BORDER_RADIUS_CLASS, FONT_FAMILY_CLASS } from "@/lib/constants";
 import {
+  bioCardStyle,
+  bioFontVars,
+  bioPriceBadgeStyle,
+  bioThemeCssVars,
+  bioTopBarPillStyle,
   primaryActionColor,
   readableTextOn,
   resolveBioTheme,
+  whatsappButtonStyle,
   withAlpha,
 } from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
@@ -82,17 +92,19 @@ export function ProductPage({
   const fontClass = FONT_FAMILY_CLASS[shop.font_family] ?? FONT_FAMILY_CLASS.sans;
   const radiusClass = BORDER_RADIUS_CLASS[shop.border_radius] ?? BORDER_RADIUS_CLASS.lg;
 
-  const actionFill = primaryActionColor(palette);
+  const decor = palette.decor;
+  // Les deux cartes (galerie, détails) sont des cartes produit : même fond
+  // (`decor.card` pour Wax), même bordure, même ombre dure que sur la page bio.
+  const surfaceStyle = bioCardStyle(palette);
+  const cardBg = decor?.card?.bg ?? palette.surface;
+  const cardText = decor?.card?.text ?? palette.surfaceText;
+  const actionFill = primaryActionColor(palette, cardBg);
   const actionInk = readableTextOn(actionFill);
-  const hairline = withAlpha(palette.surfaceText, 0.15);
-
-  const surfaceStyle: React.CSSProperties = {
-    backgroundColor: palette.surface,
-    color: palette.surfaceText,
-    border: `1px solid ${palette.border}`,
-    backdropFilter:
-      palette.buttonVariant === "glass" ? "blur(12px)" : undefined,
-  };
+  const hairline = withAlpha(cardText, 0.15);
+  const priceBadge = bioPriceBadgeStyle(palette);
+  // Polices du thème, seulement si le vendeur n'a pas choisi la sienne.
+  const fontVars = bioFontVars(palette, shop.font_family);
+  const bodyFont = fontVars["--bio-font-body"];
 
   const images = product.images ?? [];
   const mainImage = images[activeImage] ?? images[0];
@@ -167,26 +179,33 @@ export function ProductPage({
 
   return (
     <div
-      className={cn("min-h-dvh", fontClass)}
-      style={{
-        background: palette.background,
-        color: palette.text,
-        colorScheme: palette.scheme,
-      }}
+      className={cn("relative min-h-dvh", fontClass)}
+      style={
+        {
+          background: palette.background,
+          color: palette.text,
+          colorScheme: palette.scheme,
+          ...bioThemeCssVars(palette),
+          ...fontVars,
+          ...(bodyFont ? { fontFamily: bodyFont } : {}),
+        } as React.CSSProperties
+      }
     >
+      {/* ── Même zone haute que la page bio (la fiche n'a jamais de bannière) :
+          le visiteur ne perd pas le décor en ouvrant un produit. ── */}
+      <BioHeaderDecor palette={palette} hasBanner={false} />
+
       {/* ── Top bar: back to the bio page, share this product ── */}
-      <div className="mx-auto flex w-full max-w-[680px] items-center justify-between gap-3 px-4 pt-4 lg:max-w-5xl">
+      <div className="relative mx-auto flex w-full max-w-[680px] items-center justify-between gap-3 px-4 pt-4 lg:max-w-5xl">
         <Link
           href={`/${shop.slug}`}
           className={cn(
             "flex min-w-0 items-center gap-2 rounded-full py-2 pl-2 pr-4",
             "transition-transform hover:scale-[1.02] active:scale-95",
           )}
-          style={{
-            backgroundColor: palette.surface,
-            color: palette.surfaceText,
-            border: `1px solid ${palette.border}`,
-          }}
+          style={bioTopBarPillStyle(palette, {
+            overHeader: decor?.header?.kind === "band",
+          })}
         >
           <ChevronLeft className="size-5 shrink-0" />
           <span className="truncate text-sm font-semibold">{shop.name}</span>
@@ -197,17 +216,15 @@ export function ProductPage({
           onClick={() => setShareOpen(true)}
           aria-label="Partager ce produit"
           className="flex size-11 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95"
-          style={{
-            backgroundColor: palette.surface,
-            color: palette.surfaceText,
-            border: `1px solid ${palette.border}`,
-          }}
+          style={bioTopBarPillStyle(palette, {
+            overHeader: decor?.header?.kind === "band",
+          })}
         >
           <Share2 className="size-5" />
         </button>
       </div>
 
-      <main className="mx-auto w-full max-w-[680px] px-4 pb-32 pt-4 lg:max-w-5xl">
+      <main className="relative mx-auto w-full max-w-[680px] px-4 pb-32 pt-4 lg:max-w-5xl">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8">
           {/* ── Gallery ── */}
           <div className="space-y-3">
@@ -238,7 +255,22 @@ export function ProductPage({
                   </span>
                 )}
                 {isOnSale && !isOutOfStock && (
-                  <span className="rounded-lg bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white">
+                  <span
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-xs font-semibold",
+                      !decor?.highlight && "bg-rose-500 text-white",
+                    )}
+                    // Même règle que la carte : la promo porte le rehaut du
+                    // thème quand il en a un.
+                    style={
+                      decor?.highlight
+                        ? {
+                            backgroundColor: decor.highlight.bg,
+                            color: decor.highlight.text,
+                          }
+                        : undefined
+                    }
+                  >
                     Promo
                   </span>
                 )}
@@ -283,20 +315,69 @@ export function ProductPage({
             className={cn("flex flex-col gap-5 p-5 sm:p-6", radiusClass)}
             style={surfaceStyle}
           >
-            <h1 className="text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
+            <h1
+              className={cn(
+                "text-2xl font-bold leading-tight sm:text-3xl",
+                !decor && "tracking-tight",
+              )}
+              style={{ fontFamily: "var(--bio-font-display, inherit)" }}
+            >
               {product.name}
             </h1>
 
             <div className="flex flex-wrap items-baseline gap-3">
-              <span className="text-3xl font-bold">
-                {formatPrice(effectivePrice, product.currency)}
-              </span>
+              {priceBadge ? (
+                // La même pastille que sur la carte, en plus grand : chiffres
+                // en police d'affiche, tabulaires, « FCFA » en petit.
+                <span
+                  className="inline-flex items-baseline gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 leading-none"
+                  style={priceBadge}
+                >
+                  {(() => {
+                    const price = splitPriceSymbol(
+                      formatPrice(effectivePrice, product.currency),
+                    );
+                    return (
+                      <>
+                        <span className="text-2xl font-bold">{price.amount}</span>
+                        {price.symbol && (
+                          // En police de corps, comme sur la carte : les
+                          // capitales d'Ojuju déforment « FCFA ».
+                          <span
+                            className="text-sm font-bold tracking-wide"
+                            style={{ fontFamily: "var(--bio-font-body, inherit)" }}
+                          >
+                            {price.symbol}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </span>
+              ) : (
+                <span className="text-3xl font-bold">
+                  {formatPrice(effectivePrice, product.currency)}
+                </span>
+              )}
               {isOnSale && (
                 <>
                   <span className="text-lg line-through opacity-60">
                     {formatPrice(product.compare_price!, product.currency)}
                   </span>
-                  <span className="rounded-full bg-rose-500 px-2.5 py-0.5 text-sm font-semibold text-white">
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-sm font-semibold",
+                      !decor?.highlight && "bg-rose-500 text-white",
+                    )}
+                    style={
+                      decor?.highlight
+                        ? {
+                            backgroundColor: decor.highlight.bg,
+                            color: decor.highlight.text,
+                          }
+                        : undefined
+                    }
+                  >
                     −
                     {Math.round(
                       ((product.compare_price! - product.price) /
@@ -378,11 +459,13 @@ export function ProductPage({
                   return true;
                 }}
                 className={cn(
-                  "flex h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold text-white",
+                  "flex h-12 items-center justify-center gap-2 rounded-xl text-base font-semibold",
                   "transition-transform active:scale-[0.99]",
                   isOutOfStock && "pointer-events-none opacity-50",
                 )}
-                style={{ backgroundColor: "#25D366" }}
+                // Vert WhatsApp jamais thémé, encre lisible dessus, filet :
+                // la même règle que « Commander » sur les cartes.
+                style={whatsappButtonStyle("inline")}
               >
                 <MessageCircle className="size-5" />
                 {isOutOfStock ? "Épuisé" : "Commander sur WhatsApp"}
@@ -412,7 +495,7 @@ export function ProductPage({
                       "transition-transform active:scale-[0.99]",
                     )}
                     style={{
-                      color: palette.surfaceText,
+                      color: cardText,
                       border: `2px solid ${actionFill}`,
                     }}
                   >
@@ -444,7 +527,12 @@ export function ProductPage({
         {/* ── Related ── */}
         {related.length > 0 && (
           <section className="mt-12">
-            <h2 className="mb-4 text-lg font-bold">Ça pourrait aussi te plaire</h2>
+            <h2
+              className="mb-4 text-lg font-bold"
+              style={{ fontFamily: "var(--bio-font-display, inherit)" }}
+            >
+              Ça pourrait aussi te plaire
+            </h2>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {related.map((item) => (
                 <BioProductCard
@@ -479,11 +567,7 @@ export function ProductPage({
             <Link
               href={`/register?de=${encodeURIComponent(shop.slug)}`}
               className="flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:scale-[1.02] active:scale-95"
-              style={{
-                backgroundColor: palette.surface,
-                color: palette.surfaceText,
-                border: `1px solid ${palette.border}`,
-              }}
+              style={bioTopBarPillStyle(palette)}
             >
               <Sparkles className="size-4" />
               Crée ta page sur Bio-Lien
@@ -504,11 +588,7 @@ export function ProductPage({
               "transition-transform duration-150 hover:scale-105 active:scale-95",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
             )}
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              border: `1px solid ${palette.border}`,
-            }}
+            style={bioTopBarPillStyle(palette)}
           >
             <ShoppingBag className="size-6" />
             {itemCount > 0 && (

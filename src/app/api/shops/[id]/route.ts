@@ -5,7 +5,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeShop } from "@/lib/db/serialize";
-import { RESERVED_SLUGS } from "@/lib/constants";
+import { RESERVED_SLUGS, SHOP_FONT_VALUES } from "@/lib/constants";
+import { isBioThemeId } from "@/lib/bio-themes";
 import { revalidateShopSlug } from "@/lib/shops/revalidate";
 import { loadBalance } from "@/lib/payouts/balance-db";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
@@ -42,12 +43,16 @@ const patchSchema = z
     is_published: z.boolean().optional(),
     theme_color: z.string().trim().max(20).optional(),
     accent_color: z.string().trim().max(20).optional(),
-    font_family: z.string().trim().max(50).optional(),
+    // Fermé sur le catalogue : une valeur inconnue retombait en silence sur Inter.
+    font_family: z.enum(SHOP_FONT_VALUES).optional(),
     border_radius: z.string().trim().max(20).optional(),
     card_style: z.string().trim().max(20).optional(),
     cta_shape: z.string().trim().max(20).optional(),
     cta_style: z.string().trim().max(20).optional(),
-    bio_theme: z.string().trim().max(50).optional(),
+    // Même fermeture : un id inconnu était stocké puis replié en silence.
+    bio_theme: z.string().trim().max(50).refine(isBioThemeId, {
+      message: "Thème de page inconnu.",
+    }).optional(),
     currency: z.enum(CURRENCIES).optional(),
     contact_email: nullableText(254),
     contact_phone: nullableText(30),

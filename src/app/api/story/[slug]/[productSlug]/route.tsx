@@ -3,6 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { isBioThemeId, resolveBioTheme } from "@/lib/bio-themes";
 import { formatPrice } from "@/lib/utils/format";
 import type { ProductImage, ProductRow, ShopRow } from "@/lib/types/database";
+import {
+  STORY_GUTTER,
+  STORY_HEIGHT,
+  STORY_WIDTH,
+  StoryDivider,
+  StoryHeaderDecor,
+  storyButtonStyle,
+  storyCardStyle,
+  storyPillStyle,
+  storyPriceBadgeStyle,
+  storyRaise,
+} from "../../story-decor";
 
 /**
  * GET /api/story/{slug}/{productSlug} — a ready-to-post story image
@@ -12,16 +24,31 @@ import type { ProductImage, ProductRow, ShopRow } from "@/lib/types/database";
  * product, taps "Partager en story", and it is on Instagram in the shop's own
  * palette. Same exposure policy as the page story — published shop AND
  * published product only, 404 otherwise.
+ *
+ * Avec un thème « Afrique de l'Ouest », la carte du produit est cousue sur
+ * la lisière de la bande ou posée sur le lavis, et le prix s'écrit dans la
+ * pastille de rehaut du thème (story-decor.tsx) ; sans décor, rien ne change.
  */
 
 // Runtime Node.js : Prisma ne tourne pas sur le runtime edge, et next/og
 // rend aussi bien sur Node.
 
-const WIDTH = 1080;
-const HEIGHT = 1920;
+const WIDTH = STORY_WIDTH;
+const HEIGHT = STORY_HEIGHT;
 const CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400";
 
 const SLUG_RE = /^[a-z0-9_-]{1,80}$/;
+
+/**
+ * Sépare le montant de son symbole quand celui-ci suit le nombre après une
+ * insécable (« 12 500 FCFA » → « 12 500 » + « FCFA ») pour que la pastille
+ * écrive le symbole en plus petit. Un prix dont le symbole précède le nombre
+ * (« ₦2,500.00 ») reste d'un seul tenant.
+ */
+function splitPriceSymbol(formatted: string): { amount: string; symbol?: string } {
+  const match = /^(.+)\u00A0([A-Za-z]+)$/.exec(formatted);
+  return match ? { amount: match[1], symbol: match[2] } : { amount: formatted };
+}
 
 type Ctx = { params: Promise<{ slug: string; productSlug: string }> };
 
@@ -89,6 +116,7 @@ export async function GET(request: Request, ctx: Ctx) {
   const palette = resolveBioTheme(
     isBioThemeId(themeOverride) ? { ...shop, bio_theme: themeOverride } : shop,
   );
+  const decor = palette.decor;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.bio-lien.com";
   const productUrl = `${appUrl.replace(/\/$/, "")}/${shop.slug}/${product.slug}`;
@@ -118,6 +146,15 @@ export async function GET(request: Request, ctx: Ctx) {
   const productName =
     product.name.length > 60 ? `${product.name.slice(0, 57)}…` : product.name;
 
+  const priceBadge = storyPriceBadgeStyle(palette);
+  const price = splitPriceSymbol(formatPrice(product.price, currency));
+  const raise = storyRaise(palette);
+  // Le badge promo prend la couleur de rehaut du thème quand il en a une ;
+  // sinon le rose historique.
+  const saleBadge = decor?.highlight
+    ? { backgroundColor: decor.highlight.bg, color: decor.highlight.text }
+    : { backgroundColor: "#F43F5E", color: "#FFFFFF" };
+
   return new ImageResponse(
     (
       <div
@@ -125,14 +162,17 @@ export async function GET(request: Request, ctx: Ctx) {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
+          position: "relative",
           width: "100%",
           height: "100%",
-          padding: "88px 72px",
+          padding: `88px ${STORY_GUTTER}px`,
           background: palette.background,
           color: palette.text,
           fontFamily: "system-ui, -apple-system, sans-serif",
         }}
       >
+        <StoryHeaderDecor palette={palette} />
+
         {/* Shop identity */}
         <div
           style={{
@@ -141,11 +181,9 @@ export async function GET(request: Request, ctx: Ctx) {
             gap: 14,
             padding: "14px 34px",
             borderRadius: 999,
-            background: palette.surface,
-            color: palette.surfaceText,
-            border: `2px solid ${palette.border}`,
             fontSize: 34,
             fontWeight: 800,
+            ...storyPillStyle(palette),
           }}
         >
           {shop.name}
@@ -161,7 +199,7 @@ export async function GET(request: Request, ctx: Ctx) {
           </div>
         </div>
 
-        {/* Product visual */}
+        {/* Product visual — sur une bande, la carte chevauche la lisière */}
         <div
           style={{
             display: "flex",
@@ -169,10 +207,9 @@ export async function GET(request: Request, ctx: Ctx) {
             marginTop: 64,
             width: 820,
             height: 820,
-            borderRadius: 56,
+            borderRadius: decor ? 28 : 56,
             overflow: "hidden",
-            background: palette.surface,
-            border: `6px solid ${palette.surface}`,
+            ...storyCardStyle(palette),
           }}
         >
           {image?.url ? (
@@ -192,7 +229,7 @@ export async function GET(request: Request, ctx: Ctx) {
                 justifyContent: "center",
                 width: "100%",
                 height: "100%",
-                color: palette.surfaceText,
+                color: decor?.card?.text ?? palette.surfaceText,
                 fontSize: 260,
                 fontWeight: 800,
               }}
@@ -210,10 +247,9 @@ export async function GET(request: Request, ctx: Ctx) {
                 left: 36,
                 padding: "14px 30px",
                 borderRadius: 999,
-                background: "#F43F5E",
-                color: "#FFFFFF",
                 fontSize: 40,
                 fontWeight: 800,
+                ...saleBadge,
               }}
             >
               −{discount}%
@@ -244,16 +280,40 @@ export async function GET(request: Request, ctx: Ctx) {
             marginTop: 26,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              fontSize: 84,
-              fontWeight: 800,
-              color: palette.accent,
-            }}
-          >
-            {formatPrice(product.price, currency)}
-          </div>
+          {priceBadge ? (
+            // La pastille de prix du thème : chiffres en grand, symbole en
+            // petit, tous deux dans l'encre garantie lisible sur le rehaut.
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 16,
+                padding: "10px 40px",
+                borderRadius: 999,
+                fontSize: 72,
+                fontWeight: 800,
+                ...priceBadge,
+              }}
+            >
+              {price.amount}
+              {price.symbol ? (
+                <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}>
+                  {price.symbol}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                fontSize: 84,
+                fontWeight: 800,
+                color: palette.accent,
+              }}
+            >
+              {formatPrice(product.price, currency)}
+            </div>
+          )}
           {isOnSale ? (
             <div
               style={{
@@ -268,6 +328,9 @@ export async function GET(request: Request, ctx: Ctx) {
             </div>
           ) : null}
         </div>
+
+        {/* La couture du thème, entre le produit et l'appel à scanner */}
+        <StoryDivider palette={palette} />
 
         <div style={{ display: "flex", flexGrow: 1 }} />
 
@@ -286,6 +349,7 @@ export async function GET(request: Request, ctx: Ctx) {
               borderRadius: 40,
               background: "#FFFFFF",
               border: `2px solid ${palette.border}`,
+              ...(raise ? { boxShadow: raise } : {}),
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -314,11 +378,9 @@ export async function GET(request: Request, ctx: Ctx) {
                 display: "flex",
                 padding: "16px 30px",
                 borderRadius: 999,
-                background: palette.surface,
-                color: palette.surfaceText,
-                border: `2px solid ${palette.border}`,
                 fontSize: 27,
                 fontWeight: 700,
+                ...storyButtonStyle(palette, { pill: true }),
               }}
             >
               {displayUrl.length > 32 ? `${displayUrl.slice(0, 29)}…` : displayUrl}

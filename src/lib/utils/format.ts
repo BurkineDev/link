@@ -8,25 +8,34 @@ import type { Currency } from "@/lib/types/database";
 // Price formatting
 // ---------------------------------------------------------------------------
 
+/** Espace insécable : le symbole ne descend jamais seul à la ligne (« 12 500 FCFA »). */
+const NBSP = "\u00A0";
+/** Espace fine insécable : le séparateur des milliers en français. */
+const NARROW_NBSP = "\u202F";
+
 const CURRENCY_FORMAT: Record<
   Currency,
   { locale: string; symbol: string; position: "before" | "after"; decimals: number; separator?: string }
 > = {
-  XOF: { locale: "fr-FR", symbol: "FCFA", position: "after", decimals: 0, separator: " " },
-  XAF: { locale: "fr-FR", symbol: "FCFA", position: "after", decimals: 0, separator: " " },
+  XOF: { locale: "fr-FR", symbol: "FCFA", position: "after", decimals: 0, separator: NBSP },
+  XAF: { locale: "fr-FR", symbol: "FCFA", position: "after", decimals: 0, separator: NBSP },
   GHS: { locale: "en-GH", symbol: "GH₵", position: "before", decimals: 2 },
   NGN: { locale: "en-NG", symbol: "₦", position: "before", decimals: 2 },
   KES: { locale: "en-KE", symbol: "KSh", position: "before", decimals: 2 },
-  MAD: { locale: "fr-MA", symbol: "DH", position: "after", decimals: 2, separator: " " },
+  MAD: { locale: "fr-MA", symbol: "DH", position: "after", decimals: 2, separator: NBSP },
   USD: { locale: "en-US", symbol: "$", position: "before", decimals: 2 },
 };
 
 /**
  * Formats a price amount with the correct currency symbol and locale.
  *
+ * Le prix FCFA est un objet typographique : « 12 500 FCFA », espace fine
+ * insécable entre les milliers, insécable avant le symbole, jamais de
+ * décimales, jamais « XOF » — c'est ce qu'une acheteuse lit en plein soleil.
+ *
  * @example
  * formatPrice(5000, "XOF") // "5 000 FCFA"
- * formatPrice(2500, "NGN") // "₦2,500"
+ * formatPrice(2500, "NGN") // "₦2,500.00"
  * formatPrice(9.99, "USD") // "$9.99"
  */
 export function formatPrice(amount: number, currency: Currency | string): string {
@@ -37,10 +46,17 @@ export function formatPrice(amount: number, currency: Currency | string): string
     return `${amount.toLocaleString()} ${currency}`;
   }
 
-  const formatted = amount.toLocaleString(fmt.locale, {
+  let formatted = amount.toLocaleString(fmt.locale, {
     minimumFractionDigits: fmt.decimals,
     maximumFractionDigits: fmt.decimals,
   });
+
+  // Les moteurs ICU ne s'accordent pas sur l'espace des milliers en français
+  // (U+202F sur Node et Chrome récents, U+00A0 sur d'anciens WebView) : on
+  // impose l'espace fine insécable pour que le même prix s'écrive partout pareil.
+  if (fmt.locale.startsWith("fr")) {
+    formatted = formatted.replace(/[\u00A0\u202F ]/g, NARROW_NBSP);
+  }
 
   if (fmt.position === "before") {
     return `${fmt.symbol}${formatted}`;

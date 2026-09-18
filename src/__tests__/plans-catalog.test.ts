@@ -172,10 +172,11 @@ test("le prix carte affiché est celui que Stripe facture", () => {
   expect(cardPriceLabel("pro", "year")).toBe("99 $CA");
   expect(cardPriceLabel("starter", "month")).toBe("4,99 $CA");
   const pro = planPricing("pro");
-  expect(pro.prepaid.months1).toBe(`${PREPAID_PRICES.pro[1].toLocaleString("fr-FR")} FCFA`);
+  expect(pro.prepaid.months1).toBe(`${PREPAID_PRICES.pro[1].toLocaleString("fr-FR")}\u00a0FCFA`);
   expect(pro.prepaid.yearlySavingsPercent).toBeGreaterThan(0);
-  // Espace fine insécable (U+202F) de fr-FR, comme partout ailleurs (formatPrice).
-  expect(planPriceSummary("starter")).toBe("2\u202f000 FCFA / mois, 5\u202f000 FCFA / 3 mois ou 18\u202f000 FCFA / an ; par carte 4,99 $CA / mois ou 49 $CA / an");
+  // Espace fine insécable (U+202F) entre les milliers et insécable (U+00A0)
+  // avant FCFA, comme partout ailleurs (formatPrice).
+  expect(planPriceSummary("starter")).toBe("2\u202f000\u00a0FCFA / mois, 5\u202f000\u00a0FCFA / 3 mois ou 18\u202f000\u00a0FCFA / an ; par carte 4,99 $CA / mois ou 49 $CA / an");
   expect(planPriceSummary("free")).toBe("gratuit");
   expect(planLabel("free")).toBe("Découverte");
 });

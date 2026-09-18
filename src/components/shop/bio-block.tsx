@@ -5,7 +5,12 @@ import { BioLinkButton } from "@/components/shop/bio-link-button";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 import { blockClickEndpoint } from "@/lib/blocks/ids";
 import type { ResolvedBlock } from "@/lib/blocks/types";
-import type { BioPalette } from "@/lib/bio-themes";
+import {
+  bioRaise,
+  whatsappButtonStyle,
+  withAlpha,
+  type BioPalette,
+} from "@/lib/bio-themes";
 import { cn } from "@/lib/utils";
 import { normalizeWhatsAppNumber } from "@/lib/utils/whatsapp";
 import type { SocialLinks } from "@/lib/types/database";
@@ -57,9 +62,32 @@ export function BioBlock({
   // blocs — il n'est rendu que s'il existe, jamais comme placeholder.
   if (!block.title) return body;
 
+  const decor = palette.decor;
+
   return (
     <div className="space-y-2">
-      <h2 className="px-1 text-sm font-semibold" style={{ color: palette.text }}>
+      {/* Avec décor : titre en police d'affiche, prolongé d'un filet — une
+          couture discrète sous le titre, pas un second motif. Le filet est
+          d'encre sur page claire, de sable sur page sombre. */}
+      <h2
+        className={cn(
+          "px-1 font-semibold",
+          decor ? "pb-1.5 pt-2 text-xl leading-tight" : "text-sm",
+        )}
+        style={{
+          color: palette.text,
+          fontFamily: "var(--bio-font-display, inherit)",
+          ...(decor
+            ? {
+                borderBottom: `1px solid ${
+                  palette.scheme === "dark"
+                    ? withAlpha(palette.surface, 0.34)
+                    : withAlpha(palette.text, 0.25)
+                }`,
+              }
+            : {}),
+        }}
+      >
         {block.title}
       </h2>
       {body}
@@ -128,14 +156,16 @@ function renderBlock({
           rel="noopener noreferrer"
           onClick={() => beacon(blockClickEndpoint(block.id))}
           className={cn(
-            "flex w-full items-center justify-center gap-2 px-4 py-3.5 text-[15px] font-semibold text-white",
+            "flex w-full items-center justify-center gap-2 px-4 py-3.5 text-[15px] font-semibold",
             "transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
             radiusClass,
           )}
+          // Le bloc remplace le bouton flottant quand le vendeur l'a placé :
+          // même vert, même encre lisible dessus, même filet.
           style={
             {
-              backgroundColor: "#25D366",
+              ...whatsappButtonStyle("inline"),
               ["--tw-ring-color"]: palette.text,
               ["--tw-ring-offset-color"]: palette.backgroundSolid,
             } as React.CSSProperties
@@ -204,6 +234,17 @@ function renderBlock({
             );
       if (networks.length === 0) return null;
 
+      // Les puces suivent la bordure des boutons du thème : 2 px quand les
+      // boutons sont bordés, et l'ombre dure quand ils sont en relief.
+      const bold = palette.decor?.buttonBorder === "bold";
+      const chipStyle: React.CSSProperties = {
+        backgroundColor: palette.surface,
+        color: palette.surfaceText,
+        border: `${bold ? 2 : 1}px solid ${palette.border}`,
+      };
+      const raise = bioRaise(palette);
+      if (raise) chipStyle.boxShadow = raise;
+
       return (
         <ul className="flex flex-wrap justify-center gap-2">
           {networks.map((entry) => (
@@ -217,11 +258,7 @@ function renderBlock({
                   "transition-transform duration-150 active:scale-95",
                   radiusClass,
                 )}
-                style={{
-                  backgroundColor: palette.surface,
-                  color: palette.surfaceText,
-                  border: `1px solid ${palette.border}`,
-                }}
+                style={chipStyle}
               >
                 {entry.network}
               </SmartAppLink>

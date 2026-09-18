@@ -120,6 +120,15 @@ test("anonyme → 401 ; numéro WhatsApp sans indicatif → 422", async () => {
   expect((await post({ ...BODY, shop: { ...BODY.shop, whatsappNumber: "70123456" } })).status).toBe(422);
 });
 
+test("thème de page hors catalogue → 422, rien n'est écrit ; les quatre thèmes « Afrique de l'Ouest » passent", async () => {
+  expect((await post({ ...BODY, shop: { ...BODY.shop, bioTheme: "safari" } })).status).toBe(422);
+  expect(_writes).toHaveLength(0);
+  for (const bioTheme of ["bogolan", "wax", "indigo", "pagne"]) {
+    _writes.length = 0;
+    expect((await post({ ...BODY, shop: { ...BODY.shop, bioTheme } })).status).toBe(201);
+  }
+});
+
 describe("caisse masquée (drapeau absent)", () => {
   test("le mode « online » est refusé (422), rien n'est écrit", async () => {
     const res = await post({ ...BODY, shop: { ...BODY.shop, checkoutMode: "online", whatsappNumber: null } });

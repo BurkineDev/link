@@ -8,6 +8,7 @@ import { MessageCircle, Share2, ShoppingBag, Sparkles } from "lucide-react";
 import { BioProfile, BioSocials } from "@/components/shop/bio-profile";
 import { BioBlock } from "@/components/shop/bio-block";
 import { BioProductCard } from "@/components/shop/bio-product-card";
+import { BioDivider, BioHeaderDecor } from "@/components/shop/bio-theme-decor";
 import { SmartAppLink } from "@/components/shop/smart-app-link";
 
 import { TrackingPixels } from "@/components/shop/tracking-pixels";
@@ -18,7 +19,15 @@ import {
   CTA_SHAPE_CLASS,
   FONT_FAMILY_CLASS,
 } from "@/lib/constants";
-import { bioThemeCssVars, resolveBioTheme } from "@/lib/bio-themes";
+import {
+  bioFontVars,
+  bioTabStyle,
+  bioTabTrackStyle,
+  bioThemeCssVars,
+  bioTopBarPillStyle,
+  resolveBioTheme,
+  whatsappButtonStyle,
+} from "@/lib/bio-themes";
 import { buildWhatsAppOrderUrl } from "@/lib/utils/whatsapp";
 import { isOnlineCheckoutEnabled } from "@/lib/payments/online-checkout";
 import { isProductBlock, selectProductsForBlocks } from "@/lib/blocks/public";
@@ -68,6 +77,17 @@ function subscribeToHash(onChange: () => void) {
 const readHash = () => window.location.hash;
 /** The hash never reaches the server, so SSR always renders the default tab. */
 const noHashOnServer = () => "";
+
+/**
+ * Géométrie de la zone haute, en px, pour coudre l'avatar sur la lisière
+ * d'une bande ou d'une bannière : la barre haute (pt-4 + pastilles de 44)
+ * puis l'espace historique avant le profil (main pt-5) placent l'avatar à
+ * 80 px du haut ; on le décale pour que son centre (size-24, donc 48 px)
+ * tombe exactement sur le bord de la zone haute.
+ */
+const TOP_BAR_HEIGHT = 60;
+const PROFILE_GAP = 20;
+const AVATAR_OVERLAP = 48;
 
 /**
  * Counts one page view without ever delaying the page: sendBeacon hands the
@@ -195,6 +215,28 @@ export function ShopPage({
   const showTabs = hasLinks && hasProducts;
   const showCartFab = cartEnabled && (tab === "shop" || itemCount > 0);
 
+  // Décor du thème (bogolan, wax, indigo, pagne) ; `undefined` pour les dix
+  // thèmes historiques, qui rendent alors exactement comme avant.
+  const decor = palette.decor;
+  const hasBanner = Boolean(shop.banner_url);
+  const header = decor?.header;
+  // La bande d'en-tête ou la bannière occupent la zone haute : les pastilles
+  // s'inversent pour rester lisibles dessus, et l'avatar vient chevaucher
+  // leur lisière quand le thème lui donne un anneau.
+  const overHeader = hasBanner || header?.kind === "band";
+  const stitched = Boolean(decor?.avatarRing) && overHeader;
+  // Décalage du profil pour une bande (hauteur connue du thème) ; pour une
+  // bannière, la hauteur dépend du point de rupture : classes Tailwind.
+  const profileOffset =
+    stitched && !hasBanner && header?.kind === "band"
+      ? header.height - AVATAR_OVERLAP - (TOP_BAR_HEIGHT + PROFILE_GAP)
+      : undefined;
+  // Polices du thème (Ojuju + Atkinson), seulement si le vendeur n'a pas
+  // choisi la sienne : le corps passe alors par la variable plutôt que par
+  // la classe de la police par défaut.
+  const fontVars = bioFontVars(palette, shop.font_family);
+  const bodyFont = fontVars["--bio-font-body"];
+
   return (
     <div
       className={cn("relative min-h-dvh", fontClass)}
@@ -204,9 +246,14 @@ export function ShopPage({
           color: palette.text,
           colorScheme: palette.scheme,
           ...bioThemeCssVars(palette),
+          ...fontVars,
+          ...(bodyFont ? { fontFamily: bodyFont } : {}),
         } as React.CSSProperties
       }
     >
+      {/* ── Zone haute du thème : lavis ou bande, jamais avec une bannière ── */}
+      <BioHeaderDecor palette={palette} hasBanner={hasBanner} />
+
       <TrackingPixels
         tiktokPixelId={shop.tiktok_pixel_id}
         metaPixelId={shop.meta_pixel_id}
@@ -238,11 +285,7 @@ export function ShopPage({
           href="/"
           aria-label="Bio-Lien"
           className="flex size-11 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95"
-          style={{
-            backgroundColor: palette.surface,
-            color: palette.surfaceText,
-            border: `1px solid ${palette.border}`,
-          }}
+          style={bioTopBarPillStyle(palette, { overHeader })}
         >
           <Sparkles className="size-5" />
         </Link>
@@ -252,18 +295,23 @@ export function ShopPage({
           onClick={openShare}
           aria-label="Partager cette page"
           className="flex size-11 items-center justify-center rounded-full transition-transform hover:scale-105 active:scale-95"
-          style={{
-            backgroundColor: palette.surface,
-            color: palette.surfaceText,
-            border: `1px solid ${palette.border}`,
-          }}
+          style={bioTopBarPillStyle(palette, { overHeader })}
         >
           <Share2 className="size-5" />
         </button>
       </div>
 
       <main className="relative mx-auto w-full max-w-[680px] px-4 pb-32 pt-5">
-        <BioProfile shop={shop} palette={palette} />
+        <BioProfile
+          shop={shop}
+          palette={palette}
+          // Bannière (h-44, sm:h-56) : l'avatar descend pour chevaucher son
+          // bord bas ; bande : décalage calculé sur la hauteur du thème.
+          className={cn(stitched && hasBanner && "mt-12 sm:mt-24")}
+          style={
+            profileOffset !== undefined ? { marginTop: profileOffset } : undefined
+          }
+        />
 
         {/* Les réseaux juste sous la bio, comme sur une page de liens
             classique : c'est la première chose qu'un visiteur venu de
@@ -274,18 +322,17 @@ export function ShopPage({
           className="mt-4"
         />
 
+        {/* La couture du thème (frise, points, toron, piqûre) — rendue même
+            sans réseaux : c'est ce qui distingue Bogolan de Sahel. */}
+        <BioDivider palette={palette} />
+
         {/* ── Liens / Boutique switch ── */}
         {showTabs && (
           <div
             role="tablist"
             aria-label="Sections de la page"
             className="mx-auto mt-6 grid w-full max-w-xs grid-cols-2 rounded-full p-1"
-            style={{
-              backgroundColor:
-                palette.buttonVariant === "shadow"
-                  ? palette.border
-                  : `color-mix(in oklab, ${palette.text} 16%, transparent)`,
-            }}
+            style={bioTabTrackStyle(palette)}
           >
             {(
               [
@@ -301,20 +348,33 @@ export function ShopPage({
                   aria-selected={selected}
                   onClick={() => selectTab(entry.value)}
                   className={cn(
-                    "rounded-full py-2.5 text-sm font-semibold transition-all duration-200",
+                    "flex items-center justify-center rounded-full py-2.5 text-sm font-semibold transition-all duration-200",
                     "focus-visible:outline-none focus-visible:ring-2",
-                    !selected && "opacity-70 hover:opacity-100",
+                    // Sur un thème à décor, l'onglet inactif lit à pleine
+                    // opacité (tampon d'encre ou cobalt sur crème).
+                    !selected && !decor && "opacity-70 hover:opacity-100",
                   )}
                   style={
                     {
-                      backgroundColor: selected ? palette.surface : "transparent",
-                      color: selected ? palette.surfaceText : palette.text,
-                      boxShadow: selected ? "0 1px 3px rgba(0,0,0,.12)" : undefined,
+                      ...bioTabStyle(palette, selected),
                       "--tw-ring-color": palette.text,
                     } as React.CSSProperties
                   }
                 >
                   {entry.label}
+                  {/* Compteur d'articles en pastille de rehaut (moutarde,
+                      ocre…) : seulement quand le thème en a une. */}
+                  {entry.value === "shop" && decor?.highlight && (
+                    <span
+                      className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums"
+                      style={{
+                        backgroundColor: "var(--bio-highlight)",
+                        color: "var(--bio-highlight-text)",
+                      }}
+                    >
+                      {shopProducts.length}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -363,10 +423,18 @@ export function ShopPage({
                       )}
                       style={
                         {
-                          backgroundColor: selected
-                            ? palette.surface
-                            : `color-mix(in oklab, ${palette.text} 12%, transparent)`,
-                          color: selected ? palette.surfaceText : palette.text,
+                          // Avec décor, la puce active reprend l'onglet actif
+                          // (tampon ou relief) ; sinon, le rendu historique.
+                          ...(selected && decor
+                            ? bioTabStyle(palette, true)
+                            : {
+                                backgroundColor: selected
+                                  ? palette.surface
+                                  : `color-mix(in oklab, ${palette.text} 12%, transparent)`,
+                                color: selected
+                                  ? palette.surfaceText
+                                  : palette.text,
+                              }),
                           "--tw-ring-color": palette.text,
                         } as React.CSSProperties
                       }
@@ -444,9 +512,7 @@ export function ShopPage({
             )}
             style={
               {
-                backgroundColor: palette.surface,
-                color: palette.surfaceText,
-                border: `1px solid ${palette.border}`,
+                ...bioTopBarPillStyle(palette),
                 "--tw-ring-color": palette.text,
               } as React.CSSProperties
             }
@@ -467,15 +533,18 @@ export function ShopPage({
           rel="noopener noreferrer"
           aria-label={tab === "shop" ? "Commander sur WhatsApp" : "Écrire sur WhatsApp"}
           className={cn(
-            "fixed bottom-5 right-4 z-40 flex h-14 items-center gap-2 rounded-full px-5 shadow-lg sm:right-6",
+            "fixed bottom-5 right-4 z-40 flex h-14 items-center gap-2 rounded-full px-5 sm:right-6",
             "transition-transform duration-150 active:scale-95",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
           )}
-          style={{ backgroundColor: "#25D366" }}
+          // Vert WhatsApp jamais thémé, encre sombre dessus (le blanc ne
+          // faisait que 1,98:1), filet et ombre dure pour le détacher de
+          // n'importe quel fond — sur tous les thèmes.
+          style={whatsappButtonStyle("fab")}
         >
-          <MessageCircle className="size-5 text-white" />
+          <MessageCircle className="size-5" />
           {/* Sur l'onglet Liens, personne ne « commande » : on écrit. */}
-          <span className="text-sm font-semibold text-white">{tab === "shop" ? "Commander" : "WhatsApp"}</span>
+          <span className="text-sm font-semibold">{tab === "shop" ? "Commander" : "WhatsApp"}</span>
         </SmartAppLink>
         )
       ) : (
@@ -489,11 +558,7 @@ export function ShopPage({
               "transition-transform duration-150 active:scale-95",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
             )}
-            style={{
-              backgroundColor: palette.surface,
-              color: palette.surfaceText,
-              border: `1px solid ${palette.border}`,
-            }}
+            style={bioTopBarPillStyle(palette)}
           >
             <ShoppingBag className="size-6" />
             {itemCount > 0 && (

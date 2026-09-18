@@ -9,6 +9,8 @@ import {
   JetBrains_Mono,
   DM_Serif_Display,
   Space_Grotesk,
+  Ojuju,
+  Atkinson_Hyperlegible_Next,
 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
@@ -65,16 +67,22 @@ const inter = Inter({
   display: "swap",
 });
 
+// Polices optionnelles du vendeur : sans `preload: false`, chaque woff2
+// déclaré dans le layout racine serait préchargé sur toutes les routes — trois
+// fichiers de plus à la première visite en 3G, même pour une boutique en Inter.
+// Le navigateur ne les télécharge que sur une page qui les utilise.
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
   display: "swap",
+  preload: false,
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
   display: "swap",
+  preload: false,
 });
 
 const dmSerifDisplay = DM_Serif_Display({
@@ -82,6 +90,36 @@ const dmSerifDisplay = DM_Serif_Display({
   weight: "400",
   subsets: ["latin"],
   display: "swap",
+  preload: false,
+});
+
+// Paire des thèmes « Afrique de l'Ouest » (bogolan, wax, indigo, pagne).
+// Ojuju (Ụdị Foundry, Lagos) en un seul poids, 700, pour le nom, les titres de
+// groupe et les chiffres du prix ; Atkinson Hyperlegible Next (Braille
+// Institute), variable, pour le corps — la plus lisible en plein soleil sur un
+// LCD d'entrée de gamme, aussi proposée seule comme police « Hyperlisible ».
+// latin-ext couvre ɛ ɔ ŋ ɓ des noms en mooré, dioula et fulfulde.
+const ojuju = Ojuju({
+  variable: "--font-ojuju",
+  weight: "700",
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  preload: false,
+});
+
+// Next ne connaît pas les métriques d'« Atkinson Hyperlegible Next » (seule
+// l'ancienne « Atkinson Hyperlegible » est dans son catalogue) : il ne peut pas
+// fabriquer la police de repli ajustée et le signale à chaque requête. On le
+// lui dit explicitement, et on pose nous-mêmes une pile de repli sans-serif —
+// sans elle, le temps que le woff2 arrive en 3G, `display: swap` afficherait
+// le texte dans la police par défaut du navigateur, souvent une serif.
+const atkinson = Atkinson_Hyperlegible_Next({
+  variable: "--font-atkinson",
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  preload: false,
+  adjustFontFallback: false,
+  fallback: ["system-ui", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
 });
 
 // Les métadonnées sont figées au build : lire le drapeau ici est correct.
@@ -185,7 +223,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${poppins.variable} ${caveat.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${poppins.variable} ${caveat.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable} ${ojuju.variable} ${atkinson.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
