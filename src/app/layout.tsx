@@ -151,6 +151,18 @@ const OPERATOR_KEYWORDS = ONLINE
   ? ["Mobile Money", "Orange Money", "MTN MoMo", "Wave", "Moov Money"]
   : [];
 
+function siteVerification(): Pick<Metadata, "verification"> {
+  const google = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+  const tiktok = process.env.NEXT_PUBLIC_TIKTOK_SITE_VERIFICATION?.trim();
+  if (!google && !tiktok) return {};
+  return {
+    verification: {
+      ...(google && { google }),
+      ...(tiktok && { other: { "tiktok-developers-site-verification": tiktok } }),
+    },
+  };
+}
+
 export const metadata: Metadata = {
   // Un seul endroit décide de la forme d'un titre d'onglet. Les pages
   // fournissent leur nom, le gabarit ajoute la marque — sinon chacune recolle
@@ -198,6 +210,10 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  // Les balises de vérification (Google Search Console, TikTok) viennent de
+  // l'environnement, jamais du dépôt ; absentes, rien n'est émis. Lues au
+  // build : redéployer après les avoir posées.
+  ...siteVerification(),
   // Les fichiers icon.svg / apple-icon.png / favicon.ico de src/app sont
   // détectés automatiquement ; seul le manifeste demande à être déclaré.
   manifest: "/manifest.webmanifest",
