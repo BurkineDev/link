@@ -5,6 +5,8 @@ import { serializeOrder } from "@/lib/db/serialize";
 import { OrderStatusBadge } from "@/components/dashboard/order-status-badge";
 import { BoostCard } from "@/components/dashboard/boost-card";
 import { InstallCard } from "@/components/pwa/install-card";
+import { StartStepsCard } from "@/components/dashboard/start-steps-card";
+import { getEffectivePlan, getPlanLimits } from "@/lib/subscription";
 import {
   Card,
   CardHeader,
@@ -217,6 +219,20 @@ export default async function DashboardPage() {
 
   const currency = shop?.currency ?? "XOF";
 
+  // Le plan effectif, pour la ligne « Découverte · 2 / 3 produits » : une
+  // vendeuse doit voir où elle en est avant de buter sur la limite.
+  const sub = await prisma.creatorSubscription.findUnique({
+    where: { userId: user.id },
+    select: { plan: true, status: true, provider: true, currentPeriodEnd: true },
+  });
+  const effectivePlan = getEffectivePlan(
+    sub
+      ? { plan: sub.plan, status: sub.status, provider: sub.provider, current_period_end: sub.currentPeriodEnd?.toISOString() ?? null }
+      : null,
+  );
+  const planLimits = getPlanLimits(effectivePlan);
+  const publicUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? "https://www.bio-lien.com").replace(/\/$/, "")}/${shop?.slug ?? ""}`;
+
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
       {/* Page header */}
@@ -272,6 +288,18 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Une seule question à la fois : qu'est-ce que je fais maintenant ? */}
+      {shop?.slug && shop.is_published && (
+        <StartStepsCard
+          slug={shop.slug}
+          shopName={shop.name}
+          publicUrl={publicUrl}
+          productsCount={productsCount}
+          plan={{ label: planLimits.label, maxProducts: planLimits.maxProducts, isFree: effectivePlan === "free" }}
+        />
+      )}
+
 
       {missingWhatsapp && (
         <div className="flex items-start gap-3 rounded-2xl border-2 border-primary bg-primary/10 px-5 py-4">
