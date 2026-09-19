@@ -136,13 +136,32 @@ export function organizationJsonLd(siteUrl: string) {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "Bio-Lien",
+    // Les graphies qu'on tape dans Google : sans elles, « biolien » ou
+    // « bio lien » n'ont aucune raison de mener ici plutôt qu'à un blog bio.
+    alternateName: BRAND_ALTERNATE_NAMES,
     url: siteUrl,
     logo: `${siteUrl}/icon.svg`,
     description: isOnlineCheckoutEnabled()
       ? "Bio-Lien permet aux vendeurs d'Afrique de l'Ouest de créer leur boutique en ligne et d'encaisser en Mobile Money ou par carte."
       : "Bio-Lien permet aux vendeurs d'Afrique de l'Ouest de créer leur boutique en ligne et de recevoir leurs commandes sur WhatsApp.",
+    foundingDate: "2026",
+    areaServed: ["CI", "SN", "BF", "ML", "TG", "BJ"],
+    ...(BRAND_PROFILES.length > 0 && { sameAs: BRAND_PROFILES }),
   };
 }
+
+/** Comment les gens écrivent le nom : l'entité doit les reconnaître toutes. */
+export const BRAND_ALTERNATE_NAMES = ["Biolien", "Bio Lien", "BioLien", "bio-lien.com"];
+
+/**
+ * Les profils officiels, lus de l'environnement (`NEXT_PUBLIC_BRAND_PROFILES`,
+ * adresses séparées par des virgules) : ce sont eux qui disent aux moteurs
+ * que le compte TikTok, la page Facebook et le site sont la même entité.
+ */
+export const BRAND_PROFILES: string[] = (process.env.NEXT_PUBLIC_BRAND_PROFILES ?? "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter((value) => /^https:\/\//.test(value));
 
 /**
  * Le site.
@@ -157,7 +176,9 @@ export function websiteJsonLd(siteUrl: string) {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "Bio-Lien",
+    alternateName: BRAND_ALTERNATE_NAMES,
     url: siteUrl,
     inLanguage: "fr",
+    publisher: { "@type": "Organization", name: "Bio-Lien", url: siteUrl },
   };
 }

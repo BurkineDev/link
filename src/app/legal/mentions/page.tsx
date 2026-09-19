@@ -28,23 +28,18 @@ export default function MentionsPage() {
 
       <h2>Éditeur du service</h2>
       <p>
-        <strong>Bio-Lien</strong>
-        <br />
-        Plateforme e-commerce pour créateurs et entrepreneurs africains.
+        <strong>Bio-Lien</strong> est un service édité par <strong>WEND TECH</strong>, entreprise individuelle
+        immatriculée au Registre du commerce et du crédit mobilier du Burkina Faso (Bobo-Dioulasso, avril 2025),
+        titulaire d&apos;un Identifiant financier unique. Numéros RCCM et IFU communiqués sur demande.
       </p>
       <p>
         Email : <a href="mailto:support@bio-lien.com">support@bio-lien.com</a>
         <br />
-        Site : <a href="https://www.bio-lien.com">bio-lien.com</a>
-      </p>
-      <p className="text-sm text-muted-foreground italic">
-        Les informations légales détaillées (raison sociale, capital, numéro
-        d&apos;immatriculation, siège social, représentant légal) seront publiées ici
-        dès l&apos;immatriculation de la société.
+        Site : <a href="https://www.bio-lien.com">bio-lien.com</a> — <Link href="/a-propos">À propos</Link>
       </p>
 
       <h2>Directeur de la publication</h2>
-      <p>Le représentant légal de Bio-Lien.</p>
+      <p>Aristide Sawadogo, fondateur de WEND TECH.</p>
 
       <h2>Hébergement</h2>
       <p>

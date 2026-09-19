@@ -710,6 +710,9 @@ function Footer() {
       <Wordmark className="text-[15px]" href={null} />
       <span>La vitrine tout-en-un des créateurs et entrepreneurs africains</span>
       <span className="flex flex-wrap gap-x-4 gap-y-1">
+        <Link href="/a-propos" className="no-underline hover:text-[var(--b-ink)]" style={{ color: "inherit" }}>
+          À propos
+        </Link>
         <Link href="/legal/privacy" className="no-underline hover:text-[var(--b-ink)]" style={{ color: "inherit" }}>
           Confidentialité
         </Link>
